@@ -3,9 +3,11 @@ package com.servonvif.client.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.servonvif.client.R
 import com.servonvif.client.data.model.EventPayload
 import com.servonvif.client.ui.pip.PiPAlertActivity
 
@@ -16,8 +18,22 @@ class MonitoringForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildForegroundNotification("Monitoramento ativo"))
         
+        val notification = buildForegroundNotification("Monitoramento ativo")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                } else {
+                    0
+                }
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+
         // Connect to local or configured IP engine
         val serverUrl = "ws://192.168.1.100:8080/ws/events"
         wsManager = WebSocketManager(serverUrl) { event ->
@@ -53,7 +69,7 @@ class MonitoringForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ServONVIF Core")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setSmallIcon(R.drawable.app_icon)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
