@@ -253,19 +253,29 @@ class TvMainActivity : Activity() {
                 val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
                 ringtone?.play()
 
-                // 2. Open PiP Floating Alert
-                val intent = Intent(this, PiPAlertActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra("EXTRA_CAMERA_ID", 1)
-                    putExtra("EXTRA_CAMERA_NAME", "Câmera Portão (Simulação)")
-                    putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
-                    putExtra("EXTRA_SCORE", 0.98)
-                    putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
+                // 2. Open Pure Non-Invasive Window Overlay
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                    FloatingOverlayManager(this).showFloatingAlert(
+                        cameraId = 1,
+                        cameraName = "Câmera Portão (Simulação)",
+                        mjpegUrl = "/api/mjpeg/1",
+                        score = 0.98,
+                        durationSeconds = configRepo.pipDurationSeconds
+                    )
+                } else {
+                    val intent = Intent(this, PiPAlertActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra("EXTRA_CAMERA_ID", 1)
+                        putExtra("EXTRA_CAMERA_NAME", "Câmera Portão (Simulação)")
+                        putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
+                        putExtra("EXTRA_SCORE", 0.98)
+                        putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
+                    }
+                    startActivity(intent)
                 }
-                startActivity(intent)
 
                 tvCardLastEvent.text = "🔴 Câmera Portão (Simulação) • Score: 98% • Agora"
-                logTest("✅ Simulação concluída com sucesso! Áudio e Janela PiP executados.")
+                logTest("✅ Simulação concluída com sucesso! Janela Flutuante 100% não invasiva ativa.")
             } catch (e: Exception) {
                 logTest("❌ Falha na simulação: ${e.message}")
             }
@@ -297,15 +307,25 @@ class TvMainActivity : Activity() {
         btnTestPiPAlert.setOnClickListener {
             logTest("🧪 Disparando Janela Picture-in-Picture (PiP) de Teste por 10s...")
             try {
-                val intent = Intent(this, PiPAlertActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra("EXTRA_CAMERA_ID", 1)
-                    putExtra("EXTRA_CAMERA_NAME", "Câmera de Teste")
-                    putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
-                    putExtra("EXTRA_SCORE", 0.95)
-                    putExtra("EXTRA_DURATION", 10)
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                    FloatingOverlayManager(this).showFloatingAlert(
+                        cameraId = 1,
+                        cameraName = "Câmera de Teste",
+                        mjpegUrl = "/api/mjpeg/1",
+                        score = 0.95,
+                        durationSeconds = 10
+                    )
+                } else {
+                    val intent = Intent(this, PiPAlertActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra("EXTRA_CAMERA_ID", 1)
+                        putExtra("EXTRA_CAMERA_NAME", "Câmera de Teste")
+                        putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
+                        putExtra("EXTRA_SCORE", 0.95)
+                        putExtra("EXTRA_DURATION", 10)
+                    }
+                    startActivity(intent)
                 }
-                startActivity(intent)
                 logTest("✅ Janela PiP aberta com sucesso!")
             } catch (e: Exception) {
                 logTest("❌ Falha ao abrir PiP: ${e.message}")
@@ -326,14 +346,14 @@ class TvMainActivity : Activity() {
 
         btnTestServerPing.setOnClickListener {
             val startTime = System.currentTimeMillis()
-            logTest("📡 Enviando ping HTTP para http://${configRepo.serverIp}:${configRepo.serverPort}...")
+            logTest("📡 Enviando ping com identidade de hardware para http://${configRepo.serverIp}:${configRepo.serverPort}...")
             thread {
                 try {
-                    val isSuccess = apiClient.testConnection()
+                    val isSuccess = apiClient.pingServer(this)
                     val latency = System.currentTimeMillis() - startTime
                     mainHandler.post {
                         if (isSuccess) {
-                            logTest("✅ Servidor respondeu em ${latency}ms! Comunicação perfeita.")
+                            logTest("✅ Servidor identificou este dispositivo em ${latency}ms! Veja no painel Web.")
                         } else {
                             logTest("❌ Falha de comunicação! Verifique o IP ou a rede Wi-Fi.")
                         }

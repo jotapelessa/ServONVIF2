@@ -8,11 +8,13 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.model.EventPayload
 import com.servonvif.client.data.repository.ServerConfigRepository
+import com.servonvif.client.ui.pip.FloatingOverlayManager
 import com.servonvif.client.ui.pip.PiPAlertActivity
 
 class MonitoringForegroundService : Service() {
@@ -20,11 +22,13 @@ class MonitoringForegroundService : Service() {
     private var wsManager: WebSocketManager? = null
     private lateinit var configRepo: ServerConfigRepository
     private lateinit var notificationManager: NotificationManager
+    private lateinit var floatingOverlayManager: FloatingOverlayManager
 
     override fun onCreate() {
         super.onCreate()
         configRepo = ServerConfigRepository(this)
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        floatingOverlayManager = FloatingOverlayManager(this)
         createNotificationChannels()
 
         val notification = buildForegroundNotification("Monitorando eventos de segurança em tempo real")
@@ -83,7 +87,21 @@ class MonitoringForegroundService : Service() {
             }
         }
 
-        // 2. Build Intent for PiP / Spotlight Overlay
+        // 2. Pure WindowManager Floating Overlay (Non-Invasive, Zero Disruption to Third-Party Apps like SBT)
+        val hasOverlayPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        if (hasOverlayPermission) {
+            Log.d("MonitoringService", "Displaying Non-Invasive Floating Window via WindowManager")
+            floatingOverlayManager.showFloatingAlert(
+                cameraId = event.cameraId,
+                cameraName = event.cameraName,
+                mjpegUrl = event.mjpegUrl,
+                score = event.score,
+                durationSeconds = configRepo.pipDurationSeconds
+            )
+            return
+        }
+
+        // 3. Fallback: High-Priority Heads-Up Notification if overlay permission is not granted
         val alertIntent = Intent(this, PiPAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -103,7 +121,6 @@ class MonitoringForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 3. High-Priority Heads-Up Notification with FullScreenIntent (Essential for Android 10+ TV/Tablets)
         try {
             val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
                 .setSmallIcon(R.drawable.app_icon)
@@ -121,71 +138,79 @@ class MonitoringForegroundService : Service() {
         } catch (e: Exception) {
             Log.e("MonitoringService", "Failed to show alert notification: ${e.message}")
         }
-
-        // Also attempt direct start for devices allowing background starts
-        try {
-            startActivity(alertIntent)
-        } catch (e: Exception) {
-            // Handled via fullScreenPendingIntent
-        }
     }
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                // Channel for Silent Persistent Service
                 val serviceChannel = NotificationChannel(
-                    CHANNEL_ID,
-                    "ServONVIF Serviço em 2º Plano",
+                    NOTIFICATION_CHANNEL_ID,
+                    "ServONVIF Monitor de Segurança",
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = "Mantém a conexão ativa em segundo plano na Smart TV e Tablets"
+                    description = "Serviço sentinela de segundo plano"
+                    setShowBadge(false)
                 }
 
-                // Channel for High-Priority Heads-Up Emergency Alerts
                 val alertChannel = NotificationChannel(
                     ALERT_CHANNEL_ID,
-                    "ServONVIF Alertas de Movimento (PiP)",
+                    "ServONVIF Alertas de Movimento",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Dispara janela de vídeo instantânea ao detectar movimento"
+                    description = "Alertas de detecção de movimento em tempo real"
                     enableVibration(true)
+                    setShowBadge(true)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
 
                 notificationManager.createNotificationChannel(serviceChannel)
                 notificationManager.createNotificationChannel(alertChannel)
             } catch (e: Exception) {
-                Log.e("MonitoringService", "Error creating notification channels: ${e.message}")
+                Log.e("MonitoringService", "Channel creation error: ${e.message}")
             }
         }
     }
 
     private fun buildForegroundNotification(contentText: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ServONVIF Sentinela")
-            .setContentText(contentText)
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.app_icon)
+            .setContentTitle("🛡️ ServONVIF Monitor Ativo")
+            .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
             .build()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == ACTION_RESTART_WS) {
+            startWebSocketMonitoring()
+        }
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            wsManager?.stop()
-        } catch (e: Exception) {
-            // Safe cleanup
-        }
+        floatingOverlayManager.hideFloatingAlert()
+        wsManager?.stop()
     }
 
     companion object {
-        const val CHANNEL_ID = "servonvif_monitoring_channel"
+        const val NOTIFICATION_CHANNEL_ID = "servonvif_monitoring_channel"
         const val ALERT_CHANNEL_ID = "servonvif_alert_channel"
         const val NOTIFICATION_ID = 1001
         const val ALERT_NOTIFICATION_ID = 2002
+        const val ACTION_RESTART_WS = "com.servonvif.client.ACTION_RESTART_WS"
     }
 }
