@@ -27,7 +27,7 @@
         android:label="ServONVIF Monitor"
         android:roundIcon="@android:drawable/ic_menu_camera"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+        android:theme="@style/Theme.ServONVIF"
         android:usesCleartextTraffic="true">
 
         <!-- Background Persistent Monitoring Service -->
