@@ -119,7 +119,21 @@ class WebSocketHub:
                 logger.warning(f"Error sending to WebSocket client {info.ip}: {e}")
                 stale_connections.add(ws)
 
-        for stale in stale_connections:
-            self.disconnect(stale)
+    async def broadcast_motion_alert(
+        self,
+        camera_id: int,
+        camera_name: str,
+        score: float,
+        mjpeg_url: str
+    ) -> None:
+        payload = {
+            "type": "MOTION_ALERT",
+            "camera_id": camera_id,
+            "camera_name": camera_name,
+            "score": score,
+            "mjpeg_url": mjpeg_url,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.broadcast_event(payload)
 
 ws_hub = WebSocketHub()

@@ -22,6 +22,7 @@ export interface MotionEvent {
   score: number;
   video_path?: string;
   thumbnail_path?: string;
+  thumbnail_url?: string;
   telegram_sent: boolean;
   duration_seconds: number;
 }
@@ -195,6 +196,82 @@ export const apiClient = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Falha ao remover dispositivo");
+    return data;
+  },
+
+  // --- LPR & Vehicles Management ---
+  async getVehicles(): Promise<any[]> {
+    const res = await fetch(`${API_BASE}/api/vehicles/`);
+    if (!res.ok) throw new Error("Falha ao carregar veículos cadastrados");
+    return res.json();
+  },
+
+  async createVehicle(payload: {
+    plate_number: string;
+    owner_name: string;
+    vehicle_model?: string;
+    category?: string;
+    notes?: string;
+  }): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/vehicles/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao cadastrar veículo");
+    return data;
+  },
+
+  async updateVehicle(
+    vehicleId: number,
+    payload: {
+      plate_number?: string;
+      owner_name?: string;
+      vehicle_model?: string;
+      category?: string;
+      notes?: string;
+      is_active?: boolean;
+    }
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao atualizar veículo");
+    return data;
+  },
+
+  async deleteVehicle(vehicleId: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao remover veículo");
+    return data;
+  },
+
+  async getPlateLogs(limit = 50): Promise<any[]> {
+    const res = await fetch(`${API_BASE}/api/vehicles/logs?limit=${limit}`);
+    if (!res.ok) throw new Error("Falha ao obter histórico de placas");
+    return res.json();
+  },
+
+  async simulatePlateDetection(payload: {
+    plate_number: string;
+    camera_id?: number;
+    camera_name?: string;
+    confidence?: number;
+  }): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/vehicles/simulate-plate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao simular leitura de placa");
     return data;
   },
 };

@@ -39,10 +39,13 @@ import {
   HelpCircle,
   Radio,
   Zap,
+  Car,
+  Plus,
+  Search,
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine">("devices");
+  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine">("vehicles");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -54,6 +57,21 @@ export default function SettingsPage() {
   const [editingDeviceName, setEditingDeviceName] = useState("");
   const [lastPingedDeviceId, setLastPingedDeviceId] = useState<string | null>(null);
   const [lastPingInfo, setLastPingInfo] = useState<any>(null);
+
+  // LPR / Vehicles State
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [plateLogs, setPlateLogs] = useState<any[]>([]);
+  const [plateLogsLoading, setPlateLogsLoading] = useState(false);
+  const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+  const [newPlateNumber, setNewPlateNumber] = useState("");
+  const [newOwnerName, setNewOwnerName] = useState("");
+  const [newVehicleModel, setNewVehicleModel] = useState("");
+  const [newCategory, setNewCategory] = useState("MORADOR");
+  const [newNotes, setNewNotes] = useState("");
+  const [simulatingPlate, setSimulatingPlate] = useState(false);
+  const [simulatedPlateResult, setSimulatedPlateResult] = useState<any>(null);
+  const [testPlateInput, setTestPlateInput] = useState("BRA2E19");
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -199,7 +217,87 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchVehicles = async () => {
+    setVehiclesLoading(true);
+    try {
+      const data = await apiClient.getVehicles();
+      setVehicles(data);
+    } catch (e) {
+      console.error("Failed to load vehicles:", e);
+    } finally {
+      setVehiclesLoading(false);
+    }
+  };
+
+  const fetchPlateLogs = async () => {
+    setPlateLogsLoading(true);
+    try {
+      const data = await apiClient.getPlateLogs(50);
+      setPlateLogs(data);
+    } catch (e) {
+      console.error("Failed to load plate logs:", e);
+    } finally {
+      setPlateLogsLoading(false);
+    }
+  };
+
+  const handleCreateVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlateNumber || !newOwnerName) {
+      alert("Por favor preencha a placa e o nome do proprietário.");
+      return;
+    }
+    try {
+      const created = await apiClient.createVehicle({
+        plate_number: newPlateNumber,
+        owner_name: newOwnerName,
+        vehicle_model: newVehicleModel,
+        category: newCategory,
+        notes: newNotes,
+      });
+      setVehicles((prev) => [created, ...prev]);
+      setIsVehicleModalOpen(false);
+      setNewPlateNumber("");
+      setNewOwnerName("");
+      setNewVehicleModel("");
+      setNewNotes("");
+    } catch (e: any) {
+      alert("Erro ao cadastrar veículo: " + (e.message || e));
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: number) => {
+    if (!confirm("Tem certeza que deseja remover este veículo?")) return;
+    try {
+      await apiClient.deleteVehicle(vehicleId);
+      setVehicles((prev) => prev.filter((v) => v.id !== vehicleId));
+    } catch (e: any) {
+      alert("Erro ao remover veículo: " + (e.message || e));
+    }
+  };
+
+  const handleSimulatePlate = async () => {
+    setSimulatingPlate(true);
+    setSimulatedPlateResult(null);
+    try {
+      const res = await apiClient.simulatePlateDetection({
+        plate_number: testPlateInput,
+      });
+      setSimulatedPlateResult(res.detection);
+      fetchPlateLogs();
+      fetchVehicles();
+    } catch (e: any) {
+      alert("Falha na simulação de leitura de placa: " + (e.message || e));
+    } finally {
+      setSimulatingPlate(false);
+    }
+  };
+
   useEffect(() => {
+    if (activeTab === "vehicles") {
+      fetchVehicles();
+      fetchPlateLogs();
+    }
     if (activeTab === "logs") {
       fetchLogs();
     }
@@ -377,6 +475,21 @@ export default function SettingsPage() {
         {/* Navigation Sidebar */}
         <aside className="w-64 shrink-0 space-y-1.5">
           <button
+            onClick={() => setActiveTab("vehicles")}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "vehicles"
+                ? "bg-amber-600 text-white shadow-lg shadow-amber-600/25 font-semibold"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <Car className="w-4 h-4 text-amber-400" />
+            <div className="text-left flex-1">
+              <div>Placas &amp; Veículos (LPR)</div>
+              <div className="text-[10px] text-amber-200/80 font-normal">Controle de Portão 5MP</div>
+            </div>
+          </button>
+
+          <button
             onClick={() => setActiveTab("devices")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "devices"
@@ -493,6 +606,342 @@ export default function SettingsPage() {
             </div>
           ) : (
             <>
+              {/* ================= TAB: VEHICLES & LPR ================= */}
+              {activeTab === "vehicles" && (
+                <div className="space-y-6">
+                  {/* Top Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <Car className="w-5 h-5 text-amber-400" />
+                        <span>Reconhecimento Automático de Placas (LPR / ANPR - 5MP)</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Controle de acesso por placas Mercosul e antigas integrado à sua câmera 5MP. Alertas instantâneos na Smart TV!
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsVehicleModalOpen(true)}
+                        className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-md shadow-amber-600/20 transition-all"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Cadastrar Veículo</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          fetchVehicles();
+                          fetchPlateLogs();
+                        }}
+                        disabled={vehiclesLoading}
+                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${vehiclesLoading ? "animate-spin" : ""}`} />
+                        <span>Atualizar</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Simulator & OCR Test Workbench */}
+                  <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/20 border border-amber-500/30 rounded-2xl p-5 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
+                          <Zap className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-slate-100">Bancada de Testes de Leitura &amp; Alerta na TV</div>
+                          <div className="text-[11px] text-slate-400">Simule a detecção de uma placa para ver a identificação do morador e o aviso PiP na TV.</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full font-semibold">
+                        Motor LPR Ativo
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                      <div className="md:col-span-4 flex items-center justify-center p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+                        {/* Brazilian Stylized Plate Display */}
+                        <div className="bg-white border-2 border-slate-900 rounded-md w-48 shadow-lg overflow-hidden flex flex-col items-center">
+                          <div className="bg-blue-700 text-white w-full px-2 py-0.5 flex items-center justify-between text-[9px] font-black tracking-wider">
+                            <span>BRASIL</span>
+                            <span className="text-[8px] opacity-80">MERCOSUL</span>
+                          </div>
+                          <div className="py-2 text-slate-900 font-black text-2xl tracking-widest font-mono">
+                            {testPlateInput.toUpperCase() || "PLACA"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-8 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={testPlateInput}
+                            onChange={(e) => setTestPlateInput(e.target.value.toUpperCase())}
+                            placeholder="Ex: BRA2E19 ou ABC1234"
+                            maxLength={8}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-amber-500 flex-1 max-w-xs"
+                          />
+
+                          <button
+                            onClick={handleSimulatePlate}
+                            disabled={simulatingPlate || !testPlateInput}
+                            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md shadow-amber-600/30 flex items-center gap-2"
+                          >
+                            <Zap className={`w-3.5 h-3.5 ${simulatingPlate ? "animate-spin" : ""}`} />
+                            <span>{simulatingPlate ? "Processando OCR..." : "Simular Reconhecimento & Alerta TV"}</span>
+                          </button>
+                        </div>
+
+                        {simulatedPlateResult && (
+                          <div className="p-3 bg-slate-950/80 border border-emerald-500/40 rounded-xl text-xs space-y-1.5 animate-in fade-in">
+                            <div className="flex items-center justify-between">
+                              <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                {simulatedPlateResult.alert_title}
+                              </span>
+                              <span className="text-slate-400 font-mono text-[10px]">
+                                Confiança: {(simulatedPlateResult.confidence * 100).toFixed(0)}% • Formato: {simulatedPlateResult.plate_type}
+                              </span>
+                            </div>
+                            <div className="text-slate-300 text-[11px]">
+                              Proprietário: <strong className="text-white">{simulatedPlateResult.owner_name}</strong> • Veículo: <strong className="text-white">{simulatedPlateResult.vehicle_model}</strong> • Categoria: <span className="text-amber-300 font-semibold">{simulatedPlateResult.category}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Registered Vehicles List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span>Veículos Cadastrados ({vehicles.length})</span>
+                      </h3>
+                    </div>
+
+                    {vehiclesLoading ? (
+                      <div className="p-8 text-center text-slate-500 text-xs">
+                        <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2" />
+                        Carregando veículos...
+                      </div>
+                    ) : vehicles.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {vehicles.map((v) => {
+                          const categoryColor =
+                            v.category === "MORADOR"
+                              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                              : v.category === "VISITANTE"
+                              ? "bg-blue-500/10 text-blue-300 border-blue-500/20"
+                              : v.category === "PRESTADOR"
+                              ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                              : "bg-rose-500/10 text-rose-300 border-rose-500/20";
+
+                          return (
+                            <div
+                              key={v.id}
+                              className="bg-slate-900/70 border border-slate-800 hover:border-slate-700 p-4 rounded-xl space-y-3 transition-all"
+                            >
+                              <div className="flex items-center justify-between">
+                                {/* Stylized Mini Plate */}
+                                <div className="bg-white border border-slate-800 rounded px-2.5 py-0.5 text-slate-950 font-mono font-black text-sm tracking-wider shadow-sm">
+                                  {v.plate_number}
+                                </div>
+
+                                <span className={`text-[10px] border px-2 py-0.5 rounded-full font-bold uppercase ${categoryColor}`}>
+                                  {v.category}
+                                </span>
+                              </div>
+
+                              <div>
+                                <div className="text-sm font-bold text-slate-100">{v.owner_name}</div>
+                                <div className="text-xs text-slate-400">{v.vehicle_model || "Modelo não informado"}</div>
+                              </div>
+
+                              <div className="text-[11px] text-slate-500 flex items-center justify-between pt-2 border-t border-slate-800/80">
+                                <span>Detecções: <strong className="text-slate-300">{v.total_detections}</strong></span>
+                                <button
+                                  onClick={() => handleDeleteVehicle(v.id)}
+                                  className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                                  title="Remover veículo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-8 text-center space-y-2">
+                        <Car className="w-8 h-8 text-slate-500 mx-auto" />
+                        <div className="text-sm font-semibold text-slate-300">Nenhum veículo cadastrado</div>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                          Cadastre as placas dos moradores, familiares e prestadores de serviço para identificação com foto e som na TV!
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recent Plate Logs */}
+                  <div className="space-y-3 pt-4 border-t border-slate-800/80">
+                    <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-400" />
+                      <span>Histórico Recente de Placas Capturadas</span>
+                    </h3>
+
+                    {plateLogs.length > 0 ? (
+                      <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="divide-y divide-slate-800/60">
+                          {plateLogs.map((log) => (
+                            <div key={log.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-900/40">
+                              <div className="flex items-center gap-3">
+                                <div className="bg-white px-2 py-0.5 rounded text-slate-950 font-mono font-black text-xs">
+                                  {log.plate_number}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-slate-200">
+                                    {log.owner_name ? `${log.owner_name} (${log.vehicle_model})` : "Veículo Não Cadastrado"}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 font-mono">
+                                    Câmera: {log.camera_name} • Confiança: {(log.confidence * 100).toFixed(0)}%
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(log.detected_at).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-slate-500 text-xs bg-slate-900/30 rounded-xl border border-slate-800">
+                        Nenhuma leitura registrada recentemente.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal: Cadastrar Veículo */}
+                  {isVehicleModalOpen && (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <Car className="w-5 h-5 text-amber-400" />
+                            <span>Cadastrar Novo Veículo</span>
+                          </h3>
+                          <button
+                            onClick={() => setIsVehicleModalOpen(false)}
+                            className="text-slate-400 hover:text-slate-200"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleCreateVehicle} className="space-y-3.5">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Placa do Veículo *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newPlateNumber}
+                              onChange={(e) => setNewPlateNumber(e.target.value.toUpperCase())}
+                              placeholder="Ex: BRA2E19 ou ABC1234"
+                              maxLength={8}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Nome do Proprietário / Morador *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newOwnerName}
+                              onChange={(e) => setNewOwnerName(e.target.value)}
+                              placeholder="Ex: João Paulo (Casa 05)"
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Modelo / Cor
+                              </label>
+                              <input
+                                type="text"
+                                value={newVehicleModel}
+                                onChange={(e) => setNewVehicleModel(e.target.value)}
+                                placeholder="Ex: Civic Preto"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Categoria
+                              </label>
+                              <select
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                              >
+                                <option value="MORADOR">Morador</option>
+                                <option value="VISITANTE">Visitante</option>
+                                <option value="PRESTADOR">Prestador</option>
+                                <option value="BLOQUEADO">Bloqueado / Alerta</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Observações (Opcional)
+                            </label>
+                            <input
+                              type="text"
+                              value={newNotes}
+                              onChange={(e) => setNewNotes(e.target.value)}
+                              placeholder="Ex: Vaga 02, entregas matutinas"
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsVehicleModalOpen(false)}
+                              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="submit"
+                              className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md shadow-amber-600/30"
+                            >
+                              Salvar Veículo
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ================= TAB: DEVICES & ACL ================= */}
               {activeTab === "devices" && (
                 <div className="space-y-6">

@@ -46,3 +46,31 @@ class Device(SQLModel, table=True):
     last_ping_at: Optional[datetime] = None
     last_seen: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Vehicle(SQLModel, table=True):
+    __tablename__ = "vehicles"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    plate_number: str = Field(index=True, unique=True)  # ex: "BRA2E19" ou "ABC1234"
+    owner_name: str = Field(index=True)                 # ex: "João Paulo"
+    vehicle_model: str = Field(default="Não informado") # ex: "Honda Civic Preto"
+    category: str = Field(default="MORADOR")           # "MORADOR", "VISITANTE", "PRESTADOR", "BLOQUEADO"
+    notes: Optional[str] = None
+    is_active: bool = Field(default=True)
+    total_detections: int = Field(default=0)
+    last_seen_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class PlateDetectionLog(SQLModel, table=True):
+    __tablename__ = "plate_detection_logs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    camera_id: int = Field(index=True)
+    camera_name: str
+    plate_number: str = Field(index=True)
+    confidence: float = Field(default=0.95)
+    category: str = Field(default="DESCONHECIDO")      # "MORADOR", "VISITANTE", "PRESTADOR", "BLOQUEADO", "DESCONHECIDO"
+    owner_name: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    detected_at: datetime = Field(default_factory=datetime.utcnow, index=True)
