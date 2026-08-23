@@ -2,17 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.servonvif.client">
 
-    <!-- Permissions -->
+    <!-- Essential Network & Background Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Android TV Leanback Hardware Features -->
+    <!-- Android TV Leanback Hardware Configurations -->
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
@@ -37,26 +38,38 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- Mobile / Tablet Main Activity -->
-        <activity
-            android:name=".ui.main.MainActivity"
-            android:exported="true"
-            android:label="ServONVIF">
+        <!-- TV Boot Completed Receiver -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
-        </activity>
+        </receiver>
 
-        <!-- Android TV Leanback Main Activity -->
+        <!-- Android TV Main Launcher Activity -->
         <activity
             android:name=".ui.tv.TvMainActivity"
             android:exported="true"
             android:label="ServONVIF TV"
-            android:screenOrientation="landscape">
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.ServONVIF.TV">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Mobile / Tablet Companion Activity -->
+        <activity
+            android:name=".ui.main.MainActivity"
+            android:exported="true"
+            android:label="ServONVIF Mobile">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -70,7 +83,8 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:showWhenLocked="true"
-            android:turnScreenOn="true" />
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ServONVIF" />
 
     </application>
 </manifest>

@@ -4,22 +4,26 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.model.EventPayload
+import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.ui.pip.PiPAlertActivity
 
 class MonitoringForegroundService : Service() {
 
     private var wsManager: WebSocketManager? = null
+    private lateinit var configRepo: ServerConfigRepository
 
     override fun onCreate() {
         super.onCreate()
+        configRepo = ServerConfigRepository(this)
         createNotificationChannel()
-        
-        val notification = buildForegroundNotification("Monitoramento ativo")
+
+        val notification = buildForegroundNotification("Monitorando eventos em tempo real")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -34,21 +38,38 @@ class MonitoringForegroundService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        // Connect to local or configured IP engine
-        val serverUrl = "ws://192.168.1.100:8080/ws/events"
+        startWebSocketMonitoring()
+    }
+
+    private fun startWebSocketMonitoring() {
+        wsManager?.stop()
+        val serverUrl = configRepo.wsBaseUrl
         wsManager = WebSocketManager(serverUrl) { event ->
-            triggerPiPAlert(event)
+            handleIncomingAlert(event)
         }
         wsManager?.start()
     }
 
-    private fun triggerPiPAlert(event: EventPayload) {
+    private fun handleIncomingAlert(event: EventPayload) {
+        // 1. Play subtle audio chime if enabled
+        if (configRepo.isSoundAlertEnabled) {
+            try {
+                val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
+                ringtone?.play()
+            } catch (e: Exception) {
+                // Ignore audio errors on quiet TV profiles
+            }
+        }
+
+        // 2. Trigger Picture-in-Picture Floating Alert
         val intent = Intent(this, PiPAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("EXTRA_CAMERA_ID", event.cameraId)
             putExtra("EXTRA_CAMERA_NAME", event.cameraName)
             putExtra("EXTRA_MJPEG_URL", event.mjpegUrl)
             putExtra("EXTRA_SCORE", event.score)
+            putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
         }
         startActivity(intent)
     }
@@ -57,9 +78,11 @@ class MonitoringForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "ServONVIF Monitor Channel",
-                NotificationManager.IMPORTANCE_LOW
-            )
+                "ServONVIF Alertas de Câmeras",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificações prioritárias de detecção de movimento em Smart TVs"
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
         }
@@ -67,7 +90,7 @@ class MonitoringForegroundService : Service() {
 
     private fun buildForegroundNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ServONVIF Core")
+            .setContentTitle("ServONVIF Monitor TV")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.app_icon)
             .setPriority(NotificationCompat.PRIORITY_LOW)
