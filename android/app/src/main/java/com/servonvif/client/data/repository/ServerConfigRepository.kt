@@ -24,7 +24,7 @@ class ServerConfigRepository(context: Context) {
         set(value) = prefs.edit().putString(KEY_PIP_POSITION, value).apply()
 
     var pipSize: String
-        get() = prefs.getString(KEY_PIP_SIZE, SIZE_SMALL) ?: SIZE_SMALL
+        get() = prefs.getString(KEY_PIP_SIZE, SIZE_MINI) ?: SIZE_MINI
         set(value) = prefs.edit().putString(KEY_PIP_SIZE, value).apply()
 
     var isSoundAlertEnabled: Boolean
@@ -61,8 +61,13 @@ class ServerConfigRepository(context: Context) {
         const val POSITION_BOTTOM_LEFT = "BOTTOM_LEFT"
         const val POSITION_CENTER = "CENTER"
 
-        const val SIZE_SMALL = "SMALL"    // 300 x 170 dp
-        const val SIZE_MEDIUM = "MEDIUM"  // 400 x 225 dp
-        const val SIZE_LARGE = "LARGE"    // 520 x 292 dp
+        const val SIZE_MICRO = "MICRO"      // 220 x 124 dp (Ultra Compacto 16:9)
+        const val SIZE_MINI = "MINI"        // 270 x 152 dp (Pequeno 16:9)
+        const val SIZE_COMPACT = "COMPACT"  // 320 x 180 dp (Médio 16:9)
+        const val SIZE_MEDIUM = "MEDIUM"    // 380 x 214 dp (Padrão 16:9)
+        const val SIZE_LARGE = "LARGE"      // 480 x 270 dp (Grande 16:9)
+
+        // Legacy compatibility aliases
+        const val SIZE_SMALL = "MINI"
     }
 }

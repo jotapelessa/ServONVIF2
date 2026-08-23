@@ -86,6 +86,7 @@ class TvMainActivity : Activity() {
         setupNavigation()
         setupWebView()
         setupTestLab()
+        setupFocusEffects()
         requestNotificationPermission()
         ensureForegroundServiceRunning()
 
@@ -134,6 +135,26 @@ class TvMainActivity : Activity() {
         tvCardServerIp.text = "${configRepo.serverIp}:${configRepo.serverPort}"
     }
 
+    private fun setupFocusEffects() {
+        val allTvButtons = listOf(
+            btnNavCameras, btnNavStatus, btnNavTests, btnNavSettings,
+            btnTestSimulateMotion, btnTestAutoDiscoverServer,
+            btnTestPiPAlert, btnTestSoundChime, btnTestServerPing,
+            btnTestSyncCameras, btnTestHeadsUpNotification, btnTestOverlayPermission,
+            btnClearConsole
+        )
+
+        for (btn in allTvButtons) {
+            btn.setOnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) {
+                    v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(150).start()
+                } else {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+                }
+            }
+        }
+    }
+
     private fun setupNavigation() {
         btnNavCameras.setOnClickListener { switchSection(1) }
         btnNavStatus.setOnClickListener {
@@ -151,10 +172,10 @@ class TvMainActivity : Activity() {
         sectionStatus.visibility = if (sectionId == 2) View.VISIBLE else View.GONE
         sectionTests.visibility = if (sectionId == 3) View.VISIBLE else View.GONE
 
-        // Update Nav button background tints
-        btnNavCameras.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 1) R.color.blue_primary else R.color.card_bg))
-        btnNavStatus.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 2) R.color.blue_primary else R.color.card_bg))
-        btnNavTests.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 3) R.color.blue_primary else R.color.card_bg))
+        // Update Nav button active indicators
+        btnNavCameras.setBackgroundResource(if (sectionId == 1) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnNavStatus.setBackgroundResource(if (sectionId == 2) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnNavTests.setBackgroundResource(if (sectionId == 3) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
     }
 
     private fun setupWebView() {

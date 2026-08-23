@@ -69,11 +69,13 @@ class PiPAlertActivity : Activity() {
         val displayMetrics = resources.displayMetrics
         val density = displayMetrics.density
 
-        // 1. Determine Window Size (16:9 Aspect Ratio)
+        // 1. Determine Window Size (Strict 16:9 Aspect Ratio)
         val (widthDp, heightDp) = when (configRepo.pipSize) {
-            ServerConfigRepository.SIZE_LARGE -> Pair(520, 292)
-            ServerConfigRepository.SIZE_MEDIUM -> Pair(400, 225)
-            else -> Pair(310, 174) // Default Compact / Small
+            ServerConfigRepository.SIZE_MICRO -> Pair(220, 124)
+            ServerConfigRepository.SIZE_MINI -> Pair(270, 152)
+            ServerConfigRepository.SIZE_COMPACT -> Pair(320, 180)
+            ServerConfigRepository.SIZE_LARGE -> Pair(460, 258)
+            else -> Pair(270, 152) // Default Mini / Micro
         }
 
         val widthPx = (widthDp * density).toInt()

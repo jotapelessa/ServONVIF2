@@ -7,8 +7,9 @@
     android:background="#0B0F19"
     android:padding="20dp">
 
-    <!-- Header & Navigation Bar (D-Pad & Touch Enabled) -->
+    <!-- Header & Navigation Bar (D-Pad & Touch Enabled with Glowing Focus Rings) -->
     <LinearLayout
+        android:id="@+id/navBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -22,7 +23,7 @@
             android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:layout_marginEnd="24dp" />
+            android:layout_marginEnd="20dp" />
 
         <HorizontalScrollView
             android:layout_width="0dp"
@@ -38,51 +39,67 @@
                 <Button
                     android:id="@+id/btnNavCameras"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:text="📺 Mosaico de Câmeras"
-                    android:backgroundTint="#2563EB"
+                    android:background="@drawable/btn_tv_action_blue_selector"
                     android:textColor="#FFFFFF"
                     android:textSize="13sp"
+                    android:textStyle="bold"
                     android:focusable="true"
-                    android:layout_marginEnd="10dp" />
+                    android:clickable="true"
+                    android:layout_marginEnd="10dp"
+                    android:nextFocusRight="@+id/btnNavStatus"
+                    android:nextFocusDown="@+id/sectionContainer" />
 
                 <Button
                     android:id="@+id/btnNavStatus"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:text="📊 Status &amp; Diagnóstico"
-                    android:backgroundTint="#1E293B"
-                    android:textColor="#94A3B8"
+                    android:background="@drawable/btn_tv_action_dark_selector"
+                    android:textColor="#FFFFFF"
                     android:textSize="13sp"
                     android:focusable="true"
-                    android:layout_marginEnd="10dp" />
+                    android:clickable="true"
+                    android:layout_marginEnd="10dp"
+                    android:nextFocusLeft="@+id/btnNavCameras"
+                    android:nextFocusRight="@+id/btnNavTests"
+                    android:nextFocusDown="@+id/sectionContainer" />
 
                 <Button
                     android:id="@+id/btnNavTests"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:text="🧪 Central de Testes"
-                    android:backgroundTint="#1E293B"
-                    android:textColor="#94A3B8"
+                    android:background="@drawable/btn_tv_action_dark_selector"
+                    android:textColor="#FFFFFF"
                     android:textSize="13sp"
                     android:focusable="true"
-                    android:layout_marginEnd="10dp" />
+                    android:clickable="true"
+                    android:layout_marginEnd="10dp"
+                    android:nextFocusLeft="@+id/btnNavStatus"
+                    android:nextFocusRight="@+id/btnNavSettings"
+                    android:nextFocusDown="@+id/sectionContainer" />
 
                 <Button
                     android:id="@+id/btnNavSettings"
                     android:layout_width="wrap_content"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:text="⚙️ Configurações"
-                    android:backgroundTint="#1E293B"
-                    android:textColor="#94A3B8"
+                    android:background="@drawable/btn_tv_action_dark_selector"
+                    android:textColor="#FFFFFF"
                     android:textSize="13sp"
-                    android:focusable="true" />
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:nextFocusLeft="@+id/btnNavTests"
+                    android:nextFocusDown="@+id/sectionContainer" />
             </LinearLayout>
         </HorizontalScrollView>
     </LinearLayout>
 
     <!-- Main Dynamic Content Container -->
     <FrameLayout
+        android:id="@+id/sectionContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
@@ -99,7 +116,9 @@
                 android:id="@+id/tvMainWebView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#000000" />
+                android:background="#000000"
+                android:focusable="true"
+                android:nextFocusUp="@+id/btnNavCameras" />
         </LinearLayout>
 
         <!-- SECTION 2: Real-time System Status & Live Event Feed -->
@@ -107,7 +126,8 @@
             android:id="@+id/sectionStatus"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone">
+            android:visibility="gone"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -274,7 +294,8 @@
             android:id="@+id/sectionTests"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone">
+            android:visibility="gone"
+            android:focusable="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -293,7 +314,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Execute testes interativos pelo controle remoto ou toque para comprovar que o PiP, som, rede e disparo funcionam perfeitamente:"
+                    android:text="Navegue com as setas do controle remoto e pressione OK para executar os testes:"
                     android:textColor="#94A3B8"
                     android:textSize="13sp"
                     android:layout_marginBottom="16dp" />
@@ -311,11 +332,16 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🎯 Simular Movimento Real (End-to-End)"
-                        android:backgroundTint="#059669"
+                        android:background="@drawable/btn_tv_action_green_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
+                        android:textStyle="bold"
                         android:focusable="true"
-                        android:layout_marginEnd="10dp" />
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp"
+                        android:nextFocusUp="@+id/btnNavTests"
+                        android:nextFocusRight="@+id/btnTestAutoDiscoverServer"
+                        android:nextFocusDown="@+id/btnTestPiPAlert" />
 
                     <Button
                         android:id="@+id/btnTestAutoDiscoverServer"
@@ -323,10 +349,15 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🔍 Auto-Detectar Servidor Mac"
-                        android:backgroundTint="#0284C7"
+                        android:background="@drawable/btn_tv_action_blue_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
-                        android:focusable="true" />
+                        android:textStyle="bold"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:nextFocusUp="@+id/btnNavTests"
+                        android:nextFocusLeft="@+id/btnTestSimulateMotion"
+                        android:nextFocusDown="@+id/btnTestServerPing" />
                 </LinearLayout>
 
                 <!-- Row 2: PiP, Audio & Network Tests -->
@@ -342,11 +373,16 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🪟 Testar Janela PiP (10s)"
-                        android:backgroundTint="#2563EB"
+                        android:background="@drawable/btn_tv_action_blue_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
+                        android:textStyle="bold"
                         android:focusable="true"
-                        android:layout_marginEnd="10dp" />
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp"
+                        android:nextFocusUp="@+id/btnTestSimulateMotion"
+                        android:nextFocusRight="@+id/btnTestSoundChime"
+                        android:nextFocusDown="@+id/btnTestSyncCameras" />
 
                     <Button
                         android:id="@+id/btnTestSoundChime"
@@ -354,11 +390,17 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🔔 Testar Som Chime"
-                        android:backgroundTint="#334155"
+                        android:background="@drawable/btn_tv_action_dark_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
+                        android:textStyle="bold"
                         android:focusable="true"
-                        android:layout_marginEnd="10dp" />
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp"
+                        android:nextFocusUp="@+id/btnTestSimulateMotion"
+                        android:nextFocusLeft="@+id/btnTestPiPAlert"
+                        android:nextFocusRight="@+id/btnTestServerPing"
+                        android:nextFocusDown="@+id/btnTestHeadsUpNotification" />
 
                     <Button
                         android:id="@+id/btnTestServerPing"
@@ -366,10 +408,15 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="📡 Testar Ping Servidor"
-                        android:backgroundTint="#334155"
+                        android:background="@drawable/btn_tv_action_dark_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
-                        android:focusable="true" />
+                        android:textStyle="bold"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:nextFocusUp="@+id/btnTestAutoDiscoverServer"
+                        android:nextFocusLeft="@+id/btnTestSoundChime"
+                        android:nextFocusDown="@+id/btnTestOverlayPermission" />
                 </LinearLayout>
 
                 <!-- Row 3: Sync, HeadsUp & Overlays -->
@@ -385,11 +432,16 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🔄 Sincronizar Câmeras"
-                        android:backgroundTint="#334155"
+                        android:background="@drawable/btn_tv_action_dark_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
+                        android:textStyle="bold"
                         android:focusable="true"
-                        android:layout_marginEnd="10dp" />
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp"
+                        android:nextFocusUp="@+id/btnTestPiPAlert"
+                        android:nextFocusRight="@+id/btnTestHeadsUpNotification"
+                        android:nextFocusDown="@+id/btnClearConsole" />
 
                     <Button
                         android:id="@+id/btnTestHeadsUpNotification"
@@ -397,11 +449,17 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🚨 Testar Notificação"
-                        android:backgroundTint="#DC2626"
+                        android:background="@drawable/btn_tv_action_red_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
+                        android:textStyle="bold"
                         android:focusable="true"
-                        android:layout_marginEnd="10dp" />
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp"
+                        android:nextFocusUp="@+id/btnTestSoundChime"
+                        android:nextFocusLeft="@+id/btnTestSyncCameras"
+                        android:nextFocusRight="@+id/btnTestOverlayPermission"
+                        android:nextFocusDown="@+id/btnClearConsole" />
 
                     <Button
                         android:id="@+id/btnTestOverlayPermission"
@@ -409,10 +467,15 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🔑 Permissão Sobrepor"
-                        android:backgroundTint="#7C3AED"
+                        android:background="@drawable/btn_tv_action_purple_selector"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
-                        android:focusable="true" />
+                        android:textStyle="bold"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:nextFocusUp="@+id/btnTestServerPing"
+                        android:nextFocusLeft="@+id/btnTestHeadsUpNotification"
+                        android:nextFocusDown="@+id/btnClearConsole" />
                 </LinearLayout>
 
                 <!-- Console Output Log Box -->
@@ -435,12 +498,14 @@
                     <Button
                         android:id="@+id/btnClearConsole"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="40dp"
                         android:text="Limpar Logs"
-                        android:backgroundTint="#1E293B"
-                        android:textColor="#94A3B8"
-                        android:textSize="11sp"
-                        android:focusable="true" />
+                        android:background="@drawable/btn_tv_action_dark_selector"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:nextFocusUp="@+id/btnTestSyncCameras" />
                 </LinearLayout>
 
                 <TextView

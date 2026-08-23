@@ -2,6 +2,7 @@ package com.servonvif.client.ui.tv
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -31,9 +32,10 @@ class TvSettingsActivity : Activity() {
     private lateinit var btnPosBottomLeft: Button
     private lateinit var btnPosCenter: Button
 
-    // Size Buttons
-    private lateinit var btnSizeSmall: Button
-    private lateinit var btnSizeMedium: Button
+    // Size Buttons (Strict 16:9)
+    private lateinit var btnSizeMicro: Button
+    private lateinit var btnSizeMini: Button
+    private lateinit var btnSizeCompact: Button
     private lateinit var btnSizeLarge: Button
 
     // Duration Buttons
@@ -43,7 +45,7 @@ class TvSettingsActivity : Activity() {
     private lateinit var btnDur30s: Button
 
     private var selectedPosition = ServerConfigRepository.POSITION_TOP_RIGHT
-    private var selectedSize = ServerConfigRepository.SIZE_SMALL
+    private var selectedSize = ServerConfigRepository.SIZE_MINI
     private var selectedDuration = 10
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +57,7 @@ class TvSettingsActivity : Activity() {
         initViews()
         loadCurrentSettings()
         setupListeners()
+        setupFocusEffects()
     }
 
     private fun initViews() {
@@ -72,14 +75,34 @@ class TvSettingsActivity : Activity() {
         btnPosBottomLeft = findViewById(R.id.btnPosBottomLeft)
         btnPosCenter = findViewById(R.id.btnPosCenter)
 
-        btnSizeSmall = findViewById(R.id.btnSizeSmall)
-        btnSizeMedium = findViewById(R.id.btnSizeMedium)
+        btnSizeMicro = findViewById(R.id.btnSizeMicro)
+        btnSizeMini = findViewById(R.id.btnSizeMini)
+        btnSizeCompact = findViewById(R.id.btnSizeCompact)
         btnSizeLarge = findViewById(R.id.btnSizeLarge)
 
         btnDur5s = findViewById(R.id.btnDur5s)
         btnDur10s = findViewById(R.id.btnDur10s)
         btnDur15s = findViewById(R.id.btnDur15s)
         btnDur30s = findViewById(R.id.btnDur30s)
+    }
+
+    private fun setupFocusEffects() {
+        val focusableButtons = listOf(
+            btnPosTopRight, btnPosTopLeft, btnPosBottomRight, btnPosBottomLeft, btnPosCenter,
+            btnSizeMicro, btnSizeMini, btnSizeCompact, btnSizeLarge,
+            btnDur5s, btnDur10s, btnDur15s, btnDur30s,
+            btnTestConnection, btnSaveSettings
+        )
+
+        for (btn in focusableButtons) {
+            btn.setOnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) {
+                    v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(150).start()
+                } else {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+                }
+            }
+        }
     }
 
     private fun loadCurrentSettings() {
@@ -98,33 +121,25 @@ class TvSettingsActivity : Activity() {
     }
 
     private fun updatePositionUI() {
-        val activeColor = ContextCompat.getColor(this, R.color.blue_primary)
-        val inactiveColor = ContextCompat.getColor(this, R.color.card_bg)
-
-        btnPosTopRight.setBackgroundColor(if (selectedPosition == ServerConfigRepository.POSITION_TOP_RIGHT) activeColor else inactiveColor)
-        btnPosTopLeft.setBackgroundColor(if (selectedPosition == ServerConfigRepository.POSITION_TOP_LEFT) activeColor else inactiveColor)
-        btnPosBottomRight.setBackgroundColor(if (selectedPosition == ServerConfigRepository.POSITION_BOTTOM_RIGHT) activeColor else inactiveColor)
-        btnPosBottomLeft.setBackgroundColor(if (selectedPosition == ServerConfigRepository.POSITION_BOTTOM_LEFT) activeColor else inactiveColor)
-        btnPosCenter.setBackgroundColor(if (selectedPosition == ServerConfigRepository.POSITION_CENTER) activeColor else inactiveColor)
+        btnPosTopRight.setBackgroundResource(if (selectedPosition == ServerConfigRepository.POSITION_TOP_RIGHT) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnPosTopLeft.setBackgroundResource(if (selectedPosition == ServerConfigRepository.POSITION_TOP_LEFT) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnPosBottomRight.setBackgroundResource(if (selectedPosition == ServerConfigRepository.POSITION_BOTTOM_RIGHT) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnPosBottomLeft.setBackgroundResource(if (selectedPosition == ServerConfigRepository.POSITION_BOTTOM_LEFT) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnPosCenter.setBackgroundResource(if (selectedPosition == ServerConfigRepository.POSITION_CENTER) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
     }
 
     private fun updateSizeUI() {
-        val activeColor = ContextCompat.getColor(this, R.color.blue_primary)
-        val inactiveColor = ContextCompat.getColor(this, R.color.card_bg)
-
-        btnSizeSmall.setBackgroundColor(if (selectedSize == ServerConfigRepository.SIZE_SMALL) activeColor else inactiveColor)
-        btnSizeMedium.setBackgroundColor(if (selectedSize == ServerConfigRepository.SIZE_MEDIUM) activeColor else inactiveColor)
-        btnSizeLarge.setBackgroundColor(if (selectedSize == ServerConfigRepository.SIZE_LARGE) activeColor else inactiveColor)
+        btnSizeMicro.setBackgroundResource(if (selectedSize == ServerConfigRepository.SIZE_MICRO) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSizeMini.setBackgroundResource(if (selectedSize == ServerConfigRepository.SIZE_MINI || selectedSize == ServerConfigRepository.SIZE_SMALL) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSizeCompact.setBackgroundResource(if (selectedSize == ServerConfigRepository.SIZE_COMPACT || selectedSize == ServerConfigRepository.SIZE_MEDIUM) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSizeLarge.setBackgroundResource(if (selectedSize == ServerConfigRepository.SIZE_LARGE) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
     }
 
     private fun updateDurationUI() {
-        val activeColor = ContextCompat.getColor(this, R.color.blue_primary)
-        val inactiveColor = ContextCompat.getColor(this, R.color.card_bg)
-
-        btnDur5s.setBackgroundColor(if (selectedDuration == 5) activeColor else inactiveColor)
-        btnDur10s.setBackgroundColor(if (selectedDuration == 10) activeColor else inactiveColor)
-        btnDur15s.setBackgroundColor(if (selectedDuration == 15) activeColor else inactiveColor)
-        btnDur30s.setBackgroundColor(if (selectedDuration == 30) activeColor else inactiveColor)
+        btnDur5s.setBackgroundResource(if (selectedDuration == 5) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnDur10s.setBackgroundResource(if (selectedDuration == 10) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnDur15s.setBackgroundResource(if (selectedDuration == 15) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnDur30s.setBackgroundResource(if (selectedDuration == 30) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
     }
 
     private fun setupListeners() {
@@ -134,8 +149,9 @@ class TvSettingsActivity : Activity() {
         btnPosBottomLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_BOTTOM_LEFT; updatePositionUI() }
         btnPosCenter.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_CENTER; updatePositionUI() }
 
-        btnSizeSmall.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_SMALL; updateSizeUI() }
-        btnSizeMedium.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MEDIUM; updateSizeUI() }
+        btnSizeMicro.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MICRO; updateSizeUI() }
+        btnSizeMini.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MINI; updateSizeUI() }
+        btnSizeCompact.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_COMPACT; updateSizeUI() }
         btnSizeLarge.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_LARGE; updateSizeUI() }
 
         btnDur5s.setOnClickListener { selectedDuration = 5; updateDurationUI() }
