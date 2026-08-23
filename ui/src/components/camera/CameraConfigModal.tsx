@@ -92,7 +92,7 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="card-dark rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]">
+      <div className="card-dark rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-slate-900/60 shrink-0">
           <div className="flex items-center gap-3">
@@ -170,29 +170,28 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
           </div>
 
           {/* 2. Device Alert Routing */}
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <span className="text-xs font-bold text-white uppercase tracking-wider block">
                   2. Dispositivos Autorizados a Receber Alertas
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  Marque quais telas devem exibir o PiP e tocar som ao detectar movimento nesta câmera.
+                  Selecione quais telas devem exibir o PiP e tocar som ao detectar movimento nesta câmera.
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={selectAllDevices}
-                  className="text-[10px] text-blue-400 hover:underline font-medium"
+                  className="px-2.5 py-1 text-[11px] font-medium text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition"
                 >
                   Marcar Todos
                 </button>
-                <span className="text-slate-600">&bull;</span>
                 <button
                   type="button"
                   onClick={clearAllDevices}
-                  className="text-[10px] text-slate-400 hover:underline font-medium"
+                  className="px-2.5 py-1 text-[11px] font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition"
                 >
                   Limpar
                 </button>
@@ -200,71 +199,84 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
             </div>
 
             {loadingDevices ? (
-              <div className="flex items-center justify-center py-4 text-xs text-slate-400 gap-2">
+              <div className="flex items-center justify-center py-6 text-xs text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                <span>Carregando dispositivos...</span>
+                <span>Carregando dispositivos conectados...</span>
               </div>
             ) : devices.length > 0 ? (
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                 {devices.map((dev) => {
-                  const isChecked =
-                    allowedDeviceIds.length === 0 || allowedDeviceIds.includes(dev.device_id);
                   const isSpecificSelected = allowedDeviceIds.includes(dev.device_id);
+                  const isEffectiveActive = allowedDeviceIds.length === 0 || isSpecificSelected;
 
                   return (
-                    <label
+                    <div
                       key={dev.id}
                       onClick={() => toggleDevice(dev.device_id)}
-                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
-                        isSpecificSelected || allowedDeviceIds.length === 0
-                          ? "bg-slate-800/80 border-blue-500/40 text-white"
-                          : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                      className={`relative flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all duration-150 select-none ${
+                        isSpecificSelected
+                          ? "bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/5 ring-1 ring-blue-500/30"
+                          : allowedDeviceIds.length === 0
+                          ? "bg-slate-800/60 border-slate-700 text-slate-200 hover:border-slate-600"
+                          : "bg-slate-950/50 border-slate-800/80 text-slate-500 hover:border-slate-700 hover:text-slate-400"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`p-2 rounded-lg ${
+                          className={`p-2.5 rounded-xl shrink-0 ${
                             dev.device_type === "Android TV"
-                              ? "bg-purple-500/20 text-purple-400"
-                              : "bg-blue-500/20 text-blue-400"
+                              ? "bg-purple-500/20 text-purple-400 border border-purple-500/20"
+                              : dev.device_type === "Web Browser"
+                              ? "bg-blue-500/20 text-blue-400 border border-blue-500/20"
+                              : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20"
                           }`}
                         >
-                          <Tv className="w-4 h-4" />
+                          {dev.device_type === "Android TV" ? (
+                            <Tv className="w-4 h-4" />
+                          ) : (
+                            <Monitor className="w-4 h-4" />
+                          )}
                         </div>
-                        <div>
-                          <div className="text-xs font-semibold">{dev.name}</div>
-                          <div className="text-[10px] font-mono text-slate-500">
-                            {dev.ip_address} &bull; {dev.device_type}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white truncate">
+                            {dev.name}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>{dev.ip_address}</span>
+                            <span>&bull;</span>
+                            <span className="truncate">{dev.device_type}</span>
                           </div>
                         </div>
                       </div>
 
                       <div
-                        className={`w-5 h-5 rounded-md flex items-center justify-center border transition ${
+                        className={`w-5 h-5 rounded-lg flex items-center justify-center border transition ml-2 shrink-0 ${
                           isSpecificSelected
-                            ? "bg-blue-600 border-blue-500 text-white"
+                            ? "bg-blue-600 border-blue-500 text-white shadow-sm"
                             : allowedDeviceIds.length === 0
-                            ? "bg-blue-600/40 border-blue-500/40 text-white"
-                            : "border-slate-700 bg-slate-900"
+                            ? "bg-slate-700/60 border-slate-600 text-slate-300"
+                            : "border-slate-800 bg-slate-900 text-transparent"
                         }`}
                       >
-                        {(isSpecificSelected || allowedDeviceIds.length === 0) && (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        )}
+                        {isEffectiveActive && <CheckCircle2 className="w-3.5 h-3.5" />}
                       </div>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="p-3 text-center text-xs text-slate-500 bg-slate-950 rounded-xl border border-slate-800">
+              <div className="p-4 text-center text-xs text-slate-400 bg-slate-950/80 rounded-xl border border-slate-800">
                 Nenhum dispositivo Android TV ou tela registrado ainda no ServONVIF.
               </div>
             )}
 
             {allowedDeviceIds.length === 0 && (
-              <div className="text-[10px] text-amber-400/90 font-medium px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                ℹ️ Como nenhum dispositivo específico está isolado, <strong>todos os aparelhos autorizados</strong> receberão alertas desta câmera.
+              <div className="flex items-center gap-2 text-[11px] text-amber-300 font-medium px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  Modo Padrão Global: <strong>Todas as telas conectadas</strong> receberão alertas desta câmera.
+                </span>
               </div>
             )}
           </div>
