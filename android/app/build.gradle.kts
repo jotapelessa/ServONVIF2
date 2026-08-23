@@ -17,6 +17,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    applicationVariants.all {
+        outputs.all {
+            val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            outputImpl?.outputFileName = "ServONVIF-v${defaultConfig.versionName}.apk"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -24,6 +31,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // Generates ServONVIF-v1.9.0.apk
         }
     }
     compileOptions {
