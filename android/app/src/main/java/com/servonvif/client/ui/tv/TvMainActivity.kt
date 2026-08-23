@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -65,6 +66,7 @@ class TvMainActivity : Activity() {
     private lateinit var btnTestServerPing: Button
     private lateinit var btnTestSyncCameras: Button
     private lateinit var btnTestHeadsUpNotification: Button
+    private lateinit var btnTestOverlayPermission: Button
     private lateinit var tvTestConsoleOutput: TextView
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -119,6 +121,7 @@ class TvMainActivity : Activity() {
         btnTestServerPing = findViewById(R.id.btnTestServerPing)
         btnTestSyncCameras = findViewById(R.id.btnTestSyncCameras)
         btnTestHeadsUpNotification = findViewById(R.id.btnTestHeadsUpNotification)
+        btnTestOverlayPermission = findViewById(R.id.btnTestOverlayPermission)
         tvTestConsoleOutput = findViewById(R.id.tvTestConsoleOutput)
 
         tvCardServerIp.text = "${configRepo.serverIp}:${configRepo.serverPort}"
@@ -318,6 +321,28 @@ class TvMainActivity : Activity() {
                 logTest("✅ Notificação Heads-Up enviada com sucesso!")
             } catch (e: Exception) {
                 logTest("❌ Erro ao enviar notificação: ${e.message}")
+            }
+        }
+
+        btnTestOverlayPermission.setOnClickListener {
+            logTest("🔑 Verificando permissão de sobreposição (Janela Flutuante)...")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Settings.canDrawOverlays(this)) {
+                    logTest("✅ Permissão de sobreposição já está CONCEDIDA!")
+                } else {
+                    logTest("⚠️ Permissão NÃO concedida. Abrindo tela de configurações do Android...")
+                    try {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        logTest("❌ Não foi possível abrir configurações de sobreposição: ${e.message}")
+                    }
+                }
+            } else {
+                logTest("✅ Android < 6.0 não necessita de permissão explícita de sobreposição.")
             }
         }
     }
