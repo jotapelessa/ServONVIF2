@@ -26,17 +26,17 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Download Official Gradle Wrapper JAR
-      run: |
-        cd android
-        mkdir -p gradle/wrapper
-        curl -s -L -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradle/wrapper/gradle-wrapper.jar || curl -s -L -o gradle/wrapper/gradle-wrapper.jar https://repo.gradle.org/artifactory/libs-releases/org/gradle/gradle-wrapper/8.6/gradle-wrapper-8.6.jar
-        chmod +x gradlew
+    - name: Setup Gradle 8.6
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.6'
 
-    - name: Build Debug APK with Gradle Wrapper
+    - name: Generate Wrapper and Build APK
       run: |
         cd android
-        ./gradlew assembleDebug --no-daemon --stacktrace --info
+        gradle wrapper --gradle-version 8.6
+        chmod +x gradlew
+        ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK to Artifacts
       uses: actions/upload-artifact@v4
