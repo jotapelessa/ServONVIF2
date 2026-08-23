@@ -1,20 +1,22 @@
 package com.servonvif.client.ui.pip
 
 import android.app.Activity
-import android.app.PictureInPictureParams
 import android.content.Intent
-import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.util.Rational
+import android.os.CountDownTimer
+import android.util.DisplayMetrics
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.ui.tv.TvMainActivity
@@ -23,14 +25,21 @@ class PiPAlertActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var tvTitle: TextView
-    private val handler = Handler(Looper.getMainLooper())
-    private var autoDismissRunnable: Runnable? = null
+    private lateinit var tvCountdown: TextView
+    private lateinit var btnPipClose: TextView
+    private lateinit var pipProgressBar: ProgressBar
+    private lateinit var pipCardContainer: CardView
+
+    private lateinit var configRepo: ServerConfigRepository
+    private var countdownTimer: CountDownTimer? = null
     private var cameraId: Int = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Ensure window wakes the screen and shows over keyguard / other apps on TV
+        configRepo = ServerConfigRepository(this)
+
+        // Ensure screen wakes up and turns on over lockscreen/other apps
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -44,20 +53,101 @@ class PiPAlertActivity : Activity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Configure Window Floating Geometry (Corner Position & Compact Size)
+        applyWindowGeometry()
+
         setContentView(R.layout.activity_pip_alert)
 
+        initViews()
+        loadCameraStream()
+        startCountdownTimer()
+    }
+
+    private fun applyWindowGeometry() {
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val displayMetrics = resources.displayMetrics
+        val density = displayMetrics.density
+
+        // 1. Determine Window Size (16:9 Aspect Ratio)
+        val (widthDp, heightDp) = when (configRepo.pipSize) {
+            ServerConfigRepository.SIZE_LARGE -> Pair(520, 292)
+            ServerConfigRepository.SIZE_MEDIUM -> Pair(400, 225)
+            else -> Pair(310, 174) // Default Compact / Small
+        }
+
+        val widthPx = (widthDp * density).toInt()
+        val heightPx = (heightDp * density).toInt()
+        val marginPx = (20 * density).toInt()
+
+        val layoutParams = window.attributes
+        layoutParams.width = widthPx
+        layoutParams.height = heightPx
+
+        // 2. Determine Screen Position
+        when (configRepo.pipPosition) {
+            ServerConfigRepository.POSITION_TOP_LEFT -> {
+                layoutParams.gravity = Gravity.TOP or Gravity.START
+                layoutParams.x = marginPx
+                layoutParams.y = marginPx
+            }
+            ServerConfigRepository.POSITION_BOTTOM_RIGHT -> {
+                layoutParams.gravity = Gravity.BOTTOM or Gravity.END
+                layoutParams.x = marginPx
+                layoutParams.y = marginPx
+            }
+            ServerConfigRepository.POSITION_BOTTOM_LEFT -> {
+                layoutParams.gravity = Gravity.BOTTOM or Gravity.START
+                layoutParams.x = marginPx
+                layoutParams.y = marginPx
+            }
+            ServerConfigRepository.POSITION_CENTER -> {
+                layoutParams.gravity = Gravity.CENTER
+            }
+            else -> {
+                // Default: Top-Right (Intercom Security Standard)
+                layoutParams.gravity = Gravity.TOP or Gravity.END
+                layoutParams.x = marginPx
+                layoutParams.y = marginPx
+            }
+        }
+
+        // Allow touches outside the window if needed and watch touch
+        layoutParams.flags = layoutParams.flags or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+
+        window.attributes = layoutParams
+    }
+
+    private fun initViews() {
         webView = findViewById(R.id.pipWebView)
         tvTitle = findViewById(R.id.tvCameraTitle)
+        tvCountdown = findViewById(R.id.tvCountdown)
+        btnPipClose = findViewById(R.id.btnPipClose)
+        pipProgressBar = findViewById(R.id.pipProgressBar)
+        pipCardContainer = findViewById(R.id.pipCardContainer)
 
-        val configRepo = ServerConfigRepository(this)
         cameraId = intent.getIntExtra("EXTRA_CAMERA_ID", 1)
         val cameraName = intent.getStringExtra("EXTRA_CAMERA_NAME") ?: "Câmera de Segurança"
+        val score = intent.getDoubleExtra("EXTRA_SCORE", 0.0)
+
+        val scoreBadge = if (score > 0.0) " (${(score * 100).toInt()}%)" else ""
+        tvTitle.text = "🔴 $cameraName$scoreBadge"
+
+        btnPipClose.setOnClickListener {
+            finish()
+        }
+
+        pipCardContainer.setOnClickListener {
+            openFullScreenDashboard()
+        }
+    }
+
+    private fun loadCameraStream() {
         val mjpegUrl = intent.getStringExtra("EXTRA_MJPEG_URL") ?: "/api/mjpeg/$cameraId"
-        val durationSeconds = intent.getIntExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
+        val fullStreamUrl = if (mjpegUrl.startsWith("http")) mjpegUrl else "${configRepo.httpBaseUrl}$mjpegUrl"
 
-        tvTitle.text = "🔴 $cameraName - Movimento Detectado"
-
-        // Configure WebView for high-speed live stream
         webView.settings.apply {
             javaScriptEnabled = false
             cacheMode = WebSettings.LOAD_NO_CACHE
@@ -65,7 +155,6 @@ class PiPAlertActivity : Activity() {
             loadWithOverviewMode = true
         }
 
-        val fullStreamUrl = if (mjpegUrl.startsWith("http")) mjpegUrl else "${configRepo.httpBaseUrl}$mjpegUrl"
         val htmlContent = """
             <!DOCTYPE html>
             <html>
@@ -83,58 +172,58 @@ class PiPAlertActivity : Activity() {
         """.trimIndent()
 
         webView.loadDataWithBaseURL(configRepo.httpBaseUrl, htmlContent, "text/html", "UTF-8", null)
-
-        // Automatically trigger 16:9 Picture-in-Picture mode on Android TV
-        enterPiPMode()
-
-        // Auto-dismiss after duration (e.g. 10s)
-        autoDismissRunnable = Runnable {
-            if (!isFinishing) {
-                finish()
-            }
-        }
-        handler.postDelayed(autoDismissRunnable!!, durationSeconds * 1000L)
     }
 
-    private fun enterPiPMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val params = PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-                enterPictureInPictureMode(params)
-            } catch (e: Exception) {
-                // Ignore if device does not support PiP params
+    private fun startCountdownTimer() {
+        val durationSeconds = intent.getIntExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
+        val totalMillis = durationSeconds * 1000L
+
+        pipProgressBar.max = totalMillis.toInt()
+        pipProgressBar.progress = totalMillis.toInt()
+
+        countdownTimer = object : CountDownTimer(totalMillis, 100) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsRemaining = (millisUntilFinished / 1000) + 1
+                tvCountdown.text = "${secondsRemaining}s"
+                pipProgressBar.progress = millisUntilFinished.toInt()
             }
+
+            override fun onFinish() {
+                if (!isFinishing) {
+                    finish()
+                }
+            }
+        }.start()
+    }
+
+    private fun openFullScreenDashboard() {
+        val intent = Intent(this, TvMainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_FOCUS_CAMERA_ID", cameraId)
         }
+        startActivity(intent)
+        finish()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // When user clicks OK/Center on the TV remote while in PiP, open full TV Dashboard
+        // When user clicks OK/Center on the TV remote while in PiP, expand to full dashboard
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            val intent = Intent(this, TvMainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("EXTRA_FOCUS_CAMERA_ID", cameraId)
-            }
-            startActivity(intent)
+            openFullScreenDashboard()
+            return true
+        } else if (keyCode == KeyEvent.KEYCODE_BACK) {
             finish()
             return true
         }
         return super.onKeyDown(keyCode, event)
     }
 
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode) {
-            tvTitle.visibility = View.GONE
-        } else {
-            tvTitle.visibility = View.VISIBLE
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        autoDismissRunnable?.let { handler.removeCallbacks(it) }
-        webView.destroy()
+        countdownTimer?.cancel()
+        try {
+            webView.destroy()
+        } catch (e: Exception) {
+            // Safe cleanup
+        }
     }
 }

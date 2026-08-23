@@ -19,6 +19,14 @@ class ServerConfigRepository(context: Context) {
         get() = prefs.getInt(KEY_PIP_DURATION, 10)
         set(value) = prefs.edit().putInt(KEY_PIP_DURATION, value).apply()
 
+    var pipPosition: String
+        get() = prefs.getString(KEY_PIP_POSITION, POSITION_TOP_RIGHT) ?: POSITION_TOP_RIGHT
+        set(value) = prefs.edit().putString(KEY_PIP_POSITION, value).apply()
+
+    var pipSize: String
+        get() = prefs.getString(KEY_PIP_SIZE, SIZE_SMALL) ?: SIZE_SMALL
+        set(value) = prefs.edit().putString(KEY_PIP_SIZE, value).apply()
+
     var isSoundAlertEnabled: Boolean
         get() = prefs.getBoolean(KEY_SOUND_ALERT, true)
         set(value) = prefs.edit().putBoolean(KEY_SOUND_ALERT, value).apply()
@@ -42,7 +50,19 @@ class ServerConfigRepository(context: Context) {
         private const val KEY_SERVER_IP = "server_ip"
         private const val KEY_SERVER_PORT = "server_port"
         private const val KEY_PIP_DURATION = "pip_duration"
+        private const val KEY_PIP_POSITION = "pip_position"
+        private const val KEY_PIP_SIZE = "pip_size"
         private const val KEY_SOUND_ALERT = "sound_alert"
         private const val KEY_AUTO_START = "auto_start"
+
+        const val POSITION_TOP_RIGHT = "TOP_RIGHT"
+        const val POSITION_TOP_LEFT = "TOP_LEFT"
+        const val POSITION_BOTTOM_RIGHT = "BOTTOM_RIGHT"
+        const val POSITION_BOTTOM_LEFT = "BOTTOM_LEFT"
+        const val POSITION_CENTER = "CENTER"
+
+        const val SIZE_SMALL = "SMALL"    // 300 x 170 dp
+        const val SIZE_MEDIUM = "MEDIUM"  // 400 x 225 dp
+        const val SIZE_LARGE = "LARGE"    // 520 x 292 dp
     }
 }

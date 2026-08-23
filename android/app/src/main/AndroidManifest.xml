@@ -73,7 +73,7 @@
             android:taskAffinity=""
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.ServONVIF" />
+            android:theme="@style/Theme.ServONVIF.FloatingPiP" />
 
         <!-- Fullscreen Player Activity -->
         <activity
