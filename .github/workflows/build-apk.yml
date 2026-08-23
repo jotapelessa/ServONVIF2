@@ -26,13 +26,15 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Setup Gradle
+    - name: Setup Gradle 8.6
       uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.6'
 
     - name: Build Debug APK
       run: |
         cd android
-        gradle assembleDebug --stacktrace
+        gradle assembleDebug --stacktrace --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
@@ -42,10 +44,9 @@ jobs:
 
     - name: Create Automatic GitHub Release
       uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
       with:
-        tag_name: latest
-        name: ServONVIF Android TV & Mobile APK
+        tag_name: v1.0.0
+        name: ServONVIF Android TV & Mobile APK v1.0.0
         draft: false
         prerelease: false
         files: android/app/build/outputs/apk/debug/*.apk
