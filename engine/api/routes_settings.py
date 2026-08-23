@@ -93,10 +93,39 @@ def get_media_storage_stats():
         "media_path": str(media_dir.resolve()),
     }
 
+def get_system_metrics():
+    try:
+        import psutil
+        cpu_pct = psutil.cpu_percent(interval=None)
+        vmem = psutil.virtual_memory()
+        proc = psutil.Process()
+        proc_mem_mb = round(proc.memory_info().rss / (1024 * 1024), 1)
+        return {
+            "cpu_percent": round(cpu_pct, 1),
+            "ram_percent": round(vmem.percent, 1),
+            "ram_used_mb": proc_mem_mb,
+            "ram_total_mb": round(vmem.total / (1024 * 1024), 0),
+            "system_ram_used_mb": round(vmem.used / (1024 * 1024), 0),
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get system metrics: {e}")
+        return {
+            "cpu_percent": 0.0,
+            "ram_percent": 0.0,
+            "ram_used_mb": 0.0,
+            "ram_total_mb": 0.0,
+            "system_ram_used_mb": 0.0,
+        }
+
+@router.get("/metrics")
+async def get_realtime_metrics():
+    return get_system_metrics()
+
 @router.get("/")
 async def get_current_settings():
     local_ip = get_local_ip()
     storage_stats = get_media_storage_stats()
+    sys_metrics = get_system_metrics()
     return {
         "app_name": settings.APP_NAME,
         "port": settings.PORT,
@@ -111,6 +140,7 @@ async def get_current_settings():
         "telegram_bot_configured": telegram_service.is_configured,
         "telegram_cooldown_seconds": settings.TELEGRAM_COOLDOWN_SECONDS,
         "storage": storage_stats,
+        "system_metrics": sys_metrics,
     }
 
 @router.post("/")

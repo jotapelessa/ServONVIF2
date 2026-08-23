@@ -288,4 +288,16 @@ export const apiClient = {
     if (!res.ok) throw new Error(data.detail || "Falha ao simular leitura de placa");
     return data;
   },
+
+  async getMetrics(): Promise<{
+    cpu_percent: number;
+    ram_percent: number;
+    ram_used_mb: number;
+    ram_total_mb: number;
+    system_ram_used_mb: number;
+  }> {
+    const res = await fetch(`${API_BASE}/api/settings/metrics`);
+    if (!res.ok) throw new Error("Falha ao obter métricas de CPU/RAM");
+    return res.json();
+  },
 };

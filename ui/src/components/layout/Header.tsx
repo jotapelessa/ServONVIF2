@@ -1,8 +1,22 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { Shield, Plus, Scan, Film, Sliders, PanelRightOpen, PanelRightClose, Activity, Car } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
+import {
+  Shield,
+  Plus,
+  Scan,
+  Film,
+  Sliders,
+  PanelRightOpen,
+  PanelRightClose,
+  Activity,
+  Car,
+  Cpu,
+  HardDrive,
+} from "lucide-react";
 
 interface HeaderProps {
   onScanClick: () => void;
@@ -18,6 +32,45 @@ export function Header({
   onToggleSidebar,
 }: HeaderProps) {
   const { isConnected } = useWebSocket();
+  const [metrics, setMetrics] = useState<{
+    cpu_percent: number;
+    ram_percent: number;
+    ram_used_mb: number;
+    ram_total_mb: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchMetrics() {
+      try {
+        const data = await apiClient.getMetrics();
+        if (isMounted) setMetrics(data);
+      } catch (e) {
+        // Silently handle if engine is reconnecting
+      }
+    }
+
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 3500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const getCpuColor = (pct: number) => {
+    if (pct >= 80) return "text-rose-400 bg-rose-500/10 border-rose-500/20";
+    if (pct >= 50) return "text-amber-400 bg-amber-500/10 border-amber-500/20";
+    return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+  };
+
+  const getRamColor = (pct: number) => {
+    if (pct >= 85) return "text-rose-400 bg-rose-500/10 border-rose-500/20";
+    if (pct >= 65) return "text-amber-400 bg-amber-500/10 border-amber-500/20";
+    return "text-purple-400 bg-purple-500/10 border-purple-500/20";
+  };
 
   return (
     <header className="h-16 w-full app-header px-6 flex items-center justify-between z-30 shrink-0">
@@ -39,8 +92,37 @@ export function Header({
         </div>
       </div>
 
-      {/* Action Controls & Navigation */}
+      {/* Action Controls, Telemetry & Navigation */}
       <div className="flex items-center gap-3">
+        {/* Real-time Server Telemetry (CPU & RAM) */}
+        {metrics && (
+          <div className="hidden lg:flex items-center gap-2">
+            {/* CPU Badge */}
+            <div
+              title={`Uso de CPU do Servidor: ${metrics.cpu_percent}%`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition ${getCpuColor(
+                metrics.cpu_percent
+              )}`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>CPU</span>
+              <span className="font-bold">{metrics.cpu_percent}%</span>
+            </div>
+
+            {/* RAM Badge */}
+            <div
+              title={`Memória RAM do Servidor: ${metrics.ram_used_mb} MB usados pelo processo (${metrics.ram_percent}% do sistema)`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition ${getRamColor(
+                metrics.ram_percent
+              )}`}
+            >
+              <HardDrive className="w-3.5 h-3.5" />
+              <span>RAM</span>
+              <span className="font-bold">{metrics.ram_used_mb > 0 ? `${metrics.ram_used_mb}MB` : `${metrics.ram_percent}%`}</span>
+            </div>
+          </div>
+        )}
+
         {/* Status Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs">
           <span className="relative flex h-2 w-2">
