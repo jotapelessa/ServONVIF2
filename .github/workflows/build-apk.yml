@@ -1,4 +1,4 @@
-name: Build Android APK (Mobile & TV)
+name: Build & Release Android APK (Mobile & TV)
 
 on:
   push:
@@ -34,25 +34,32 @@ jobs:
     - name: Build Debug APK
       run: |
         cd android
-        gradle assembleDebug --no-daemon --stacktrace
+        gradle assembleDebug --no-daemon
 
-    - name: Upload APK to Artifacts
+    - name: Upload APK to Workflow Artifacts
       uses: actions/upload-artifact@v4
-      if: always()
       with:
         name: ServONVIF-Android-Debug-APK
-        path: android/app/build/outputs/apk/debug/*.apk
-        if-no-files-found: warn
+        path: android/app/build/outputs/apk/debug/app-debug.apk
 
     - name: Publish to GitHub Releases
       uses: softprops/action-gh-release@v2
-      if: success()
-      continue-on-error: true
       with:
-        tag_name: v1.0.0
-        name: ServONVIF Android TV & Mobile APK
+        tag_name: v1.1.0
+        name: "ServONVIF Android TV & Mobile v1.1.0 (APK Oficial)"
+        body: |
+          ### 🛡️ ServONVIF TV Command Center v1.1.0
+          
+          Esta versão traz a **Central de Segurança Completa** para Smart TVs:
+          
+          - 🎛️ **Menu e Navegação por Controle Remoto**: Alternância suave entre Câmeras, Status, Testes e Ajustes.
+          - 📊 **Cards de Status em Tempo Real**: Monitoramento de conexão com o Mac, túnel WebSocket e contagem de câmeras.
+          - 🧪 **Laboratório de Testes**: Botões interativos para testar Janela PiP (10s), som Chime, Ping de rede e Notificações Heads-Up.
+          - 🚀 **Disparo Instantâneo**: Suporte nativo a `FullScreenIntent` e permissões de sobreposição no Android 10+.
+          
+          **Download direto abaixo:** 👇
         draft: false
         prerelease: false
-        files: android/app/build/outputs/apk/debug/*.apk
+        files: android/app/build/outputs/apk/debug/app-debug.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
