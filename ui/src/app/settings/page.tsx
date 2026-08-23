@@ -29,14 +29,27 @@ import {
   Video,
   Volume2,
   Wifi,
-  ExternalLink,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Edit2,
+  Lock,
+  PauseCircle,
+  CheckCircle,
+  HelpCircle,
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"telegram" | "tv" | "storage" | "engine" | "tests" | "logs">("tests");
+  const [activeTab, setActiveTab] = useState<"devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine">("devices");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Devices State
+  const [devices, setDevices] = useState<any[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [editingDeviceName, setEditingDeviceName] = useState("");
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -98,7 +111,53 @@ export default function SettingsPage() {
       }
     }
     load();
+    fetchDevices();
   }, []);
+
+  const fetchDevices = async () => {
+    setDevicesLoading(true);
+    try {
+      const devList = await apiClient.getDevices();
+      setDevices(devList);
+    } catch (e) {
+      console.error("Failed to load devices:", e);
+    } finally {
+      setDevicesLoading(false);
+    }
+  };
+
+  const handleUpdateDeviceStatus = async (deviceId: string, newStatus: string) => {
+    try {
+      await apiClient.updateDevice(deviceId, { status: newStatus });
+      setDevices((prev) =>
+        prev.map((d) => (d.device_id === deviceId ? { ...d, status: newStatus } : d))
+      );
+    } catch (e: any) {
+      alert("Erro ao alterar status do dispositivo: " + (e.message || e));
+    }
+  };
+
+  const handleSaveDeviceName = async (deviceId: string) => {
+    try {
+      await apiClient.updateDevice(deviceId, { device_name: editingDeviceName });
+      setDevices((prev) =>
+        prev.map((d) => (d.device_id === deviceId ? { ...d, device_name: editingDeviceName } : d))
+      );
+      setEditingDeviceId(null);
+    } catch (e: any) {
+      alert("Erro ao renomear dispositivo: " + (e.message || e));
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!confirm("Tem certeza que deseja esquecer/remover este dispositivo?")) return;
+    try {
+      await apiClient.deleteDevice(deviceId);
+      setDevices((prev) => prev.filter((d) => d.device_id !== deviceId));
+    } catch (e: any) {
+      alert("Erro ao remover dispositivo: " + (e.message || e));
+    }
+  };
 
   const fetchLogs = async () => {
     setLogsLoading(true);
@@ -115,6 +174,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === "logs") {
       fetchLogs();
+    }
+    if (activeTab === "devices") {
+      fetchDevices();
     }
   }, [activeTab, logLevelFilter]);
 
@@ -260,7 +322,7 @@ export default function SettingsPage() {
           <div className="h-4 w-px bg-slate-700" />
           <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             <Sliders className="w-5 h-5 text-blue-500" />
-            <span>Central de Controle &amp; Diagnóstico</span>
+            <span>Central de Controle &amp; Dispositivos</span>
           </h1>
         </div>
 
@@ -286,6 +348,21 @@ export default function SettingsPage() {
       <div className="flex-1 flex max-w-7xl w-full mx-auto p-6 gap-6">
         {/* Navigation Sidebar */}
         <aside className="w-64 shrink-0 space-y-1.5">
+          <button
+            onClick={() => setActiveTab("devices")}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "devices"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <Shield className="w-4 h-4 text-emerald-400" />
+            <div className="text-left flex-1">
+              <div>Dispositivos Conectados</div>
+              <div className="text-[10px] text-emerald-300/80 font-normal">Controle de Acesso &amp; ACL</div>
+            </div>
+          </button>
+
           <button
             onClick={() => setActiveTab("tests")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
@@ -388,6 +465,202 @@ export default function SettingsPage() {
             </div>
           ) : (
             <>
+              {/* ================= TAB: DEVICES & ACL ================= */}
+              {activeTab === "devices" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <Shield className="w-5 h-5 text-emerald-400" />
+                        <span>Gestão &amp; Controle de Acesso de Dispositivos (ACL)</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Gerencie quais Smart TVs, Tablets e celulares têm permissão para visualizar alertas e transmissões de vídeo.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={fetchDevices}
+                      disabled={devicesLoading}
+                      className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700 transition-colors self-start sm:self-auto"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${devicesLoading ? "animate-spin" : ""}`} />
+                      <span>Atualizar Lista</span>
+                    </button>
+                  </div>
+
+                  {/* Device List */}
+                  <div className="space-y-3">
+                    {devices && devices.length > 0 ? (
+                      devices.map((device) => {
+                        const isEditing = editingDeviceId === device.device_id;
+                        return (
+                          <div
+                            key={device.device_id}
+                            className="bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-xl p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                          >
+                            {/* Device Info */}
+                            <div className="flex items-start gap-3.5">
+                              <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 mt-0.5">
+                                {device.device_type.includes("TV") ? (
+                                  <Tv className="w-5 h-5" />
+                                ) : device.device_type.includes("Tablet") ? (
+                                  <Tablet className="w-5 h-5" />
+                                ) : device.device_type.includes("Web") ? (
+                                  <Monitor className="w-5 h-5" />
+                                ) : (
+                                  <Smartphone className="w-5 h-5" />
+                                )}
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={editingDeviceName}
+                                        onChange={(e) => setEditingDeviceName(e.target.value)}
+                                        className="bg-slate-950 border border-blue-500 rounded px-2 py-0.5 text-xs text-white"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => handleSaveDeviceName(device.device_id)}
+                                        className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded text-[11px]"
+                                      >
+                                        Salvar
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingDeviceId(null)}
+                                        className="text-slate-400 hover:text-white text-[11px]"
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <span className="text-sm font-semibold text-slate-100">{device.device_name}</span>
+                                      <button
+                                        onClick={() => {
+                                          setEditingDeviceId(device.device_id);
+                                          setEditingDeviceName(device.device_name);
+                                        }}
+                                        className="text-slate-500 hover:text-slate-300 transition-colors"
+                                        title="Renomear dispositivo"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {/* Online Badge */}
+                                  {device.is_online ? (
+                                    <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      Online Agora
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
+                                      Offline
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="text-xs text-slate-400 flex items-center gap-3">
+                                  <span className="font-mono text-slate-300">IP: {device.ip_address}</span>
+                                  <span>•</span>
+                                  <span>Tipo: {device.device_type}</span>
+                                  {device.last_seen && (
+                                    <>
+                                      <span>•</span>
+                                      <span>Última atividade: {new Date(device.last_seen).toLocaleTimeString()}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Status Selector & Actions */}
+                            <div className="flex items-center gap-2 self-end md:self-center">
+                              {/* Status Buttons */}
+                              <div className="bg-slate-950 p-1 rounded-lg border border-slate-800 flex items-center gap-1">
+                                <button
+                                  onClick={() => handleUpdateDeviceStatus(device.device_id, "ALLOWED")}
+                                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                    device.status === "ALLOWED"
+                                      ? "bg-emerald-600 text-white font-bold shadow-md shadow-emerald-600/30"
+                                      : "text-slate-400 hover:text-emerald-400 hover:bg-slate-900"
+                                  }`}
+                                  title="Permitido: Recebe alertas e streamings normalmente"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span>Permitido</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleUpdateDeviceStatus(device.device_id, "PAUSED")}
+                                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                    device.status === "PAUSED"
+                                      ? "bg-amber-600 text-white font-bold shadow-md shadow-amber-600/30"
+                                      : "text-slate-400 hover:text-amber-400 hover:bg-slate-900"
+                                  }`}
+                                  title="Pausado: Temporariamente sem notificações de movimento"
+                                >
+                                  <PauseCircle className="w-3.5 h-3.5" />
+                                  <span>Pausado</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleUpdateDeviceStatus(device.device_id, "BLOCKED")}
+                                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                    device.status === "BLOCKED"
+                                      ? "bg-rose-600 text-white font-bold shadow-md shadow-rose-600/30"
+                                      : "text-slate-400 hover:text-rose-400 hover:bg-slate-900"
+                                  }`}
+                                  title="Bloqueado: Não recebe nenhum alerta"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Bloqueado</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleUpdateDeviceStatus(device.device_id, "UNKNOWN")}
+                                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                    device.status === "UNKNOWN"
+                                      ? "bg-slate-600 text-white font-bold"
+                                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                                  }`}
+                                  title="Desconhecido: Pendente de autorização"
+                                >
+                                  <HelpCircle className="w-3.5 h-3.5" />
+                                  <span>Desconhecido</span>
+                                </button>
+                              </div>
+
+                              <button
+                                onClick={() => handleDeleteDevice(device.device_id)}
+                                className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                title="Esquecer dispositivo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center space-y-2">
+                        <Shield className="w-8 h-8 text-slate-500 mx-auto" />
+                        <div className="text-sm font-semibold text-slate-300">Nenhum dispositivo registrado ainda</div>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                          Assim que o aplicativo no Android TV ou Tablet se conectar ao servidor, ele aparecerá aqui automaticamente com controle total de permissão.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* ================= TAB: TESTS ================= */}
               {activeTab === "tests" && (
                 <div className="space-y-6">

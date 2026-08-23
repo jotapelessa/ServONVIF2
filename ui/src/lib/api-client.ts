@@ -168,4 +168,33 @@ export const apiClient = {
     if (!res.ok) throw new Error(data.detail || "Falha no teste RTSP");
     return data;
   },
+
+  async getDevices(): Promise<any[]> {
+    const res = await fetch(`${API_BASE}/api/devices/`);
+    if (!res.ok) throw new Error("Falha ao carregar lista de dispositivos");
+    return res.json();
+  },
+
+  async updateDevice(
+    deviceIdOrPk: string | number,
+    payload: { device_name?: string; status?: string; notes?: string }
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/devices/${deviceIdOrPk}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao atualizar dispositivo");
+    return data;
+  },
+
+  async deleteDevice(deviceIdOrPk: string | number): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/devices/${deviceIdOrPk}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao remover dispositivo");
+    return data;
+  },
 };

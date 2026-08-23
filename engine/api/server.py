@@ -1,20 +1,19 @@
-import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from typing import Optional
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 from loguru import logger
 
 from engine.config.settings import settings
 from engine.database.db import init_db
-from engine.core.camera_manager import camera_manager
-from engine.services.retention_worker import retention_worker
-from engine.api.websocket_hub import ws_hub
 from engine.api.routes_cameras import router as cameras_router
 from engine.api.routes_events import router as events_router
 from engine.api.routes_stream import router as stream_router
 from engine.api.routes_settings import router as settings_router
+from engine.api.routes_devices import router as devices_router
+from engine.api.websocket_hub import ws_hub
+from engine.core.camera_manager import camera_manager
+from engine.services.retention_worker import retention_worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,11 +21,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing SQLite database...")
     await init_db()
     logger.info("Starting active camera streams...")
-    loop = asyncio.get_running_loop()
-    await camera_manager.initialize(loop)
+    await camera_manager.load_and_start_all_active_cameras()
     logger.info("Starting RetentionWorker...")
     retention_worker.start()
+
     yield
+
     # Shutdown
     logger.info("Stopping RetentionWorker...")
     retention_worker.stop()
@@ -54,10 +54,15 @@ app.include_router(cameras_router)
 app.include_router(events_router)
 app.include_router(stream_router)
 app.include_router(settings_router)
+app.include_router(devices_router)
 
 @app.websocket("/ws/events")
-async def websocket_events_endpoint(websocket: WebSocket):
-    await ws_hub.connect(websocket)
+async def websocket_events_endpoint(
+    websocket: WebSocket,
+    device_id: Optional[str] = Query(None),
+    device_type: Optional[str] = Query(None)
+):
+    await ws_hub.connect(websocket, device_id=device_id, device_type=device_type)
     try:
         while True:
             # Keep-alive receive
@@ -67,8 +72,3 @@ async def websocket_events_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.warning(f"WebSocket connection error: {e}")
         ws_hub.disconnect(websocket)
-
-# Serve static frontend UI if exported (ui/out)
-ui_out_dir = settings.BASE_DIR.parent / "ui" / "out"
-if ui_out_dir.exists():
-    app.mount("/", StaticFiles(directory=str(ui_out_dir), html=True), name="static-ui")

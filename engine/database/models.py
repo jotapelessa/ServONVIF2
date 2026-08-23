@@ -30,3 +30,16 @@ class MotionEvent(SQLModel, table=True):
     thumbnail_path: Optional[str] = None
     telegram_sent: bool = Field(default=False)
     duration_seconds: float = Field(default=0.0)
+
+class Device(SQLModel, table=True):
+    __tablename__ = "devices"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    device_id: str = Field(index=True, unique=True)
+    device_name: str = Field(default="Dispositivo Desconhecido")
+    ip_address: str = Field(index=True)
+    device_type: str = Field(default="Android TV")  # "Android TV", "Tablet", "Mobile", "Web Browser"
+    status: str = Field(default="ALLOWED")          # "ALLOWED", "BLOCKED", "PAUSED", "UNKNOWN"
+    notes: Optional[str] = None
+    last_seen: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
