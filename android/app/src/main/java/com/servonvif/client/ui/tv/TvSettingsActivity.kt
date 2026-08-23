@@ -143,21 +143,21 @@ class TvSettingsActivity : Activity() {
     }
 
     private fun setupListeners() {
-        btnPosTopRight.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_RIGHT; updatePositionUI() }
-        btnPosTopLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_LEFT; updatePositionUI() }
-        btnPosBottomRight.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_BOTTOM_RIGHT; updatePositionUI() }
-        btnPosBottomLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_BOTTOM_LEFT; updatePositionUI() }
-        btnPosCenter.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_CENTER; updatePositionUI() }
+        btnPosTopRight.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_RIGHT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
+        btnPosTopLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_LEFT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
+        btnPosBottomRight.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_BOTTOM_RIGHT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
+        btnPosBottomLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_BOTTOM_LEFT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
+        btnPosCenter.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_CENTER; configRepo.pipPosition = selectedPosition; updatePositionUI() }
 
-        btnSizeMicro.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MICRO; updateSizeUI() }
-        btnSizeMini.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MINI; updateSizeUI() }
-        btnSizeCompact.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_COMPACT; updateSizeUI() }
-        btnSizeLarge.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_LARGE; updateSizeUI() }
+        btnSizeMicro.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MICRO; configRepo.pipSize = selectedSize; updateSizeUI() }
+        btnSizeMini.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_MINI; configRepo.pipSize = selectedSize; updateSizeUI() }
+        btnSizeCompact.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_COMPACT; configRepo.pipSize = selectedSize; updateSizeUI() }
+        btnSizeLarge.setOnClickListener { selectedSize = ServerConfigRepository.SIZE_LARGE; configRepo.pipSize = selectedSize; updateSizeUI() }
 
-        btnDur5s.setOnClickListener { selectedDuration = 5; updateDurationUI() }
-        btnDur10s.setOnClickListener { selectedDuration = 10; updateDurationUI() }
-        btnDur15s.setOnClickListener { selectedDuration = 15; updateDurationUI() }
-        btnDur30s.setOnClickListener { selectedDuration = 30; updateDurationUI() }
+        btnDur5s.setOnClickListener { selectedDuration = 5; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
+        btnDur10s.setOnClickListener { selectedDuration = 10; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
+        btnDur15s.setOnClickListener { selectedDuration = 15; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
+        btnDur30s.setOnClickListener { selectedDuration = 30; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
 
         btnTestConnection.setOnClickListener {
             val ip = etServerIp.text.toString().trim()

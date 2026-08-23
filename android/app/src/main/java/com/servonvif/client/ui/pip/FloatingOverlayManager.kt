@@ -11,30 +11,28 @@ import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 
 /**
  * FloatingOverlayManager:
- * Renders a lightweight, non-invasive 16:9 Floating PiP Window directly into the Android WindowManager.
+ * Non-invasive 16:9 Floating PiP Window injected directly into the Android WindowManager.
  * 
- * CRITICAL ARCHITECTURAL BENEFIT:
- * Because this is a pure Window Overlay (TYPE_APPLICATION_OVERLAY) with FLAG_NOT_FOCUSABLE,
- * underlying third-party streaming apps (SBT, YouTube, GloboPlay, Netflix, PlutoTV)
- * NEVER receive onPause()/onStop(), NEVER lose SurfaceView decoder contexts, and NEVER CRASH!
+ * Guarantees that third-party streaming apps (SBT, YouTube, GloboPlay, Netflix)
+ * NEVER pause, NEVER lose SurfaceView decoders, and NEVER crash when the PiP opens or closes.
  */
 class FloatingOverlayManager(private val context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val configRepo = ServerConfigRepository(context)
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var overlayView: View? = null
@@ -50,31 +48,42 @@ class FloatingOverlayManager(private val context: Context) {
     ) {
         mainHandler.post {
             try {
-                if (!Settings.canDrawOverlays(context)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
                     Log.w("FloatingOverlay", "SYSTEM_ALERT_WINDOW permission not granted")
                     return@post
                 }
 
-                // If an overlay is already showing, refresh it
+                // If an overlay is already showing, hide it cleanly first
                 hideFloatingAlert()
+
+                // Always read fresh settings from repository
+                val configRepo = ServerConfigRepository(context)
+                val pipSizeSetting = configRepo.pipSize
+                val pipPosSetting = configRepo.pipPosition
 
                 val inflater = LayoutInflater.from(context)
                 val view = inflater.inflate(R.layout.activity_pip_alert, null)
                 overlayView = view
 
-                // 1. Calculate 16:9 Dimensions & Margin
+                // 1. Calculate Exact 16:9 Dimensions (Micro, Mini, Compact, Large)
                 val density = context.resources.displayMetrics.density
-                val (widthDp, heightDp) = when (configRepo.pipSize) {
-                    ServerConfigRepository.SIZE_MICRO -> Pair(220, 124)
-                    ServerConfigRepository.SIZE_MINI -> Pair(270, 152)
+                val (widthDp, heightDp) = when (pipSizeSetting) {
+                    ServerConfigRepository.SIZE_MICRO -> Pair(200, 112)
+                    ServerConfigRepository.SIZE_MINI -> Pair(260, 146)
                     ServerConfigRepository.SIZE_COMPACT -> Pair(320, 180)
-                    ServerConfigRepository.SIZE_LARGE -> Pair(460, 258)
-                    else -> Pair(270, 152)
+                    ServerConfigRepository.SIZE_LARGE -> Pair(420, 236)
+                    else -> Pair(260, 146)
                 }
 
                 val widthPx = (widthDp * density).toInt()
                 val heightPx = (heightDp * density).toInt()
                 val marginPx = (16 * density).toInt()
+
+                Log.d("FloatingOverlay", "Applying PiP Size: $pipSizeSetting -> ${widthDp}x${heightDp}dp (${widthPx}x${heightPx}px) at Position: $pipPosSetting")
+
+                // Explicitly set dimensions on the CardView Container
+                val pipCardContainer = view.findViewById<CardView>(R.id.pipCardContainer)
+                pipCardContainer?.layoutParams = ViewGroup.LayoutParams(widthPx, heightPx)
 
                 val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -95,7 +104,7 @@ class FloatingOverlayManager(private val context: Context) {
                 )
 
                 // 2. Set Screen Gravity Position
-                when (configRepo.pipPosition) {
+                when (pipPosSetting) {
                     ServerConfigRepository.POSITION_TOP_LEFT -> {
                         params.gravity = Gravity.TOP or Gravity.START
                         params.x = marginPx
@@ -122,18 +131,21 @@ class FloatingOverlayManager(private val context: Context) {
                     }
                 }
 
-                // 3. Bind Layout Views
-                val tvPipCameraName = view.findViewById<TextView>(R.id.tvPipCameraName)
-                val tvPipTimer = view.findViewById<TextView>(R.id.tvPipTimer)
+                // 3. Bind Layout Views with correct XML IDs
+                val tvCameraTitle = view.findViewById<TextView>(R.id.tvCameraTitle)
+                val tvCountdown = view.findViewById<TextView>(R.id.tvCountdown)
                 val pipProgressBar = view.findViewById<ProgressBar>(R.id.pipProgressBar)
                 val pipWebView = view.findViewById<WebView>(R.id.pipWebView)
-                val btnDismissPip = view.findViewById<ImageButton>(R.id.btnDismissPip)
+                val btnPipClose = view.findViewById<TextView>(R.id.btnPipClose)
 
-                tvPipCameraName.text = cameraName
-                pipProgressBar.max = durationSeconds * 1000
-                pipProgressBar.progress = durationSeconds * 1000
+                val scoreText = if (score > 0.0) " (${(score * 100).toInt()}%)" else ""
+                tvCameraTitle?.text = "🔴 $cameraName$scoreText"
+                tvCountdown?.text = "${durationSeconds}s"
 
-                btnDismissPip?.setOnClickListener {
+                pipProgressBar?.max = durationSeconds * 1000
+                pipProgressBar?.progress = durationSeconds * 1000
+
+                btnPipClose?.setOnClickListener {
                     hideFloatingAlert()
                 }
 
@@ -185,9 +197,9 @@ class FloatingOverlayManager(private val context: Context) {
                 val totalMillis = durationSeconds * 1000L
                 countDownTimer = object : CountDownTimer(totalMillis, 100) {
                     override fun onTick(millisUntilFinished: Long) {
-                        pipProgressBar.progress = millisUntilFinished.toInt()
+                        pipProgressBar?.progress = millisUntilFinished.toInt()
                         val secondsLeft = (millisUntilFinished / 1000) + 1
-                        tvPipTimer.text = "${secondsLeft}s"
+                        tvCountdown?.text = "${secondsLeft}s"
                     }
 
                     override fun onFinish() {

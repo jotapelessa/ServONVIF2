@@ -130,6 +130,18 @@ class PiPAlertActivity : Activity() {
         pipProgressBar = findViewById(R.id.pipProgressBar)
         pipCardContainer = findViewById(R.id.pipCardContainer)
 
+        val density = resources.displayMetrics.density
+        val (widthDp, heightDp) = when (configRepo.pipSize) {
+            ServerConfigRepository.SIZE_MICRO -> Pair(200, 112)
+            ServerConfigRepository.SIZE_MINI -> Pair(260, 146)
+            ServerConfigRepository.SIZE_COMPACT -> Pair(320, 180)
+            ServerConfigRepository.SIZE_LARGE -> Pair(420, 236)
+            else -> Pair(260, 146)
+        }
+        val widthPx = (widthDp * density).toInt()
+        val heightPx = (heightDp * density).toInt()
+        pipCardContainer.layoutParams = ViewGroup.LayoutParams(widthPx, heightPx)
+
         cameraId = intent.getIntExtra("EXTRA_CAMERA_ID", 1)
         val cameraName = intent.getStringExtra("EXTRA_CAMERA_NAME") ?: "Câmera de Segurança"
         val score = intent.getDoubleExtra("EXTRA_SCORE", 0.0)
