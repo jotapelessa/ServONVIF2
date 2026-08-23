@@ -86,5 +86,21 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.ServONVIF" />
 
+        <!-- Android TV Fullscreen Player -->
+        <activity
+            android:name=".ui.tv.TvPlayerActivity"
+            android:exported="false"
+            android:label="ServONVIF Player"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.ServONVIF.TV" />
+
+        <!-- Android TV Settings Screen -->
+        <activity
+            android:name=".ui.tv.TvSettingsActivity"
+            android:exported="false"
+            android:label="ServONVIF Configurações"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.ServONVIF.TV" />
+
     </application>
 </manifest>
