@@ -25,7 +25,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
       }`}
     >
       {/* Top HUD Header */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
         {/* Name & Dot */}
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
@@ -41,21 +41,21 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
             />
           </span>
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-white truncate max-w-[180px]">
+            <span className="text-xs font-bold text-white truncate max-w-[150px] drop-shadow">
               {camera.name}
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {camera.ip_address || "RTSP Stream"}
+            <span className="text-[10px] text-slate-300 font-mono drop-shadow">
+              {camera.ip_address || "RTSP"} &bull; {((camera.sensitivity || 0.03) * 100).toFixed(0)}% MOG2
             </span>
           </div>
         </div>
 
-        {/* Hover Quick Action */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onSpotlight(camera)}
             title="Expandir / Modo Destaque"
-            className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/10 transition"
+            className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/20 shadow transition"
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -63,7 +63,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
             <button
               onClick={() => onOpenConfig(camera)}
               title="Configurações da Câmera (Sensibilidade & Dispositivos)"
-              className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/10 transition"
+              className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-blue-600 text-slate-200 hover:text-white border border-white/20 shadow transition"
             >
               <Settings className="w-3.5 h-3.5" />
             </button>
@@ -71,7 +71,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
           <button
             onClick={() => onOpenROI(camera)}
             title="Configurar Zona de Detecção (ROI)"
-            className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/10 transition"
+            className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-cyan-600 text-slate-200 hover:text-white border border-white/20 shadow transition"
           >
             <Sliders className="w-3.5 h-3.5" />
           </button>
@@ -79,7 +79,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
             <button
               onClick={() => onDeleteCamera(camera)}
               title="Excluir Câmera"
-              className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 hover:bg-rose-600 text-slate-200 hover:text-white border border-white/10 transition"
+              className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-rose-600 text-slate-200 hover:text-white border border-white/20 shadow transition"
             >
               <ShieldAlert className="w-3.5 h-3.5" />
             </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { API_BASE } from "@/lib/api-client";
 import { VideoOff, RefreshCw } from "lucide-react";
 
@@ -20,6 +20,18 @@ export function LiveView({ cameraId, cameraName, roiPolygon }: LiveViewProps) {
     setHasError(false);
     setKey((prev) => prev + 1);
   };
+
+  // Auto-reconnect after 3s if disconnected
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (hasError) {
+      timer = setTimeout(() => {
+        setHasError(false);
+        setKey((prev) => prev + 1);
+      }, 3000);
+    }
+    return () => clearTimeout(timer);
+  }, [hasError]);
 
   // Convert normalized points [0..1] to SVG polygon points string
   const svgPoints = roiPolygon && roiPolygon.length >= 3
