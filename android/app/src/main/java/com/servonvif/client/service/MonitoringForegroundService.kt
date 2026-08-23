@@ -75,15 +75,21 @@ class MonitoringForegroundService : Service() {
         }
     }
 
+    private var lastSoundChimeTimestamp = 0L
+
     private fun handleIncomingAlert(event: EventPayload) {
-        // 1. Play audible chime if enabled
+        // 1. Play audible chime if enabled (throttled to at most once every 5 seconds)
         if (configRepo.isSoundAlertEnabled) {
-            try {
-                val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
-                ringtone?.play()
-            } catch (e: Exception) {
-                // Safe ignore audio error
+            val now = System.currentTimeMillis()
+            if (now - lastSoundChimeTimestamp > 5000L) {
+                lastSoundChimeTimestamp = now
+                try {
+                    val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
+                    ringtone?.play()
+                } catch (e: Exception) {
+                    // Safe ignore audio error
+                }
             }
         }
 

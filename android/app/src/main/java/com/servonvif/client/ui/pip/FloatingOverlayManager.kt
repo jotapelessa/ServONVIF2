@@ -3,7 +3,6 @@ package com.servonvif.client.ui.pip
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -25,10 +24,12 @@ import com.servonvif.client.data.repository.ServerConfigRepository
 
 /**
  * FloatingOverlayManager:
- * Non-invasive 16:9 Floating PiP Window injected directly into the Android WindowManager.
+ * Bulletproof Non-Invasive 16:9 WindowManager Overlay for Android TV & Tablets.
  * 
- * Guarantees that third-party streaming apps (SBT, YouTube, GloboPlay, Netflix)
- * NEVER pause, NEVER lose SurfaceView decoders, and NEVER crash when the PiP opens or closes.
+ * Features:
+ * 1. Zero disruption to background streaming apps (SBT, YouTube, PlutoTV, GloboPlay).
+ * 2. Smart Debounce & Extension: If motion packets arrive continuously, extends the timer without flickering.
+ * 3. Guaranteed Minimum Duration: Enforces at least 5s (default 10s+) with timestamp-based countdown.
  */
 class FloatingOverlayManager(private val context: Context) {
 
@@ -36,8 +37,34 @@ class FloatingOverlayManager(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var overlayView: View? = null
-    private var countDownTimer: CountDownTimer? = null
     private var isShowing = false
+    private var currentCameraId: Int = -1
+    private var targetDismissTimestamp: Long = 0L
+    private var totalDurationMillis: Long = 10000L
+
+    private val countdownRunnable = object : Runnable {
+        override fun run() {
+            if (!isShowing || overlayView == null) return
+
+            val now = System.currentTimeMillis()
+            val remainingMillis = targetDismissTimestamp - now
+
+            if (remainingMillis <= 0) {
+                Log.d("FloatingOverlay", "Countdown reached 0s. Auto-dismissing overlay.")
+                hideFloatingAlert()
+            } else {
+                overlayView?.let { v ->
+                    val pipProgressBar = v.findViewById<ProgressBar>(R.id.pipProgressBar)
+                    val tvCountdown = v.findViewById<TextView>(R.id.tvCountdown)
+
+                    pipProgressBar?.progress = remainingMillis.toInt()
+                    val secondsLeft = ((remainingMillis + 999) / 1000).toInt()
+                    tvCountdown?.text = "${secondsLeft}s"
+                }
+                mainHandler.postDelayed(this, 100)
+            }
+        }
+    }
 
     fun showFloatingAlert(
         cameraId: Int,
@@ -53,17 +80,33 @@ class FloatingOverlayManager(private val context: Context) {
                     return@post
                 }
 
-                // If an overlay is already showing, hide it cleanly first
-                hideFloatingAlert()
-
-                // Always read fresh settings from repository
                 val configRepo = ServerConfigRepository(context)
+                val effectiveDuration = maxOf(durationSeconds, configRepo.pipDurationSeconds, 5)
+                totalDurationMillis = effectiveDuration * 1000L
+
+                // If already showing on screen: simply EXTEND the timer and update text!
+                if (isShowing && overlayView != null) {
+                    targetDismissTimestamp = System.currentTimeMillis() + totalDurationMillis
+                    overlayView?.let { v ->
+                        val tvCameraTitle = v.findViewById<TextView>(R.id.tvCameraTitle)
+                        val pipProgressBar = v.findViewById<ProgressBar>(R.id.pipProgressBar)
+                        val scoreText = if (score > 0.0f) " (${(score * 100).toInt()}%)" else ""
+                        tvCameraTitle?.text = "🔴 $cameraName$scoreText"
+                        pipProgressBar?.max = totalDurationMillis.toInt()
+                        pipProgressBar?.progress = totalDurationMillis.toInt()
+                    }
+                    Log.d("FloatingOverlay", "Active overlay extended for +${effectiveDuration}s for Camera: $cameraName")
+                    return@post
+                }
+
+                // If no overlay showing, construct fresh non-invasive Window
                 val pipSizeSetting = configRepo.pipSize
                 val pipPosSetting = configRepo.pipPosition
 
                 val inflater = LayoutInflater.from(context)
                 val view = inflater.inflate(R.layout.activity_pip_alert, null)
                 overlayView = view
+                currentCameraId = cameraId
 
                 // 1. Calculate Exact 16:9 Dimensions (Micro, Mini, Compact, Large)
                 val density = context.resources.displayMetrics.density
@@ -79,9 +122,7 @@ class FloatingOverlayManager(private val context: Context) {
                 val heightPx = (heightDp * density).toInt()
                 val marginPx = (16 * density).toInt()
 
-                Log.d("FloatingOverlay", "Applying PiP Size: $pipSizeSetting -> ${widthDp}x${heightDp}dp (${widthPx}x${heightPx}px) at Position: $pipPosSetting")
-
-                // Explicitly set dimensions on the CardView Container
+                // Explicitly force Dimensions on CardView container
                 val pipCardContainer = view.findViewById<CardView>(R.id.pipCardContainer)
                 pipCardContainer?.layoutParams = ViewGroup.LayoutParams(widthPx, heightPx)
 
@@ -131,7 +172,7 @@ class FloatingOverlayManager(private val context: Context) {
                     }
                 }
 
-                // 3. Bind Layout Views with correct XML IDs
+                // 3. Bind Layout Views
                 val tvCameraTitle = view.findViewById<TextView>(R.id.tvCameraTitle)
                 val tvCountdown = view.findViewById<TextView>(R.id.tvCountdown)
                 val pipProgressBar = view.findViewById<ProgressBar>(R.id.pipProgressBar)
@@ -140,10 +181,10 @@ class FloatingOverlayManager(private val context: Context) {
 
                 val scoreText = if (score > 0.0f) " (${(score * 100).toInt()}%)" else ""
                 tvCameraTitle?.text = "🔴 $cameraName$scoreText"
-                tvCountdown?.text = "${durationSeconds}s"
+                tvCountdown?.text = "${effectiveDuration}s"
 
-                pipProgressBar?.max = durationSeconds * 1000
-                pipProgressBar?.progress = durationSeconds * 1000
+                pipProgressBar?.max = totalDurationMillis.toInt()
+                pipProgressBar?.progress = totalDurationMillis.toInt()
 
                 btnPipClose?.setOnClickListener {
                     hideFloatingAlert()
@@ -192,21 +233,12 @@ class FloatingOverlayManager(private val context: Context) {
                 // 5. Add Non-Invasive View to WindowManager
                 windowManager.addView(view, params)
                 isShowing = true
-                Log.d("FloatingOverlay", "Floating Window added cleanly without interrupting background app")
+                Log.d("FloatingOverlay", "Floating Window added with duration=${effectiveDuration}s")
 
-                // 6. Start Dismiss Countdown
-                val totalMillis = durationSeconds * 1000L
-                countDownTimer = object : CountDownTimer(totalMillis, 100) {
-                    override fun onTick(millisUntilFinished: Long) {
-                        pipProgressBar?.progress = millisUntilFinished.toInt()
-                        val secondsLeft = (millisUntilFinished / 1000) + 1
-                        tvCountdown?.text = "${secondsLeft}s"
-                    }
-
-                    override fun onFinish() {
-                        hideFloatingAlert()
-                    }
-                }.start()
+                // 6. Start Timestamp-based Guaranteed Countdown
+                targetDismissTimestamp = System.currentTimeMillis() + totalDurationMillis
+                mainHandler.removeCallbacks(countdownRunnable)
+                mainHandler.post(countdownRunnable)
 
             } catch (e: Exception) {
                 Log.e("FloatingOverlay", "Error showing floating alert: ${e.message}")
@@ -217,8 +249,7 @@ class FloatingOverlayManager(private val context: Context) {
     fun hideFloatingAlert() {
         mainHandler.post {
             try {
-                countDownTimer?.cancel()
-                countDownTimer = null
+                mainHandler.removeCallbacks(countdownRunnable)
 
                 overlayView?.let { v ->
                     try {
@@ -233,10 +264,11 @@ class FloatingOverlayManager(private val context: Context) {
                     if (isShowing) {
                         windowManager.removeView(v)
                         isShowing = false
-                        Log.d("FloatingOverlay", "Floating Window removed cleanly in 0ms")
+                        Log.d("FloatingOverlay", "Floating Window dismissed cleanly")
                     }
                 }
                 overlayView = null
+                currentCameraId = -1
             } catch (e: Exception) {
                 Log.e("FloatingOverlay", "Error hiding floating alert: ${e.message}")
             }
