@@ -1,4 +1,4 @@
-name: Build & Release Android APK (Mobile & TV)
+name: Build Android APK (Mobile & TV)
 
 on:
   push:
@@ -26,27 +26,27 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Setup Gradle 8.6
+    - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: '8.6'
 
     - name: Build Debug APK
-      run: |
-        cd android
-        gradle assembleDebug --stacktrace --no-daemon
+      working-directory: ./android
+      run: gradle assembleDebug --no-daemon --stacktrace
 
-    - name: Upload APK Artifact
+    - name: Upload APK to Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ServONVIF-Android-TV-Debug-APK
+        name: ServONVIF-Android-Debug-APK
         path: android/app/build/outputs/apk/debug/*.apk
 
-    - name: Create Automatic GitHub Release
+    - name: Publish to GitHub Releases
       uses: softprops/action-gh-release@v2
+      continue-on-error: true
       with:
         tag_name: v1.0.0
-        name: ServONVIF Android TV & Mobile APK v1.0.0
+        name: ServONVIF Android TV & Mobile APK
         draft: false
         prerelease: false
         files: android/app/build/outputs/apk/debug/*.apk

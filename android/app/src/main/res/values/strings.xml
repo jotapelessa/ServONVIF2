@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ServONVIF Monitor</string>
+    <string name="title_activity_main">ServONVIF Mobile</string>
+    <string name="title_activity_tv">ServONVIF TV</string>
+</resources>
