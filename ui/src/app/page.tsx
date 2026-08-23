@@ -141,7 +141,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#0b0f19]">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-[#0b0f19]">
       {/* App Header */}
       <Header
         onScanClick={handleScan}
