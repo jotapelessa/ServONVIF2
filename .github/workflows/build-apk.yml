@@ -22,6 +22,7 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: gradle
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -32,17 +33,22 @@ jobs:
         gradle-version: '8.6'
 
     - name: Build Debug APK
-      working-directory: ./android
-      run: gradle assembleDebug --no-daemon --stacktrace
+      run: |
+        cd android
+        chmod +x gradlew || true
+        gradle assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK to Artifacts
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: ServONVIF-Android-Debug-APK
         path: android/app/build/outputs/apk/debug/*.apk
+        if-no-files-found: warn
 
     - name: Publish to GitHub Releases
       uses: softprops/action-gh-release@v2
+      if: success()
       continue-on-error: true
       with:
         tag_name: v1.0.0
