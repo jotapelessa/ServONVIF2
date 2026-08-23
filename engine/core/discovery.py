@@ -8,8 +8,8 @@ from engine.api.routes_settings import get_local_ip
 class ONVIFDiscovery:
     """
     Dual-engine camera discovery:
-    1. WS-Discovery (UDP Multicast on 239.255.255.250:3702) for standard ONVIF devices.
-    2. High-speed concurrent RTSP Port Scanner (554, 8554, 8000) for all local subnet IP cameras.
+    1. WS-Discovery (UDP Multicast on 239.255.255.250:3702 and Broadcast 255.255.255.255:3702) for standard ONVIF devices.
+    2. High-speed concurrent Multi-Port Scanner (554, 8554, 8000, 80, 8899, 37777, 34567) across all local subnet hosts.
     """
 
     WS_DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -29,10 +29,12 @@ class ONVIFDiscovery:
         </e:Body>
     </e:Envelope>"""
 
+    COMMON_CAMERA_PORTS = [554, 8554, 8000, 8899, 37777, 34567]
+
     @classmethod
-    async def discover_cameras(cls, timeout_seconds: float = 2.5) -> List[Dict[str, Any]]:
+    async def discover_cameras(cls, timeout_seconds: float = 3.5) -> List[Dict[str, Any]]:
         """
-        Runs both ONVIF WS-Discovery and concurrent Subnet RTSP Scanner in parallel.
+        Runs both ONVIF WS-Discovery and concurrent Subnet RTSP/ONVIF Multi-Port Scan.
         """
         discovered_map: Dict[str, Dict[str, Any]] = {}
 
@@ -41,39 +43,50 @@ class ONVIFDiscovery:
             onvif_results = await cls._discover_onvif(timeout_seconds=timeout_seconds)
             for cam in onvif_results:
                 discovered_map[cam["ip"]] = cam
+                logger.info(f"Discovered ONVIF Camera: {cam['ip']}")
         except Exception as e:
             logger.warning(f"ONVIF WS-Discovery encountered error: {e}")
 
-        # 2. Run High-Speed Subnet RTSP Scan
+        # 2. Run High-Speed Multi-Port Subnet Scan
         try:
-            rtsp_results = await cls._scan_subnet_rtsp(timeout_per_host=0.4)
-            for cam in rtsp_results:
+            port_results = await cls._scan_subnet_ports(timeout_per_host=0.5)
+            for cam in port_results:
                 if cam["ip"] not in discovered_map:
                     discovered_map[cam["ip"]] = cam
+                    logger.info(f"Discovered IP Camera via Port Scan: {cam['ip']}:{cam['port']}")
         except Exception as e:
-            logger.warning(f"RTSP Subnet Scan encountered error: {e}")
+            logger.warning(f"Subnet Port Scan encountered error: {e}")
 
         return list(discovered_map.values())
 
     @classmethod
-    async def _discover_onvif(cls, timeout_seconds: float = 2.0) -> List[Dict[str, Any]]:
+    async def _discover_onvif(cls, timeout_seconds: float = 2.5) -> List[Dict[str, Any]]:
         cameras = []
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.settimeout(timeout_seconds)
 
         try:
-            sock.sendto(cls.WS_DISCOVERY_PROBE.encode("utf-8"), ("239.255.255.250", 3702))
+            # Send to Multicast and Broadcast addresses
+            probe_bytes = cls.WS_DISCOVERY_PROBE.encode("utf-8")
+            sock.sendto(probe_bytes, ("239.255.255.250", 3702))
+            sock.sendto(probe_bytes, ("255.255.255.255", 3702))
+
             loop = asyncio.get_running_loop()
 
             def receive_all():
                 found = []
+                seen_ips = set()
                 while True:
                     try:
                         data, addr = sock.recvfrom(4096)
+                        ip = addr[0]
+                        if ip in seen_ips:
+                            continue
+                        seen_ips.add(ip)
+
                         response_str = data.decode("utf-8", errors="ignore")
                         xaddrs_match = re.search(r"<d:XAddrs>(.*?)</d:XAddrs>", response_str)
-                        ip = addr[0]
                         onvif_url = xaddrs_match.group(1).split()[0] if xaddrs_match else f"http://{ip}:80/onvif/device_service"
 
                         found.append({
@@ -99,22 +112,19 @@ class ONVIFDiscovery:
         return cameras
 
     @classmethod
-    async def _scan_subnet_rtsp(cls, timeout_per_host: float = 0.4) -> List[Dict[str, Any]]:
+    async def _scan_subnet_ports(cls, timeout_per_host: float = 0.5) -> List[Dict[str, Any]]:
         """
-        Asynchronously scans common RTSP ports (554, 8554) across the local /24 subnet.
+        Asynchronously scans common IP Camera ports across the entire local /24 subnet.
         """
         local_ip = get_local_ip()
-        if not local_ip or local_ip == "127.0.0.1":
-            return []
-
-        # Get subnet prefix (e.g. 192.168.1)
         parts = local_ip.split(".")
         if len(parts) != 4:
-            return []
-        subnet_prefix = ".".join(parts[:3])
+            subnet_prefix = "192.168.1"
+        else:
+            subnet_prefix = ".".join(parts[:3])
 
         discovered: List[Dict[str, Any]] = []
-        sem = asyncio.Semaphore(75) # 75 concurrent connections
+        sem = asyncio.Semaphore(80) # 80 concurrent connections
 
         async def check_target(ip: str, port: int):
             async with sem:
@@ -124,22 +134,23 @@ class ONVIFDiscovery:
                     writer.close()
                     await writer.wait_closed()
 
+                    stream_path = "/stream" if port == 8554 else "/h264Preview_01_main"
                     discovered.append({
                         "name": f"Câmera IP ({ip}:{port})",
                         "ip": ip,
                         "port": port,
-                        "default_rtsp": f"rtsp://{ip}:{port}/stream" if port == 8554 else f"rtsp://{ip}:{port}/h264Preview_01_main",
-                        "type": "RTSP Stream IP",
+                        "default_rtsp": f"rtsp://{ip}:{port}{stream_path}",
+                        "type": f"Porta {port} Aberta",
                     })
                 except Exception:
                     pass
 
-        # Scan ports 554 and 8554 for IPs 1..254
+        # Scan each host in subnet for all common camera ports
         tasks = []
         for host_num in range(1, 255):
             target_ip = f"{subnet_prefix}.{host_num}"
-            tasks.append(check_target(target_ip, 554))
-            tasks.append(check_target(target_ip, 8554))
+            for port in cls.COMMON_CAMERA_PORTS:
+                tasks.append(check_target(target_ip, port))
 
         await asyncio.gather(*tasks, return_exceptions=True)
         return discovered

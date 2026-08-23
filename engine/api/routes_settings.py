@@ -28,15 +28,40 @@ class TelegramTestPayload(BaseModel):
     chat_id: Optional[str] = None
 
 def get_local_ip() -> str:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # 1. Try standard connect to local gateway/DNS
+    for target in [('192.168.1.1', 80), ('8.8.8.8', 80), ('1.1.1.1', 80)]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.5)
+            s.connect(target)
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not ip.startswith('127.'):
+                return ip
+        except Exception:
+            pass
+
+    # 2. Hostname resolution
     try:
-        s.connect(('10.254.254.254', 1))
-        ip = s.getsockname()[0]
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith('127.'):
+                return ip
     except Exception:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
-    return ip
+        pass
+
+    # 3. macOS ifconfig fallback
+    try:
+        import subprocess
+        out = subprocess.check_output("ifconfig | grep 'inet ' | grep -v 127.0.0.1", shell=True).decode()
+        for line in out.strip().split('\n'):
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[0] == 'inet':
+                return parts[1]
+    except Exception:
+        pass
+
+    return '192.168.1.96'
 
 def get_media_storage_stats():
     total_files = 0
