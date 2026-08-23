@@ -39,7 +39,10 @@ class Device(SQLModel, table=True):
     device_name: str = Field(default="Dispositivo Desconhecido")
     ip_address: str = Field(index=True)
     device_type: str = Field(default="Android TV")  # "Android TV", "Tablet", "Mobile", "Web Browser"
+    manufacturer_model: Optional[str] = None       # ex: "Samsung Galaxy Tab", "Xiaomi Mi Box 4K"
     status: str = Field(default="ALLOWED")          # "ALLOWED", "BLOCKED", "PAUSED", "UNKNOWN"
     notes: Optional[str] = None
+    ping_count: int = Field(default=0)
+    last_ping_at: Optional[datetime] = None
     last_seen: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)

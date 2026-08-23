@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { apiClient, API_BASE } from "@/lib/api-client";
 import {
@@ -37,6 +37,8 @@ import {
   PauseCircle,
   CheckCircle,
   HelpCircle,
+  Radio,
+  Zap,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -50,6 +52,8 @@ export default function SettingsPage() {
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
   const [editingDeviceName, setEditingDeviceName] = useState("");
+  const [lastPingedDeviceId, setLastPingedDeviceId] = useState<string | null>(null);
+  const [lastPingInfo, setLastPingInfo] = useState<any>(null);
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -93,6 +97,8 @@ export default function SettingsPage() {
   const [logLevelFilter, setLogLevelFilter] = useState("ALL");
   const [copiedLogs, setCopiedLogs] = useState(false);
 
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
     async function load() {
       try {
@@ -112,6 +118,28 @@ export default function SettingsPage() {
     }
     load();
     fetchDevices();
+
+    // Setup Live WebSocket to detect device pings in real-time
+    const wsUrl = `ws://${window.location.hostname}:8080/ws/events?device_type=Web%20Dashboard`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "DEVICE_PING_TEST") {
+          setLastPingedDeviceId(data.device_id);
+          setLastPingInfo(data);
+          fetchDevices();
+        }
+      } catch (e) {
+        // Ignore non-json
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const fetchDevices = async () => {
@@ -475,7 +503,7 @@ export default function SettingsPage() {
                         <span>Gestão &amp; Controle de Acesso de Dispositivos (ACL)</span>
                       </h2>
                       <p className="text-xs text-slate-400 mt-1">
-                        Gerencie quais Smart TVs, Tablets e celulares têm permissão para visualizar alertas e transmissões de vídeo.
+                        Gerencie permissões de visualização e identifique na hora qual Smart TV ou Tablet fez o último teste de ping!
                       </p>
                     </div>
 
@@ -489,19 +517,63 @@ export default function SettingsPage() {
                     </button>
                   </div>
 
+                  {/* Highlight Banner if a device just pinged */}
+                  {lastPingInfo && (
+                    <div className="bg-amber-500/10 border-2 border-amber-400/80 rounded-xl p-4 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                          <Radio className="w-5 h-5 animate-pulse" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>DISPOSITIVO ACABOU DE FAZER TESTE DE PING NO SERVIDOR!</span>
+                          </div>
+                          <div className="text-sm font-semibold text-slate-100 mt-0.5">
+                            {lastPingInfo.device_name} • <span className="font-mono text-amber-300">{lastPingInfo.ip_address}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            Modelo: {lastPingInfo.manufacturer_model || "Android"} • Identificado em: {new Date(lastPingInfo.last_ping_at).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setEditingDeviceId(lastPingInfo.device_id);
+                          setEditingDeviceName(lastPingInfo.device_name);
+                        }}
+                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-2 rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-lg shadow-amber-500/20 shrink-0"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Renomear Este Dispositivo</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Device List */}
                   <div className="space-y-3">
                     {devices && devices.length > 0 ? (
                       devices.map((device) => {
                         const isEditing = editingDeviceId === device.device_id;
+                        const isJustPinged = lastPingedDeviceId === device.device_id;
+
                         return (
                           <div
                             key={device.device_id}
-                            className="bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 rounded-xl p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                            className={`bg-slate-900/90 border rounded-xl p-4.5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                              isJustPinged
+                                ? "border-amber-400 bg-amber-500/5 shadow-lg shadow-amber-500/10"
+                                : "border-slate-800/90 hover:border-slate-700"
+                            }`}
                           >
                             {/* Device Info */}
                             <div className="flex items-start gap-3.5">
-                              <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 mt-0.5">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                                isJustPinged
+                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                              }`}>
                                 {device.device_type.includes("TV") ? (
                                   <Tv className="w-5 h-5" />
                                 ) : device.device_type.includes("Tablet") ? (
@@ -514,7 +586,7 @@ export default function SettingsPage() {
                               </div>
 
                               <div className="space-y-1">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   {isEditing ? (
                                     <div className="flex items-center gap-2">
                                       <input
@@ -564,16 +636,24 @@ export default function SettingsPage() {
                                       Offline
                                     </span>
                                   )}
+
+                                  {/* Just Pinged Badge */}
+                                  {device.last_ping_at && (
+                                    <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                                      <Radio className="w-3 h-3 text-amber-400" />
+                                      Último Teste: {new Date(device.last_ping_at).toLocaleTimeString()} ({device.ping_count} pings)
+                                    </span>
+                                  )}
                                 </div>
 
-                                <div className="text-xs text-slate-400 flex items-center gap-3">
+                                <div className="text-xs text-slate-400 flex items-center gap-3 flex-wrap">
                                   <span className="font-mono text-slate-300">IP: {device.ip_address}</span>
                                   <span>•</span>
                                   <span>Tipo: {device.device_type}</span>
-                                  {device.last_seen && (
+                                  {device.manufacturer_model && (
                                     <>
                                       <span>•</span>
-                                      <span>Última atividade: {new Date(device.last_seen).toLocaleTimeString()}</span>
+                                      <span className="text-slate-300 font-medium">Hardware: {device.manufacturer_model}</span>
                                     </>
                                   )}
                                 </div>
@@ -653,7 +733,7 @@ export default function SettingsPage() {
                         <Shield className="w-8 h-8 text-slate-500 mx-auto" />
                         <div className="text-sm font-semibold text-slate-300">Nenhum dispositivo registrado ainda</div>
                         <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Assim que o aplicativo no Android TV ou Tablet se conectar ao servidor, ele aparecerá aqui automaticamente com controle total de permissão.
+                          Assim que o aplicativo no Android TV ou Tablet se conectar ou clicar em Testar Ping, ele aparecerá aqui com destaque em tempo real!
                         </p>
                       </div>
                     )}

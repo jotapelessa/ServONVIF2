@@ -1,12 +1,17 @@
 package com.servonvif.client.network
 
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.servonvif.client.data.model.CameraModel
 import com.servonvif.client.data.repository.ServerConfigRepository
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
@@ -43,17 +48,64 @@ class ServOnvifApiClient(private val configRepo: ServerConfigRepository) {
         }
     }
 
-    fun testConnection(): Boolean {
+    fun testConnection(context: Context? = null): Boolean {
+        return pingServer(context)
+    }
+
+    /**
+     * Sends a rich ping to /api/devices/ping with device hardware identity and model
+     * so that the administrator web panel can immediately highlight the exact device that tested.
+     */
+    fun pingServer(context: Context? = null): Boolean {
+        val manufacturer = Build.MANUFACTURER ?: "Android"
+        val model = Build.MODEL ?: "Device"
+        val fullModel = "$manufacturer $model"
+
+        val deviceId = try {
+            if (context != null) {
+                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "dev_${Build.SERIAL}"
+            } else {
+                "dev_${Build.BOARD}_${Build.MODEL.replace(" ", "_")}"
+            }
+        } catch (e: Exception) {
+            "dev_android_${Build.MODEL.replace(" ", "_")}"
+        }
+
+        val deviceType = if (Build.MODEL.contains("TV", ignoreCase = true) || Build.DEVICE.contains("tv", ignoreCase = true)) {
+            "Android TV"
+        } else {
+            "Tablet / Mobile"
+        }
+
+        val jsonPayload = mapOf(
+            "device_id" to deviceId,
+            "device_name" to "$deviceType ($fullModel)",
+            "device_type" to deviceType,
+            "manufacturer_model" to fullModel,
+            "app_version" to "1.6.0"
+        )
+
+        val jsonString = gson.toJson(jsonPayload)
+        val body = jsonString.toRequestBody("application/json; charset=utf-8".toMediaType())
+
         val request = Request.Builder()
-            .url("${configRepo.httpBaseUrl}/api/cameras/")
-            .get()
+            .url("${configRepo.httpBaseUrl}/api/devices/ping")
+            .post(body)
             .build()
 
         return try {
             client.newCall(request).execute().use { response ->
-                response.isSuccessful
+                if (response.isSuccessful) {
+                    Log.d("ServOnvifApiClient", "Ping successfully registered on server for device $deviceId ($fullModel)")
+                    true
+                } else {
+                    // Fallback to basic /api/cameras/ test
+                    val fallbackReq = Request.Builder().url("${configRepo.httpBaseUrl}/api/cameras/").get().build()
+                    client.newCall(fallbackReq).execute().use { it.isSuccessful }
+                }
             }
         } catch (e: Exception) {
+            Log.w("ServOnvifApiClient", "Ping exception: ${e.message}")
             false
         }
     }
