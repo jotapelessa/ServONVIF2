@@ -74,7 +74,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <Switch
+    <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/swTvSoundAlert"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -82,10 +82,11 @@
         android:textColor="#FFFFFF"
         android:textSize="16sp"
         android:focusable="true"
-        android:paddingVertical="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
         android:layout_marginBottom="8dp" />
 
-    <Switch
+    <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/swTvAutoStart"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -93,7 +94,8 @@
         android:textColor="#FFFFFF"
         android:textSize="16sp"
         android:focusable="true"
-        android:paddingVertical="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
         android:layout_marginBottom="24dp" />
 
     <LinearLayout

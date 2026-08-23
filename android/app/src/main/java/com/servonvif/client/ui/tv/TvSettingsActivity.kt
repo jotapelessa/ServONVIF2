@@ -4,9 +4,9 @@ import android.app.Activity
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.SwitchCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
@@ -16,8 +16,8 @@ class TvSettingsActivity : Activity() {
 
     private lateinit var etServerIp: EditText
     private lateinit var etServerPort: EditText
-    private lateinit var swSoundAlert: Switch
-    private lateinit var swAutoStart: Switch
+    private lateinit var swSoundAlert: SwitchCompat
+    private lateinit var swAutoStart: SwitchCompat
     private lateinit var btnTestConnection: Button
     private lateinit var btnSaveSettings: Button
     private lateinit var tvStatusMessage: TextView
