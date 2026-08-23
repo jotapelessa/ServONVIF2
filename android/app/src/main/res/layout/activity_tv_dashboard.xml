@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0B0F19"
+    android:padding="24dp">
+
+    <!-- Header & Navigation Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🛡️ ServONVIF TV"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="32dp" />
+
+        <Button
+            android:id="@+id/btnNavCameras"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:text="📺 Câmeras Ao Vivo"
+            android:backgroundTint="#2563EB"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:focusable="true"
+            android:layout_marginEnd="12dp" />
+
+        <Button
+            android:id="@+id/btnNavStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:text="📊 Status do Sistema"
+            android:backgroundTint="#1E293B"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:focusable="true"
+            android:layout_marginEnd="12dp" />
+
+        <Button
+            android:id="@+id/btnNavTests"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:text="🧪 Painel de Testes"
+            android:backgroundTint="#1E293B"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:focusable="true"
+            android:layout_marginEnd="12dp" />
+
+        <Button
+            android:id="@+id/btnNavSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:text="⚙️ Configurações"
+            android:backgroundTint="#1E293B"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- Content Sections Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- SECTION 1: Live Cameras WebView / Grid -->
+        <LinearLayout
+            android:id="@+id/sectionCameras"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="visible">
+
+            <WebView
+                android:id="@+id/tvMainWebView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#000000" />
+        </LinearLayout>
+
+        <!-- SECTION 2: Real-time System Status Cards -->
+        <ScrollView
+            android:id="@+id/sectionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Visão Geral do Monitoramento em Tempo Real"
+                    android:textColor="#E2E8F0"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- Grid of Status Cards -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <!-- Server Card -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="#1E293B"
+                        android:padding="16dp"
+                        android:layout_marginEnd="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🖥️ Servidor Backend"
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvCardServerStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Online"
+                            android:textColor="#22C55E"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvCardServerIp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="192.168.1.96:8080"
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <!-- WebSocket Tunnel Card -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="#1E293B"
+                        android:padding="16dp"
+                        android:layout_marginEnd="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📡 Sentinela em 2º Plano"
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvCardWsStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Conectado"
+                            android:textColor="#38BDF8"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvCardEventCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Pronto para receber alertas PiP"
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <!-- Cameras Online Card -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="#1E293B"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📷 Câmeras Conectadas"
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvCardCameraCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- Câmeras"
+                            android:textColor="#F59E0B"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvCardCameraNames"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Sincronizando..."
+                            android:textColor="#64748B"
+                            android:textSize="12sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Last Detected Event Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1E293B"
+                    android:padding="16dp"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔔 Último Alerta de Movimento Registrado"
+                        android:textColor="#94A3B8"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/tvCardLastEvent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nenhum evento registrado nesta sessão"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:layout_marginTop="6dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- SECTION 3: Diagnostic Test Laboratory -->
+        <ScrollView
+            android:id="@+id/sectionTests"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🧪 Laboratório de Testes e Validação na Smart TV"
+                    android:textColor="#E2E8F0"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Use estes botões para testar as funções do app diretamente pelo controle remoto antes de usar em produção."
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="20dp" />
+
+                <!-- Buttons Grid -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <Button
+                        android:id="@+id/btnTestPiPAlert"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="🪟 Testar Alerta PiP (10s)"
+                        android:backgroundTint="#2563EB"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:focusable="true"
+                        android:layout_marginEnd="12dp" />
+
+                    <Button
+                        android:id="@+id/btnTestSoundChime"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="🔔 Testar Aviso Sonoro"
+                        android:backgroundTint="#334155"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:focusable="true"
+                        android:layout_marginEnd="12dp" />
+
+                    <Button
+                        android:id="@+id/btnTestServerPing"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="📡 Testar Ping Servidor"
+                        android:backgroundTint="#334155"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="24dp">
+
+                    <Button
+                        android:id="@+id/btnTestSyncCameras"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="🔄 Sincronizar Câmeras Agora"
+                        android:backgroundTint="#059669"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:focusable="true"
+                        android:layout_marginEnd="12dp" />
+
+                    <Button
+                        android:id="@+id/btnTestHeadsUpNotification"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="🚨 Testar Notificação Heads-Up"
+                        android:backgroundTint="#DC2626"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <!-- Console Output Log Box -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Resultado dos Testes em Tempo Real:"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvTestConsoleOutput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="80dp"
+                    android:background="#020617"
+                    android:padding="16dp"
+                    android:text="Aguardando execução de testes..."
+                    android:textColor="#38BDF8"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+</LinearLayout>
