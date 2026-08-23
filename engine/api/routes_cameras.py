@@ -38,7 +38,7 @@ async def list_cameras(db: AsyncSession = Depends(get_db)):
 
 @router.post("/scan", response_model=List[dict])
 async def scan_network_cameras():
-    cameras = await ONVIFDiscovery.discover_cameras(timeout_seconds=3.0)
+    cameras = await ONVIFDiscovery.discover_cameras(timeout_seconds=7.0)
     return cameras
 
 @router.post("/", response_model=Camera)

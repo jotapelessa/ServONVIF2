@@ -2,16 +2,20 @@ import io
 import socket
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 import cv2
 import numpy as np
+from loguru import logger
 
 from engine.config.settings import settings
 from engine.services.telegram_bot import telegram_service
 from engine.services.retention_worker import retention_worker
+from engine.core.log_buffer import log_buffer
+from engine.api.websocket_hub import ws_hub
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
@@ -26,6 +30,14 @@ class SettingsUpdate(BaseModel):
 class TelegramTestPayload(BaseModel):
     bot_token: Optional[str] = None
     chat_id: Optional[str] = None
+
+class SimulateMotionPayload(BaseModel):
+    camera_id: Optional[int] = 1
+    camera_name: Optional[str] = "Câmera de Teste"
+    score: Optional[float] = 0.98
+
+class RTSPTestPayload(BaseModel):
+    rtsp_url: str
 
 def get_local_ip() -> str:
     # 1. Try standard connect to local gateway/DNS
@@ -152,3 +164,128 @@ async def get_pairing_qr_code():
 
     _, png = cv2.imencode('.png', img)
     return Response(content=png.tobytes(), media_type="image/png")
+
+# ================= DIAGNOSTICS & SYSTEM CONTROL ENDPOINTS =================
+
+@router.get("/diagnostics/logs")
+async def get_system_logs(limit: int = 100, level: str = "ALL"):
+    """
+    Returns structured logs and pre-formatted Markdown for 1-click clipboard reporting to Antigravity.
+    """
+    from engine.core.camera_manager import camera_manager
+    local_ip = get_local_ip()
+    logs = log_buffer.get_logs(limit=limit, level_filter=level)
+    
+    active_cams = [
+        {"id": cid, "name": ing.camera.name, "rtsp": ing.camera.rtsp_url, "running": ing.is_running}
+        for cid, ing in camera_manager.ingestors.items()
+    ]
+
+    total_ws = len(ws_hub.active_connections)
+    storage = get_media_storage_stats()
+
+    # Build Antigravity Markdown Report
+    lines = [
+        f"### 🛡️ ServONVIF Diagnostic Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"- **Servidor Local:** `{local_ip}:{settings.PORT}` | **Status:** 🟢 ONLINE",
+        f"- **Clientes WebSocket Conectados:** {total_ws} dispositivos (TV, Tablet, Web)",
+        f"- **Câmeras Ativas no Ingestor ({len(active_cams)}):**",
+    ]
+    if active_cams:
+        for c in active_cams:
+            status_emoji = "🟢" if c["running"] else "🔴"
+            lines.append(f"  • {status_emoji} ID #{c['id']} - `{c['name']}` ({c['rtsp']})")
+    else:
+        lines.append("  • Nenhuma câmera ativa no momento")
+
+    lines.append(f"- **Armazenamento de Vídeos:** {storage['total_files']} arquivos ({storage['total_size_mb']} MB)")
+    lines.append("\n#### 📋 Registros de Log Recentes:")
+    lines.append("```text")
+    for log in logs[-80:]:
+        lines.append(f"[{log['timestamp']}] [{log['level']}] {log['module']}:{log['function']}:{log['line']} - {log['message']}")
+    lines.append("```")
+
+    markdown_report = "\n".join(lines)
+
+    return {
+        "summary": {
+            "local_ip": local_ip,
+            "port": settings.PORT,
+            "connected_ws_clients": total_ws,
+            "active_cameras_count": len(active_cams),
+            "storage": storage,
+        },
+        "active_cameras": active_cams,
+        "logs": logs,
+        "markdown_report": markdown_report,
+    }
+
+@router.post("/diagnostics/simulate-motion")
+async def simulate_motion_alert(payload: SimulateMotionPayload):
+    """
+    Simulates a live motion detection alert and broadcasts to all WebSocket listeners (TV, Tablet, Web).
+    """
+    now = datetime.utcnow()
+    event_payload = {
+        "type": "MOTION_ALERT",
+        "camera_id": payload.camera_id or 1,
+        "camera_name": payload.camera_name or "Câmera de Teste (Simulação)",
+        "timestamp": now.isoformat(),
+        "score": payload.score or 0.98,
+        "thumbnail_url": "/api/events/thumbnail/1/simulated/thumb.jpg",
+        "mjpeg_url": f"/api/mjpeg/{payload.camera_id or 1}"
+    }
+
+    await ws_hub.broadcast_event(event_payload)
+    logger.info(f"🧪 Simulated Motion Alert Broadcasted: {event_payload['camera_name']} (Score: {event_payload['score']})")
+
+    return {
+        "success": True,
+        "message": f"Alerta de teste disparado com sucesso para {len(ws_hub.active_connections)} clientes conectados via WebSocket!",
+        "payload": event_payload
+    }
+
+@router.post("/diagnostics/test-rtsp")
+async def test_rtsp_connection(payload: RTSPTestPayload):
+    """
+    Directly tests socket connectivity and RTSP handshake with a camera URL.
+    """
+    url = payload.rtsp_url.strip()
+    if not url.startswith("rtsp://"):
+        raise HTTPException(status_code=400, detail="URL inválida. Deve começar com rtsp://")
+
+    # Extract host and port
+    try:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname
+        port = parsed.port or 554
+        if not host:
+            raise ValueError("Host não identificado")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao analisar URL RTSP: {e}")
+
+    start_time = datetime.now()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(2.5)
+        res = s.connect_ex((host, port))
+        s.close()
+        latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+
+        if res == 0:
+            logger.info(f"RTSP Connection Test SUCCESS for {host}:{port} ({latency_ms}ms)")
+            return {
+                "success": True,
+                "latency_ms": latency_ms,
+                "message": f"Conexão bem-sucedida com {host}:{port}! Respondeu em {latency_ms}ms."
+            }
+        else:
+            logger.warning(f"RTSP Connection Test FAILED for {host}:{port} (code {res})")
+            return {
+                "success": False,
+                "latency_ms": latency_ms,
+                "message": f"Falha ao conectar na porta {port} do IP {host} (código de erro {res})."
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Exceção de rede: {e}")

@@ -141,4 +141,31 @@ export const apiClient = {
     if (!res.ok) throw new Error("Failed to run cleanup");
     return res.json();
   },
+
+  async getDiagnosticsLogs(limit = 150, level = "ALL"): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/diagnostics/logs?limit=${limit}&level=${level}`);
+    if (!res.ok) throw new Error("Falha ao obter logs do sistema");
+    return res.json();
+  },
+
+  async simulateMotionAlert(payload?: { camera_id?: number; camera_name?: string; score?: number }): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/diagnostics/simulate-motion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    if (!res.ok) throw new Error("Falha ao simular alerta de movimento");
+    return res.json();
+  },
+
+  async testRTSP(rtsp_url: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/diagnostics/test-rtsp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rtsp_url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha no teste RTSP");
+    return data;
+  },
 };
