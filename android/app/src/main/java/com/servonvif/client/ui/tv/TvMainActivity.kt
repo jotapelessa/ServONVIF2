@@ -19,9 +19,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.servonvif.client.R
+import com.servonvif.client.data.model.CameraModel
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
 import com.servonvif.client.service.MonitoringForegroundService
@@ -127,10 +128,10 @@ class TvMainActivity : Activity() {
         sectionStatus.visibility = if (sectionId == 2) View.VISIBLE else View.GONE
         sectionTests.visibility = if (sectionId == 3) View.VISIBLE else View.GONE
 
-        // Update Nav button styles
-        btnNavCameras.setBackgroundColor(getColor(if (sectionId == 1) R.color.blue_primary else R.color.card_bg))
-        btnNavStatus.setBackgroundColor(getColor(if (sectionId == 2) R.color.blue_primary else R.color.card_bg))
-        btnNavTests.setBackgroundColor(getColor(if (sectionId == 3) R.color.blue_primary else R.color.card_bg))
+        // Update Nav button background tints
+        btnNavCameras.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 1) R.color.blue_primary else R.color.card_bg))
+        btnNavStatus.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 2) R.color.blue_primary else R.color.card_bg))
+        btnNavTests.setBackgroundColor(ContextCompat.getColor(this, if (sectionId == 3) R.color.blue_primary else R.color.card_bg))
     }
 
     private fun setupWebView() {
@@ -150,7 +151,7 @@ class TvMainActivity : Activity() {
         tvMainWebView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                 tvCardServerStatus.text = "🔴 Desconectado"
-                tvCardServerStatus.setTextColor(getColor(R.color.red_alert))
+                tvCardServerStatus.setTextColor(ContextCompat.getColor(this@TvMainActivity, R.color.red_alert))
             }
         }
 
@@ -165,25 +166,25 @@ class TvMainActivity : Activity() {
         tvCardServerIp.text = "${configRepo.serverIp}:${configRepo.serverPort}"
         thread {
             val isOnline = apiClient.testConnection()
-            val cameras = if (isOnline) apiClient.getCameras() else emptyList()
+            val cameras: List<CameraModel> = if (isOnline) apiClient.fetchCameras() else emptyList()
 
             mainHandler.post {
                 if (isOnline) {
                     tvCardServerStatus.text = "🟢 Online"
-                    tvCardServerStatus.setTextColor(getColor(R.color.green_online))
+                    tvCardServerStatus.setTextColor(ContextCompat.getColor(this, R.color.green_online))
                     tvCardWsStatus.text = "🟢 Ativo e Escutando"
-                    tvCardWsStatus.setTextColor(getColor(R.color.green_online))
+                    tvCardWsStatus.setTextColor(ContextCompat.getColor(this, R.color.green_online))
                     tvCardCameraCount.text = "${cameras.size} Câmeras"
                     tvCardCameraNames.text = if (cameras.isNotEmpty()) {
                         cameras.joinToString(", ") { it.name }
                     } else {
-                        "Nenhuma câmera conectada"
+                        "Nenhuma câmera cadastrada"
                     }
                 } else {
                     tvCardServerStatus.text = "🔴 Desconectado"
-                    tvCardServerStatus.setTextColor(getColor(R.color.red_alert))
+                    tvCardServerStatus.setTextColor(ContextCompat.getColor(this, R.color.red_alert))
                     tvCardWsStatus.text = "⚠️ Reconectando..."
-                    tvCardWsStatus.setTextColor(getColor(R.color.yellow_warning))
+                    tvCardWsStatus.setTextColor(ContextCompat.getColor(this, R.color.yellow_warning))
                     tvCardCameraCount.text = "--"
                     tvCardCameraNames.text = "Servidor inacessível em ${configRepo.serverIp}"
                 }
@@ -238,7 +239,7 @@ class TvMainActivity : Activity() {
         btnTestSyncCameras.setOnClickListener {
             logTest("🔄 Sincronizando lista de câmeras com o servidor Mac...")
             thread {
-                val cameras = apiClient.getCameras()
+                val cameras: List<CameraModel> = apiClient.fetchCameras()
                 mainHandler.post {
                     if (cameras.isNotEmpty()) {
                         logTest("✅ ${cameras.size} câmeras sincronizadas: ${cameras.joinToString { it.name }}")
