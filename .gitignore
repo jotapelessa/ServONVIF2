@@ -1,0 +1,44 @@
+# Python & Virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# SQLite & Data
+*.db
+*.sqlite3
+engine/data/media/*
+!engine/data/media/.gitkeep
+engine/data/db/*
+!engine/data/db/.gitkeep
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Android build outputs
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab
+
+# Desktop & IDE
+.DS_Store
+*.swp
+.idea/
+.vscode/
+target/
+
+# Logs
+*.log

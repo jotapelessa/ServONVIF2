@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  servonvif-engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: servonvif-core
+    restart: unless-stopped
+    network_mode: "host" # Essencial para WS-Discovery ONVIF UDP broadcast
+    volumes:
+      - ./data:/app/engine/data
+      - ./.env:/app/.env:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

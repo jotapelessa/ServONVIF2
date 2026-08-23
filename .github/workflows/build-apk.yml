@@ -1,0 +1,58 @@
+name: Build & Release Android APK (Mobile & TV)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Grant Execute Permission for Gradlew
+      run: |
+        cd android
+        chmod +x gradlew || true
+
+    - name: Build Debug APK
+      run: |
+        cd android
+        if [ ! -f "gradlew" ]; then
+          gradle wrapper
+        fi
+        ./gradlew assembleDebug --stacktrace
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ServONVIF-Android-TV-Debug-APK
+        path: android/app/build/outputs/apk/debug/*.apk
+
+    - name: Create Automatic GitHub Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest
+        name: ServONVIF Android TV & Mobile APK
+        draft: false
+        prerelease: false
+        files: android/app/build/outputs/apk/debug/*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,15 @@
+[Unit]
+Description=ServONVIF Core Engine Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ServONVIF/engine
+ExecStart=/usr/bin/python3 /opt/ServONVIF/engine/main.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/ServONVIF/.env
+
+[Install]
+WantedBy=multi-user.target
