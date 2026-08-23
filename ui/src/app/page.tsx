@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { CameraGrid } from "@/components/camera/CameraGrid";
 import { ROIDrawer } from "@/components/roi/ROIDrawer";
 import { CameraSpotlightModal } from "@/components/camera/CameraSpotlightModal";
+import { CameraConfigModal } from "@/components/camera/CameraConfigModal";
 import { useCameraStore } from "@/store/useCameraStore";
 import { Camera, apiClient } from "@/lib/api-client";
 import {
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const { cameras, loading, fetchCameras } = useCameraStore();
   const [selectedROICamera, setSelectedROICamera] = useState<Camera | null>(null);
   const [selectedSpotlightCamera, setSelectedSpotlightCamera] = useState<Camera | null>(null);
+  const [selectedConfigCamera, setSelectedConfigCamera] = useState<Camera | null>(null);
   const [selectedDeleteCamera, setSelectedDeleteCamera] = useState<Camera | null>(null);
   const [isDeletingCamera, setIsDeletingCamera] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -162,6 +164,7 @@ export default function Dashboard() {
               cameras={cameras}
               onOpenROI={(cam) => setSelectedROICamera(cam)}
               onSpotlight={(cam) => setSelectedSpotlightCamera(cam)}
+              onOpenConfig={(cam) => setSelectedConfigCamera(cam)}
               onDeleteCamera={(cam) => setSelectedDeleteCamera(cam)}
               onAddCameraClick={() => setIsAddModalOpen(true)}
             />
@@ -188,6 +191,15 @@ export default function Dashboard() {
               console.error(e);
             }
           }}
+        />
+      )}
+
+      {/* Camera Individual Config Modal (Sensibility MOG2 & Device Routing) */}
+      {selectedConfigCamera && (
+        <CameraConfigModal
+          camera={selectedConfigCamera}
+          onClose={() => setSelectedConfigCamera(null)}
+          onSaved={() => fetchCameras()}
         />
       )}
 

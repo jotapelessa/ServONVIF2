@@ -54,18 +54,23 @@ export function Sidebar({ isOpen }: SidebarProps) {
                     </div>
                   </div>
 
-                  {evt.thumbnail_url && (
-                    <div className="relative aspect-video w-full rounded overflow-hidden bg-black mb-2 border border-white/5">
-                      <img
-                        src={`${API_BASE}${evt.thumbnail_url}`}
-                        alt="Miniatura do evento"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[9px] text-emerald-400 font-mono font-bold">
-                        {(evt.score * 100).toFixed(1)}% mov
-                      </div>
+                  <div className="relative aspect-video w-full rounded overflow-hidden bg-black mb-2 border border-white/5">
+                    <img
+                      src={
+                        evt.thumbnail_url?.startsWith("http")
+                          ? evt.thumbnail_url
+                          : `${API_BASE}${evt.thumbnail_url || (evt.id ? `/api/events/${evt.id}/thumbnail` : "")}`
+                      }
+                      alt="Miniatura do evento"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = "none";
+                      }}
+                    />
+                    <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[9px] text-emerald-400 font-mono font-bold">
+                      {(evt.score * 100).toFixed(1)}% mov
                     </div>
-                  )}
+                  </div>
 
                   <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/5">
                     <span className="flex items-center gap-1 text-emerald-400">

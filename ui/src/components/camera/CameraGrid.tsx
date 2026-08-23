@@ -9,11 +9,12 @@ interface CameraGridProps {
   cameras: Camera[];
   onOpenROI: (camera: Camera) => void;
   onSpotlight: (camera: Camera) => void;
+  onOpenConfig?: (camera: Camera) => void;
   onDeleteCamera?: (camera: Camera) => void;
   onAddCameraClick: () => void;
 }
 
-export function CameraGrid({ cameras, onOpenROI, onSpotlight, onDeleteCamera, onAddCameraClick }: CameraGridProps) {
+export function CameraGrid({ cameras, onOpenROI, onSpotlight, onOpenConfig, onDeleteCamera, onAddCameraClick }: CameraGridProps) {
   const [layout, setLayout] = useState<"auto" | "1x1" | "2x2" | "3x3">("auto");
 
   const getGridClasses = () => {
@@ -82,6 +83,7 @@ export function CameraGrid({ cameras, onOpenROI, onSpotlight, onDeleteCamera, on
               camera={cam}
               onOpenROI={onOpenROI}
               onSpotlight={onSpotlight}
+              onOpenConfig={onOpenConfig}
               onDeleteCamera={onDeleteCamera}
             />
           ))}

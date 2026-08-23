@@ -15,6 +15,7 @@ class Camera(SQLModel, table=True):
     is_active: bool = Field(default=True)
     sensitivity: float = Field(default=0.03)  # Motion threshold 0.01 - 0.10
     roi_polygon: Optional[List[List[float]]] = Field(default=None, sa_column=Column(JSON))  # Normalized [[x1, y1], [x2, y2], ...]
+    allowed_device_ids: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))   # Dispositivos autorizados para esta camera
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

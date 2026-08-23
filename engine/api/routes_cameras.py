@@ -20,6 +20,7 @@ class CameraCreate(BaseModel):
     password: Optional[str] = None
     sensitivity: Optional[float] = 0.03
     roi_polygon: Optional[List[List[float]]] = None
+    allowed_device_ids: Optional[List[str]] = None
 
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
@@ -27,6 +28,7 @@ class CameraUpdate(BaseModel):
     is_active: Optional[bool] = None
     sensitivity: Optional[float] = None
     roi_polygon: Optional[List[List[float]]] = None
+    allowed_device_ids: Optional[List[str]] = None
 
 class ROISetPayload(BaseModel):
     roi_polygon: List[List[float]]

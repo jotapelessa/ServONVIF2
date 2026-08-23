@@ -440,17 +440,22 @@ export default function EventsPage() {
                     onClick={() => setSelectedEventIndex(idx)}
                     className="relative aspect-video w-full bg-black cursor-pointer overflow-hidden select-none"
                   >
-                    {evt.thumbnail_path ? (
-                      <img
-                        src={`${API_BASE}/api/events/thumbnail/${evt.camera_id}/${date.toISOString().split("T")[0]}/${evt.thumbnail_path.split("/").pop()}`}
-                        alt="Miniatura do evento"
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center w-full h-full text-slate-600">
-                        <Film className="w-8 h-8 stroke-1" />
-                      </div>
-                    )}
+                    <img
+                      src={`${API_BASE}/api/events/${evt.id}/thumbnail`}
+                      alt="Miniatura do evento"
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector(".fallback-icon")) {
+                          const iconDiv = document.createElement("div");
+                          iconDiv.className = "fallback-icon flex items-center justify-center w-full h-full text-slate-600";
+                          iconDiv.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>';
+                          parent.appendChild(iconDiv);
+                        }
+                      }}
+                    />
 
                     <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition opacity-0 group-hover:opacity-100">
                       <div className="p-3 rounded-full bg-blue-600/90 text-white shadow-xl transform group-hover:scale-110 transition">
@@ -581,7 +586,7 @@ export default function EventsPage() {
                 {/* Download Button */}
                 {activeEvent.video_path && (
                   <a
-                    href={`${API_BASE}/api/events/video/${activeEvent.camera_id}/${new Date(activeEvent.timestamp).toISOString().split("T")[0]}/${activeEvent.video_path.split("/").pop()}`}
+                    href={`${API_BASE}/api/events/${activeEvent.id}/video`}
                     download
                     title="Baixar Arquivo MP4"
                     className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition"
@@ -627,7 +632,7 @@ export default function EventsPage() {
                       }
                     }}
                     className="w-full h-full object-contain"
-                    src={`${API_BASE}/api/events/video/${activeEvent.camera_id}/${new Date(activeEvent.timestamp).toISOString().split("T")[0]}/${activeEvent.video_path.split("/").pop()}`}
+                    src={`${API_BASE}/api/events/${activeEvent.id}/video`}
                   />
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-slate-500 text-xs">

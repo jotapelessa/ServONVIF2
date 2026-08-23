@@ -195,22 +195,33 @@ class StreamIngestor:
         pre_frames = self.ring_buffer.get_window(pre_seconds=settings.PRE_EVENT_SECONDS)
         self._event_frames = list(pre_frames) + [current_frame]
 
-        # 1. IMMEDIATE DISPATCH TO WEBSOCKET (Sub-50ms)
+        # 1. INSTANT NOTIFICATION TO WEBSOCKET CLIENTS
+        time_str = now.strftime("%H-%M-%S")
+        date_str = now.strftime("%Y-%m-%d")
+        thumb_filename = f"{time_str}_thumb.jpg"
+        thumb_url = f"/api/events/thumbnail/{self.camera.id}/{date_str}/{thumb_filename}"
+
         event_payload = {
             "type": "MOTION_ALERT",
             "camera_id": self.camera.id,
             "camera_name": self.camera.name,
             "timestamp": now.isoformat(),
             "score": round(score, 4),
-            "thumbnail_url": f"/api/events/thumbnail/{self.camera.id}/{now.strftime('%Y-%m-%d')}/thumb.jpg",
+            "thumbnail_url": thumb_url,
             "mjpeg_url": f"/api/mjpeg/{self.camera.id}"
         }
 
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(ws_hub.broadcast_event(event_payload), self._loop)
+            allowed_devs = getattr(self.camera, "allowed_device_ids", None)
+            asyncio.run_coroutine_threadsafe(
+                ws_hub.broadcast_event(event_payload, allowed_device_ids=allowed_devs),
+                self._loop
+            )
             logger.info(f"⚡ INSTANT WebSocket Alert Broadcasted for [{self.camera.id}] {self.camera.name} (Score: {score:.2f})")
 
         # 2. ASYNC BACKGROUND WORKER FOR THUMBNAIL & TELEGRAM (Non-blocking)
+        self._current_thumb_path = ""
+
         def _save_and_notify_bg():
             try:
                 thumb_path = MediaWriter.save_thumbnail(
@@ -219,6 +230,7 @@ class StreamIngestor:
                     frame_bgr=current_frame,
                     bounding_boxes=bboxes
                 )
+                self._current_thumb_path = thumb_path
                 if self._loop and self._loop.is_running():
                     asyncio.run_coroutine_threadsafe(
                         telegram_service.send_photo_alert(
@@ -248,6 +260,7 @@ class StreamIngestor:
         self._event_frames = []
         now = self._current_event_data["timestamp"]
         score = self._current_event_data["score"]
+        saved_thumb_path = getattr(self, "_current_thumb_path", "")
 
         def _save_video_and_db_bg():
             try:
@@ -266,7 +279,7 @@ class StreamIngestor:
                             camera_name=self.camera.name,
                             timestamp=now,
                             score=score,
-                            thumbnail_path="",
+                            thumbnail_path=saved_thumb_path,
                             video_path=video_path,
                             duration_seconds=duration
                         ),

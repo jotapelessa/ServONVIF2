@@ -3,16 +3,17 @@
 import { Camera } from "@/lib/api-client";
 import { LiveView } from "./LiveView";
 import { useAlertStore } from "@/store/useCameraStore";
-import { Sliders, ShieldAlert, Maximize2 } from "lucide-react";
+import { Sliders, ShieldAlert, Maximize2, Settings } from "lucide-react";
 
 interface CameraCardProps {
   camera: Camera;
   onOpenROI: (camera: Camera) => void;
   onSpotlight: (camera: Camera) => void;
+  onOpenConfig?: (camera: Camera) => void;
   onDeleteCamera?: (camera: Camera) => void;
 }
 
-export function CameraCard({ camera, onOpenROI, onSpotlight, onDeleteCamera }: CameraCardProps) {
+export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDeleteCamera }: CameraCardProps) {
   const activeAlarms = useAlertStore((state) => state.activeAlarms);
   const isAlarming = Boolean(activeAlarms[camera.id] && Date.now() - activeAlarms[camera.id] < 8000);
 
@@ -58,6 +59,15 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onDeleteCamera }: C
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+          {onOpenConfig && (
+            <button
+              onClick={() => onOpenConfig(camera)}
+              title="Configurações da Câmera (Sensibilidade & Dispositivos)"
+              className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/10 transition"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => onOpenROI(camera)}
             title="Configurar Zona de Detecção (ROI)"

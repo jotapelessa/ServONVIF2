@@ -46,6 +46,36 @@ async def get_event_video(camera_id: int, date_str: str, filename: str):
         raise HTTPException(status_code=404, detail="Video clip not found")
     return FileResponse(file_path, media_type="video/mp4")
 
+@router.get("/{event_id}/thumbnail")
+async def get_event_thumbnail_by_id(event_id: int, db: AsyncSession = Depends(get_db)):
+    event = await db.get(MotionEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    if event.thumbnail_path and Path(event.thumbnail_path).exists():
+        return FileResponse(Path(event.thumbnail_path), media_type="image/jpeg")
+    
+    # Try finding in camera directory for the event date
+    date_str = event.timestamp.strftime("%Y-%m-%d")
+    cam_dir = settings.MEDIA_DIR / f"camera_{event.camera_id}" / date_str
+    if cam_dir.exists():
+        thumbs = sorted(list(cam_dir.glob("*_thumb.jpg")), reverse=True)
+        if thumbs:
+            return FileResponse(thumbs[0], media_type="image/jpeg")
+
+    raise HTTPException(status_code=404, detail="Thumbnail file not found")
+
+@router.get("/{event_id}/video")
+async def get_event_video_by_id(event_id: int, db: AsyncSession = Depends(get_db)):
+    event = await db.get(MotionEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    if event.video_path and Path(event.video_path).exists():
+        return FileResponse(Path(event.video_path), media_type="video/mp4")
+    
+    raise HTTPException(status_code=404, detail="Video file not found")
+
 @router.delete("/{event_id}")
 async def delete_event(event_id: int, db: AsyncSession = Depends(get_db)):
     event = await db.get(MotionEvent, event_id)

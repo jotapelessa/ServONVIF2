@@ -10,8 +10,22 @@ export interface Camera {
   is_active: boolean;
   sensitivity: number;
   roi_polygon?: number[][];
+  allowed_device_ids?: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface Device {
+  id: number;
+  device_id: string;
+  name: string;
+  ip_address: string;
+  device_type: string;
+  status: "ALLOWED" | "BLOCKED" | "PAUSED";
+  notes?: string;
+  manufacturer_model?: string;
+  ping_count?: number;
+  last_seen: string;
 }
 
 export interface MotionEvent {

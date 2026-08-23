@@ -99,7 +99,7 @@ class WebSocketHub:
             if info.ip == device_id_or_ip or info.device_id == device_id_or_ip:
                 info.status = new_status
 
-    async def broadcast_event(self, event_data: Dict[str, Any]) -> None:
+    async def broadcast_event(self, event_data: Dict[str, Any], allowed_device_ids: Optional[List[str]] = None) -> None:
         if not self.active_clients:
             return
 
@@ -107,11 +107,16 @@ class WebSocketHub:
         stale_connections = set()
 
         for ws, info in list(self.active_clients.items()):
-            # Check Device Permission
+            # 1. Check Global Device Access Permission
             cached_status = self.ip_status_cache.get(info.ip, info.status)
             if cached_status != "ALLOWED":
-                # Client is BLOCKED, PAUSED, or UNKNOWN: Skip sending detection alert
                 continue
+
+            # 2. Check Camera-Specific Device Whitelist (if camera has specific devices selected)
+            if allowed_device_ids and len(allowed_device_ids) > 0:
+                if info.device_id not in allowed_device_ids and info.ip not in allowed_device_ids and info.device_type != "Web Browser":
+                    # Skip alerting this device for this specific camera
+                    continue
 
             try:
                 await ws.send_text(message)
@@ -119,12 +124,16 @@ class WebSocketHub:
                 logger.warning(f"Error sending to WebSocket client {info.ip}: {e}")
                 stale_connections.add(ws)
 
+        for stale in stale_connections:
+            self.disconnect(stale)
+
     async def broadcast_motion_alert(
         self,
         camera_id: int,
         camera_name: str,
         score: float,
-        mjpeg_url: str
+        mjpeg_url: str,
+        allowed_device_ids: Optional[List[str]] = None
     ) -> None:
         payload = {
             "type": "MOTION_ALERT",
@@ -134,6 +143,6 @@ class WebSocketHub:
             "mjpeg_url": mjpeg_url,
             "timestamp": datetime.utcnow().isoformat()
         }
-        await self.broadcast_event(payload)
+        await self.broadcast_event(payload, allowed_device_ids=allowed_device_ids)
 
 ws_hub = WebSocketHub()
