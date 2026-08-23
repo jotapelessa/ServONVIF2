@@ -284,7 +284,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🧪 Central de Testes e Diagnóstico"
+                    android:text="🧪 Central de Testes, Auto-Descoberta e Simulação"
                     android:textColor="#E2E8F0"
                     android:textSize="16sp"
                     android:textStyle="bold"
@@ -293,12 +293,43 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Execute estes testes para validar áudio, flutuação Picture-in-Picture, conexão de rede e permissões do dispositivo:"
+                    android:text="Execute testes interativos pelo controle remoto ou toque para comprovar que o PiP, som, rede e disparo funcionam perfeitamente:"
                     android:textColor="#94A3B8"
                     android:textSize="13sp"
                     android:layout_marginBottom="16dp" />
 
-                <!-- Buttons Grid Row 1 -->
+                <!-- Row 1: Real Action Simulation & Auto Discovery -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <Button
+                        android:id="@+id/btnTestSimulateMotion"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_weight="1"
+                        android:text="🎯 Simular Movimento Real (End-to-End)"
+                        android:backgroundTint="#059669"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:focusable="true"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestAutoDiscoverServer"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_weight="1"
+                        android:text="🔍 Auto-Detectar Servidor Mac"
+                        android:backgroundTint="#0284C7"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <!-- Row 2: PiP, Audio & Network Tests -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -310,7 +341,7 @@
                         android:layout_width="0dp"
                         android:layout_height="52dp"
                         android:layout_weight="1"
-                        android:text="🪟 Testar Alerta PiP (10s)"
+                        android:text="🪟 Testar Janela PiP (10s)"
                         android:backgroundTint="#2563EB"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
@@ -341,12 +372,12 @@
                         android:focusable="true" />
                 </LinearLayout>
 
-                <!-- Buttons Grid Row 2 -->
+                <!-- Row 3: Sync, HeadsUp & Overlays -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginBottom="12dp">
+                    android:layout_marginBottom="14dp">
 
                     <Button
                         android:id="@+id/btnTestSyncCameras"
@@ -354,7 +385,7 @@
                         android:layout_height="52dp"
                         android:layout_weight="1"
                         android:text="🔄 Sincronizar Câmeras"
-                        android:backgroundTint="#059669"
+                        android:backgroundTint="#334155"
                         android:textColor="#FFFFFF"
                         android:textSize="13sp"
                         android:focusable="true"
@@ -385,20 +416,38 @@
                 </LinearLayout>
 
                 <!-- Console Output Log Box -->
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Console de Diagnóstico em Tempo Real:"
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
                     android:layout_marginTop="8dp"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Console de Diagnóstico em Tempo Real:"
+                        android:textColor="#94A3B8"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/btnClearConsole"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Limpar Logs"
+                        android:backgroundTint="#1E293B"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:focusable="true" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/tvTestConsoleOutput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="100dp"
+                    android:minHeight="110dp"
                     android:background="#020617"
                     android:padding="16dp"
                     android:text="Aguardando execução de testes..."

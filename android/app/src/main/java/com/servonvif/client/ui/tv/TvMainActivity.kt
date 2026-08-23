@@ -23,6 +23,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -61,12 +62,15 @@ class TvMainActivity : Activity() {
     private lateinit var tvCardLastEvent: TextView
 
     // Test Lab Views
+    private lateinit var btnTestSimulateMotion: Button
+    private lateinit var btnTestAutoDiscoverServer: Button
     private lateinit var btnTestPiPAlert: Button
     private lateinit var btnTestSoundChime: Button
     private lateinit var btnTestServerPing: Button
     private lateinit var btnTestSyncCameras: Button
     private lateinit var btnTestHeadsUpNotification: Button
     private lateinit var btnTestOverlayPermission: Button
+    private lateinit var btnClearConsole: Button
     private lateinit var tvTestConsoleOutput: TextView
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -116,12 +120,15 @@ class TvMainActivity : Activity() {
         tvCardCameraNames = findViewById(R.id.tvCardCameraNames)
         tvCardLastEvent = findViewById(R.id.tvCardLastEvent)
 
+        btnTestSimulateMotion = findViewById(R.id.btnTestSimulateMotion)
+        btnTestAutoDiscoverServer = findViewById(R.id.btnTestAutoDiscoverServer)
         btnTestPiPAlert = findViewById(R.id.btnTestPiPAlert)
         btnTestSoundChime = findViewById(R.id.btnTestSoundChime)
         btnTestServerPing = findViewById(R.id.btnTestServerPing)
         btnTestSyncCameras = findViewById(R.id.btnTestSyncCameras)
         btnTestHeadsUpNotification = findViewById(R.id.btnTestHeadsUpNotification)
         btnTestOverlayPermission = findViewById(R.id.btnTestOverlayPermission)
+        btnClearConsole = findViewById(R.id.btnClearConsole)
         tvTestConsoleOutput = findViewById(R.id.tvTestConsoleOutput)
 
         tvCardServerIp.text = "${configRepo.serverIp}:${configRepo.serverPort}"
@@ -217,19 +224,68 @@ class TvMainActivity : Activity() {
     }
 
     private fun setupTestLab() {
+        btnTestSimulateMotion.setOnClickListener {
+            logTest("🎯 Disparando Simulação End-to-End de Detecção de Movimento...")
+            try {
+                // 1. Play Sound Chime
+                val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
+                ringtone?.play()
+
+                // 2. Open PiP Floating Alert
+                val intent = Intent(this, PiPAlertActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra("EXTRA_CAMERA_ID", 1)
+                    putExtra("EXTRA_CAMERA_NAME", "Câmera Portão (Simulação)")
+                    putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
+                    putExtra("EXTRA_SCORE", 0.98)
+                    putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
+                }
+                startActivity(intent)
+
+                tvCardLastEvent.text = "🔴 Câmera Portão (Simulação) • Score: 98% • Agora"
+                logTest("✅ Simulação concluída com sucesso! Áudio e Janela PiP executados.")
+            } catch (e: Exception) {
+                logTest("❌ Falha na simulação: ${e.message}")
+            }
+        }
+
+        btnTestAutoDiscoverServer.setOnClickListener {
+            logTest("🔍 Varrendo a rede local para encontrar o ServONVIF Mac/PC...")
+            Toast.makeText(this, "Buscando servidor ServONVIF na rede...", Toast.LENGTH_SHORT).show()
+            apiClient.discoverServerOnNetwork(
+                onServerFound = { discoveredIp ->
+                    mainHandler.post {
+                        configRepo.serverIp = discoveredIp
+                        logTest("🎉 SERVIDOR ENCONTRADO NA REDE: $discoveredIp!")
+                        Toast.makeText(this, "Servidor conectado: $discoveredIp", Toast.LENGTH_LONG).show()
+                        refreshServerData()
+                        loadDashboardWebView()
+                    }
+                },
+                onScanComplete = { wasFound ->
+                    mainHandler.post {
+                        if (!wasFound) {
+                            logTest("⚠️ Varredura concluída. Nenhum outro servidor encontrado além de ${configRepo.serverIp}.")
+                        }
+                    }
+                }
+            )
+        }
+
         btnTestPiPAlert.setOnClickListener {
             logTest("🧪 Disparando Janela Picture-in-Picture (PiP) de Teste por 10s...")
             try {
                 val intent = Intent(this, PiPAlertActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     putExtra("EXTRA_CAMERA_ID", 1)
-                    putExtra("EXTRA_CAMERA_NAME", "Câmera de Teste (Portão)")
+                    putExtra("EXTRA_CAMERA_NAME", "Câmera de Teste")
                     putExtra("EXTRA_MJPEG_URL", "/api/mjpeg/1")
                     putExtra("EXTRA_SCORE", 0.95)
                     putExtra("EXTRA_DURATION", 10)
                 }
                 startActivity(intent)
-                logTest("✅ Janela PiP aberta com sucesso! Se você vir o vídeo flutuante, o dispositivo está 100% pronto.")
+                logTest("✅ Janela PiP aberta com sucesso!")
             } catch (e: Exception) {
                 logTest("❌ Falha ao abrir PiP: ${e.message}")
             }
@@ -256,9 +312,9 @@ class TvMainActivity : Activity() {
                     val latency = System.currentTimeMillis() - startTime
                     mainHandler.post {
                         if (isSuccess) {
-                            logTest("✅ Servidor respondeu em ${latency}ms! Comunicação de rede perfeita.")
+                            logTest("✅ Servidor respondeu em ${latency}ms! Comunicação perfeita.")
                         } else {
-                            logTest("❌ Falha de comunicação! Verifique se o Mac está ligado e no mesmo Wi-Fi.")
+                            logTest("❌ Falha de comunicação! Verifique o IP ou a rede Wi-Fi.")
                         }
                         refreshServerData()
                     }
@@ -271,7 +327,7 @@ class TvMainActivity : Activity() {
         }
 
         btnTestSyncCameras.setOnClickListener {
-            logTest("🔄 Sincronizando lista de câmeras com o servidor Mac...")
+            logTest("🔄 Sincronizando lista de câmeras com o servidor...")
             thread {
                 try {
                     val cameras: List<CameraModel> = apiClient.fetchCameras()
@@ -344,6 +400,10 @@ class TvMainActivity : Activity() {
             } else {
                 logTest("✅ Android < 6.0 não necessita de permissão explícita de sobreposição.")
             }
+        }
+
+        btnClearConsole.setOnClickListener {
+            tvTestConsoleOutput.text = "Logs limpos. Pronto para novos testes."
         }
     }
 
