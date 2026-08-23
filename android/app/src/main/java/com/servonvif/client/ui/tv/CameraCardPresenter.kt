@@ -2,7 +2,6 @@ package com.servonvif.client.ui.tv
 
 import android.graphics.Color
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
@@ -27,7 +26,7 @@ class CameraCardPresenter : Presenter() {
 
         cardView.titleText = camera.name
         cardView.contentText = if (camera.isActive) "● ONLINE (RTSP Ativo)" else "○ OFFLINE"
-        cardView.setMainImage(ContextCompat.getDrawable(cardView.context, R.drawable.app_banner))
+        cardView.mainImage = ContextCompat.getDrawable(cardView.context, R.drawable.app_banner)
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
