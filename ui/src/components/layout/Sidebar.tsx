@@ -44,11 +44,11 @@ export function Sidebar({ isOpen }: SidebarProps) {
                   onClick={() => setSelectedEvent(evt)}
                   className="flex flex-col p-2.5 rounded-lg card-dark hover:border-blue-500/40 cursor-pointer transition shadow-sm"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-semibold text-white truncate max-w-[140px]">
+                  <div className="flex items-center justify-between mb-1.5 gap-2">
+                    <span className="text-xs font-semibold text-white truncate flex-1">
                       {evt.camera_name || `Câmera #${evt.camera_id}`}
                     </span>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono shrink-0">
                       <Clock className="w-3 h-3 text-slate-500" />
                       <span>{timeStr}</span>
                     </div>

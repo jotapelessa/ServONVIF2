@@ -47,7 +47,7 @@ export function useWebSocket() {
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload.type === "MOTION_ALERT") {
+          if (payload.type === "MOTION_ALERT" || payload.type === "PLATE_DETECTED") {
             addEvent(payload);
             playAlertSound();
           }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { Shield, Plus, Scan, Film, Sliders, PanelRightOpen, PanelRightClose, Activity } from "lucide-react";
+import { Shield, Plus, Scan, Film, Sliders, PanelRightOpen, PanelRightClose, Activity, Car } from "lucide-react";
 
 interface HeaderProps {
   onScanClick: () => void;
@@ -61,6 +61,14 @@ export function Header({
         <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
 
         {/* Links */}
+        <Link
+          href="/settings"
+          className="flex items-center gap-1.5 h-9 px-3 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
+        >
+          <Car className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden md:inline">Placas (LPR)</span>
+        </Link>
+
         <Link
           href="/events"
           className="flex items-center gap-1.5 h-9 px-3 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
