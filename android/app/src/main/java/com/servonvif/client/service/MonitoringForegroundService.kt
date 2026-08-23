@@ -8,6 +8,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.model.EventPayload
@@ -26,31 +27,48 @@ class MonitoringForegroundService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannels()
 
-        val notification = buildForegroundNotification("Monitorando eventos de segurança")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                } else {
-                    0
-                }
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        val notification = buildForegroundNotification("Monitorando eventos de segurança em tempo real")
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Android 14+ safe dataSync type
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("MonitoringService", "Foreground service fallback: ${e.message}")
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (fallbackEx: Exception) {
+                Log.e("MonitoringService", "Failed to startForeground: ${fallbackEx.message}")
+            }
         }
 
         startWebSocketMonitoring()
     }
 
     private fun startWebSocketMonitoring() {
-        wsManager?.stop()
-        val serverUrl = configRepo.wsBaseUrl
-        wsManager = WebSocketManager(serverUrl) { event ->
-            handleIncomingAlert(event)
+        try {
+            wsManager?.stop()
+            val serverUrl = configRepo.wsBaseUrl
+            wsManager = WebSocketManager(serverUrl) { event ->
+                handleIncomingAlert(event)
+            }
+            wsManager?.start()
+        } catch (e: Exception) {
+            Log.e("MonitoringService", "WebSocket monitoring init error: ${e.message}")
         }
-        wsManager?.start()
     }
 
     private fun handleIncomingAlert(event: EventPayload) {
@@ -85,59 +103,67 @@ class MonitoringForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 3. High-Priority Heads-Up Notification with FullScreenIntent (Essential for Android 10+ TV)
-        val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
-            .setSmallIcon(R.drawable.app_icon)
-            .setContentTitle("🔴 Movimento Detectado: ${event.cameraName}")
-            .setContentText("Clique ou aguarde para visualizar a câmera ao vivo")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(true)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setContentIntent(fullScreenPendingIntent)
-            .build()
+        // 3. High-Priority Heads-Up Notification with FullScreenIntent (Essential for Android 10+ TV/Tablets)
+        try {
+            val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+                .setSmallIcon(R.drawable.app_icon)
+                .setContentTitle("🔴 Movimento Detectado: ${event.cameraName}")
+                .setContentText("Clique para visualizar a câmera ao vivo")
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .setFullScreenIntent(fullScreenPendingIntent, true)
+                .setContentIntent(fullScreenPendingIntent)
+                .build()
 
-        notificationManager.notify(ALERT_NOTIFICATION_ID, alertNotification)
+            notificationManager.notify(ALERT_NOTIFICATION_ID, alertNotification)
+        } catch (e: Exception) {
+            Log.e("MonitoringService", "Failed to show alert notification: ${e.message}")
+        }
 
         // Also attempt direct start for devices allowing background starts
         try {
             startActivity(alertIntent)
         } catch (e: Exception) {
-            // Android 10+ will handle via fullScreenPendingIntent
+            // Handled via fullScreenPendingIntent
         }
     }
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Channel for Silent Persistent Service
-            val serviceChannel = NotificationChannel(
-                CHANNEL_ID,
-                "ServONVIF Serviço em 2º Plano",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Mantém a conexão ativa em segundo plano na Smart TV"
-            }
+            try {
+                // Channel for Silent Persistent Service
+                val serviceChannel = NotificationChannel(
+                    CHANNEL_ID,
+                    "ServONVIF Serviço em 2º Plano",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Mantém a conexão ativa em segundo plano na Smart TV e Tablets"
+                }
 
-            // Channel for High-Priority Heads-Up Emergency Alerts
-            val alertChannel = NotificationChannel(
-                ALERT_CHANNEL_ID,
-                "ServONVIF Alertas de Movimento (PiP)",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Dispara janela de vídeo instantânea ao detectar movimento"
-                enableVibration(true)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            }
+                // Channel for High-Priority Heads-Up Emergency Alerts
+                val alertChannel = NotificationChannel(
+                    ALERT_CHANNEL_ID,
+                    "ServONVIF Alertas de Movimento (PiP)",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Dispara janela de vídeo instantânea ao detectar movimento"
+                    enableVibration(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
 
-            notificationManager.createNotificationChannel(serviceChannel)
-            notificationManager.createNotificationChannel(alertChannel)
+                notificationManager.createNotificationChannel(serviceChannel)
+                notificationManager.createNotificationChannel(alertChannel)
+            } catch (e: Exception) {
+                Log.e("MonitoringService", "Error creating notification channels: ${e.message}")
+            }
         }
     }
 
     private fun buildForegroundNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ServONVIF TV Sentinela")
+            .setContentTitle("ServONVIF Sentinela")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.app_icon)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -149,7 +175,11 @@ class MonitoringForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        wsManager?.stop()
+        try {
+            wsManager?.stop()
+        } catch (e: Exception) {
+            // Safe cleanup
+        }
     }
 
     companion object {
