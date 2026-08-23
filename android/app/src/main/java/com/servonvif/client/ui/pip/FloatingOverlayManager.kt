@@ -42,8 +42,8 @@ class FloatingOverlayManager(private val context: Context) {
     fun showFloatingAlert(
         cameraId: Int,
         cameraName: String,
-        mjpegUrl: String,
-        score: Double,
+        mjpegUrl: String?,
+        score: Float,
         durationSeconds: Int
     ) {
         mainHandler.post {
@@ -138,7 +138,7 @@ class FloatingOverlayManager(private val context: Context) {
                 val pipWebView = view.findViewById<WebView>(R.id.pipWebView)
                 val btnPipClose = view.findViewById<TextView>(R.id.btnPipClose)
 
-                val scoreText = if (score > 0.0) " (${(score * 100).toInt()}%)" else ""
+                val scoreText = if (score > 0.0f) " (${(score * 100).toInt()}%)" else ""
                 tvCameraTitle?.text = "🔴 $cameraName$scoreText"
                 tvCountdown?.text = "${durationSeconds}s"
 
@@ -163,10 +163,11 @@ class FloatingOverlayManager(private val context: Context) {
                 pipWebView.webChromeClient = WebChromeClient()
                 pipWebView.webViewClient = WebViewClient()
 
-                val streamUrl = if (mjpegUrl.startsWith("http")) {
-                    mjpegUrl
+                val rawStreamUrl = mjpegUrl ?: "/api/mjpeg/$cameraId"
+                val streamUrl = if (rawStreamUrl.startsWith("http")) {
+                    rawStreamUrl
                 } else {
-                    "${configRepo.httpBaseUrl}$mjpegUrl"
+                    "${configRepo.httpBaseUrl}$rawStreamUrl"
                 }
 
                 val html = """

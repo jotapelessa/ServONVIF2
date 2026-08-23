@@ -11,6 +11,7 @@ import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView

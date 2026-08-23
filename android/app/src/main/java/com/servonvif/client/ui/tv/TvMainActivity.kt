@@ -32,6 +32,7 @@ import com.servonvif.client.data.model.CameraModel
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
 import com.servonvif.client.service.MonitoringForegroundService
+import com.servonvif.client.ui.pip.FloatingOverlayManager
 import com.servonvif.client.ui.pip.PiPAlertActivity
 import kotlin.concurrent.thread
 
@@ -259,7 +260,7 @@ class TvMainActivity : Activity() {
                         cameraId = 1,
                         cameraName = "Câmera Portão (Simulação)",
                         mjpegUrl = "/api/mjpeg/1",
-                        score = 0.98,
+                        score = 0.98f,
                         durationSeconds = configRepo.pipDurationSeconds
                     )
                 } else {
@@ -312,7 +313,7 @@ class TvMainActivity : Activity() {
                         cameraId = 1,
                         cameraName = "Câmera de Teste",
                         mjpegUrl = "/api/mjpeg/1",
-                        score = 0.95,
+                        score = 0.95f,
                         durationSeconds = 10
                     )
                 } else {
