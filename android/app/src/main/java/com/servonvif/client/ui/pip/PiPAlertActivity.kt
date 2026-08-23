@@ -11,6 +11,7 @@ import android.os.Looper
 import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.TextView
@@ -28,6 +29,21 @@ class PiPAlertActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Ensure window wakes the screen and shows over keyguard / other apps on TV
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setContentView(R.layout.activity_pip_alert)
 
         webView = findViewById(R.id.pipWebView)
@@ -49,7 +65,7 @@ class PiPAlertActivity : Activity() {
             loadWithOverviewMode = true
         }
 
-        val fullStreamUrl = "${configRepo.httpBaseUrl}$mjpegUrl"
+        val fullStreamUrl = if (mjpegUrl.startsWith("http")) mjpegUrl else "${configRepo.httpBaseUrl}$mjpegUrl"
         val htmlContent = """
             <!DOCTYPE html>
             <html>
@@ -82,10 +98,14 @@ class PiPAlertActivity : Activity() {
 
     private fun enterPiPMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val params = PictureInPictureParams.Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-            enterPictureInPictureMode(params)
+            try {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            } catch (e: Exception) {
+                // Ignore if device does not support PiP params
+            }
         }
     }
 

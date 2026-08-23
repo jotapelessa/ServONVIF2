@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -17,13 +18,15 @@ class MonitoringForegroundService : Service() {
 
     private var wsManager: WebSocketManager? = null
     private lateinit var configRepo: ServerConfigRepository
+    private lateinit var notificationManager: NotificationManager
 
     override fun onCreate() {
         super.onCreate()
         configRepo = ServerConfigRepository(this)
-        createNotificationChannel()
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        createNotificationChannels()
 
-        val notification = buildForegroundNotification("Monitorando eventos em tempo real")
+        val notification = buildForegroundNotification("Monitorando eventos de segurança")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -51,46 +54,90 @@ class MonitoringForegroundService : Service() {
     }
 
     private fun handleIncomingAlert(event: EventPayload) {
-        // 1. Play subtle audio chime if enabled
+        // 1. Play audible chime if enabled
         if (configRepo.isSoundAlertEnabled) {
             try {
-                val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
                 ringtone?.play()
             } catch (e: Exception) {
-                // Ignore audio errors on quiet TV profiles
+                // Safe ignore audio error
             }
         }
 
-        // 2. Trigger Picture-in-Picture Floating Alert
-        val intent = Intent(this, PiPAlertActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // 2. Build Intent for PiP / Spotlight Overlay
+        val alertIntent = Intent(this, PiPAlertActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra("EXTRA_CAMERA_ID", event.cameraId)
             putExtra("EXTRA_CAMERA_NAME", event.cameraName)
             putExtra("EXTRA_MJPEG_URL", event.mjpegUrl)
             putExtra("EXTRA_SCORE", event.score)
             putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
         }
-        startActivity(intent)
+
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            alertIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // 3. High-Priority Heads-Up Notification with FullScreenIntent (Essential for Android 10+ TV)
+        val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.app_icon)
+            .setContentTitle("🔴 Movimento Detectado: ${event.cameraName}")
+            .setContentText("Clique ou aguarde para visualizar a câmera ao vivo")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setContentIntent(fullScreenPendingIntent)
+            .build()
+
+        notificationManager.notify(ALERT_NOTIFICATION_ID, alertNotification)
+
+        // Also attempt direct start for devices allowing background starts
+        try {
+            startActivity(alertIntent)
+        } catch (e: Exception) {
+            // Android 10+ will handle via fullScreenPendingIntent
+        }
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            // Channel for Silent Persistent Service
+            val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
-                "ServONVIF Alertas de Câmeras",
+                "ServONVIF Serviço em 2º Plano",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Mantém a conexão ativa em segundo plano na Smart TV"
+            }
+
+            // Channel for High-Priority Heads-Up Emergency Alerts
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "ServONVIF Alertas de Movimento (PiP)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notificações prioritárias de detecção de movimento em Smart TVs"
+                description = "Dispara janela de vídeo instantânea ao detectar movimento"
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
+
+            notificationManager.createNotificationChannel(serviceChannel)
+            notificationManager.createNotificationChannel(alertChannel)
         }
     }
 
     private fun buildForegroundNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ServONVIF Monitor TV")
+            .setContentTitle("ServONVIF TV Sentinela")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.app_icon)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -107,6 +154,8 @@ class MonitoringForegroundService : Service() {
 
     companion object {
         const val CHANNEL_ID = "servonvif_monitoring_channel"
+        const val ALERT_CHANNEL_ID = "servonvif_alert_channel"
         const val NOTIFICATION_ID = 1001
+        const val ALERT_NOTIFICATION_ID = 2002
     }
 }
