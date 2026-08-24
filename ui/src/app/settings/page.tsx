@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { apiClient, API_BASE } from "@/lib/api-client";
+import { apiClient, API_BASE, SettingsResponse } from "@/lib/api-client";
 import {
   ArrowLeft,
   Bell,
@@ -80,6 +80,8 @@ export default function SettingsPage() {
   const [simulatingPlate, setSimulatingPlate] = useState(false);
   const [simulatedPlateResult, setSimulatedPlateResult] = useState<any>(null);
   const [testPlateInput, setTestPlateInput] = useState("BRA2E19");
+  const [vehicleSearchTerm, setVehicleSearchTerm] = useState("");
+  const [vehicleCategoryFilter, setVehicleCategoryFilter] = useState("ALL");
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -92,18 +94,7 @@ export default function SettingsPage() {
   const [bufferSeconds, setBufferSeconds] = useState(5);
 
   // Read-only server info
-  const [serverInfo, setServerInfo] = useState<{
-    version?: string;
-    local_ip: string;
-    port: number;
-    server_ws_url: string;
-    server_http_url: string;
-    storage: {
-      total_files: number;
-      total_size_mb: number;
-      media_path: string;
-    };
-  } | null>(null);
+  const [serverInfo, setServerInfo] = useState<SettingsResponse | null>(null);
 
   // Action status
   const [testingTelegram, setTestingTelegram] = useState(false);
@@ -865,71 +856,169 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Registered Vehicles List */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                        <span>Veículos Cadastrados ({vehicles.length})</span>
-                      </h3>
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                          <Car className="w-4 h-4 text-amber-400" />
+                          <span>Veículos &amp; Placas Cadastradas ({vehicles.length})</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Controle de acesso por reconhecimento óptico de caracteres (ANPR / LPR)
+                        </p>
+                      </div>
+
+                      {/* Search & Category Filter Bar */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={vehicleSearchTerm}
+                          onChange={(e) => setVehicleSearchTerm(e.target.value)}
+                          placeholder="Buscar por placa, morador ou carro..."
+                          className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-56"
+                        />
+
+                        <select
+                          value={vehicleCategoryFilter}
+                          onChange={(e) => setVehicleCategoryFilter(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                        >
+                          <option value="ALL">Todas as Categorias</option>
+                          <option value="MORADOR">Morador</option>
+                          <option value="VISITANTE">Visitante</option>
+                          <option value="PRESTADOR">Prestador</option>
+                          <option value="VIP">VIP / Alerta</option>
+                        </select>
+                      </div>
                     </div>
 
                     {vehiclesLoading ? (
-                      <div className="p-8 text-center text-slate-500 text-xs">
-                        <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2" />
-                        Carregando veículos...
+                      <div className="p-12 text-center text-slate-500 text-xs">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-400" />
+                        Carregando banco de veículos...
                       </div>
-                    ) : vehicles.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {vehicles.map((v) => {
-                          const categoryColor =
-                            v.category === "MORADOR"
-                              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
-                              : v.category === "VISITANTE"
-                              ? "bg-blue-500/10 text-blue-300 border-blue-500/20"
-                              : v.category === "PRESTADOR"
-                              ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                              : "bg-rose-500/10 text-rose-300 border-rose-500/20";
+                    ) : vehicles.filter((v) => {
+                        if (vehicleCategoryFilter !== "ALL" && v.category !== vehicleCategoryFilter) return false;
+                        if (vehicleSearchTerm) {
+                          const q = vehicleSearchTerm.toLowerCase();
+                          const matchPlate = v.plate_number.toLowerCase().includes(q);
+                          const matchOwner = v.owner_name.toLowerCase().includes(q);
+                          const matchModel = (v.vehicle_model || "").toLowerCase().includes(q);
+                          if (!matchPlate && !matchOwner && !matchModel) return false;
+                        }
+                        return true;
+                      }).length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {vehicles
+                          .filter((v) => {
+                            if (vehicleCategoryFilter !== "ALL" && v.category !== vehicleCategoryFilter) return false;
+                            if (vehicleSearchTerm) {
+                              const q = vehicleSearchTerm.toLowerCase();
+                              const matchPlate = v.plate_number.toLowerCase().includes(q);
+                              const matchOwner = v.owner_name.toLowerCase().includes(q);
+                              const matchModel = (v.vehicle_model || "").toLowerCase().includes(q);
+                              if (!matchPlate && !matchOwner && !matchModel) return false;
+                            }
+                            return true;
+                          })
+                          .map((v) => {
+                            const isMercosul = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/i.test(v.plate_number.replace(/[^A-Za-z0-9]/g, ""));
+                            const categoryColor =
+                              v.category === "MORADOR"
+                                ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                                : v.category === "VISITANTE"
+                                ? "bg-blue-500/10 text-blue-300 border-blue-500/30"
+                                : v.category === "PRESTADOR"
+                                ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                : "bg-purple-500/10 text-purple-300 border-purple-500/30";
 
-                          return (
-                            <div
-                              key={v.id}
-                              className="bg-slate-900/70 border border-slate-800 hover:border-slate-700 p-4 rounded-xl space-y-3 transition-all"
-                            >
-                              <div className="flex items-center justify-between">
-                                {/* Stylized Mini Plate */}
-                                <div className="bg-white border border-slate-800 rounded px-2.5 py-0.5 text-slate-950 font-mono font-black text-sm tracking-wider shadow-sm">
-                                  {v.plate_number}
+                            return (
+                              <div
+                                key={v.id}
+                                className="bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 p-4 rounded-2xl space-y-3.5 transition-all shadow-lg hover:shadow-amber-500/5 group flex flex-col justify-between"
+                              >
+                                <div>
+                                  {/* Top Header: Plate Visual + Category Pill */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    {/* Realistic Brazilian Plate Badge */}
+                                    <div className="bg-white border-2 border-slate-900 rounded-md overflow-hidden shadow-md shrink-0 w-36">
+                                      <div className="bg-blue-700 text-white px-2 py-0.2 flex items-center justify-between text-[8px] font-black tracking-wider leading-tight">
+                                        <span>BRASIL</span>
+                                        <span className="text-[7px] opacity-80">{isMercosul ? "MERCOSUL" : "BR"}</span>
+                                      </div>
+                                      <div className="py-1 text-center text-slate-950 font-black text-lg tracking-widest font-mono select-all">
+                                        {v.plate_number.toUpperCase()}
+                                      </div>
+                                    </div>
+
+                                    {/* Category Pill */}
+                                    <span className={`text-[10px] border px-2.5 py-1 rounded-full font-bold uppercase tracking-wider shrink-0 ${categoryColor}`}>
+                                      {v.category === "MORADOR" ? "🏠 " : v.category === "PRESTADOR" ? "🛠️ " : v.category === "VISITANTE" ? "👤 " : "⭐ "}
+                                      {v.category}
+                                    </span>
+                                  </div>
+
+                                  {/* Owner & Vehicle Specs */}
+                                  <div className="pt-3 space-y-1">
+                                    <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                                      <span>{v.owner_name}</span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                                      <Car className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                      <span className="truncate">{v.vehicle_model || "Modelo não informado"}</span>
+                                    </div>
+                                    {v.notes && (
+                                      <div className="text-[11px] text-slate-500 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800/60 mt-1 truncate" title={v.notes}>
+                                        {v.notes}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
-                                <span className={`text-[10px] border px-2 py-0.5 rounded-full font-bold uppercase ${categoryColor}`}>
-                                  {v.category}
-                                </span>
-                              </div>
+                                {/* Footer Stats & Actions */}
+                                <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80">
+                                  <span className="font-mono text-[10px]">
+                                    Passagens: <strong className="text-amber-400 font-bold">{v.total_detections || 0}</strong>
+                                  </span>
 
-                              <div>
-                                <div className="text-sm font-bold text-slate-100">{v.owner_name}</div>
-                                <div className="text-xs text-slate-400">{v.vehicle_model || "Modelo não informado"}</div>
-                              </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setTestPlateInput(v.plate_number);
+                                        window.scrollTo({ top: 0, behavior: "smooth" });
+                                      }}
+                                      className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 rounded-lg text-[10px] font-semibold transition flex items-center gap-1"
+                                      title="Carregar placa na bancada de simulação de TV"
+                                    >
+                                      <Zap className="w-3 h-3 text-amber-400" />
+                                      <span>Testar</span>
+                                    </button>
 
-                              <div className="text-[11px] text-slate-500 flex items-center justify-between pt-2 border-t border-slate-800/80">
-                                <span>Detecções: <strong className="text-slate-300">{v.total_detections}</strong></span>
-                                <button
-                                  onClick={() => handleDeleteVehicle(v.id)}
-                                  className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
-                                  title="Remover veículo"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteVehicle(v.id)}
+                                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                                      title="Remover veículo"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     ) : (
-                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-8 text-center space-y-2">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
                         <Car className="w-8 h-8 text-slate-500 mx-auto" />
-                        <div className="text-sm font-semibold text-slate-300">Nenhum veículo cadastrado</div>
+                        <div className="text-sm font-semibold text-slate-300">
+                          {vehicleSearchTerm || vehicleCategoryFilter !== "ALL" ? "Nenhum veículo encontrado com esse filtro" : "Nenhum veículo cadastrado"}
+                        </div>
                         <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Cadastre as placas dos moradores, familiares e prestadores de serviço para identificação com foto e som na TV!
+                          {vehicleSearchTerm || vehicleCategoryFilter !== "ALL"
+                            ? "Tente alterar os termos de busca ou selecionar outra categoria."
+                            : "Cadastre as placas dos moradores, familiares e prestadores de serviço para identificação com foto e som na TV!"}
                         </p>
                       </div>
                     )}

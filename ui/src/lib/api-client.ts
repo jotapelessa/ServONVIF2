@@ -42,6 +42,35 @@ export interface MotionEvent {
   duration_seconds: number;
 }
 
+export interface SettingsResponse {
+  app_name?: string;
+  version?: string;
+  port?: number;
+  local_ip?: string;
+  server_ws_url?: string;
+  server_http_url?: string;
+  retention_days?: number;
+  default_buffer_seconds?: number;
+  telegram_enabled?: boolean;
+  telegram_paused?: boolean;
+  telegram_bot_token?: string;
+  telegram_chat_id?: string;
+  telegram_bot_configured?: boolean;
+  telegram_cooldown_seconds?: number;
+  storage?: {
+    total_files: number;
+    total_size_mb: number;
+    media_path: string;
+  };
+  system_metrics?: {
+    cpu_percent: number;
+    ram_percent: number;
+    ram_used_mb: number;
+    ram_total_mb: number;
+    system_ram_used_mb: number;
+  };
+}
+
 export const apiClient = {
   async getCameras(): Promise<Camera[]> {
     const res = await fetch(`${API_BASE}/api/cameras/`);

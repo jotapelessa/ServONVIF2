@@ -28,6 +28,10 @@ import {
   ChevronDown,
   CalendarDays,
   CalendarRange,
+  Car,
+  User,
+  Video,
+  SlidersHorizontal,
 } from "lucide-react";
 
 export default function EventsPage() {
@@ -39,6 +43,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCameraId, setSelectedCameraId] = useState<string>("ALL");
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "PLATES" | "PERSONS" | "VIDEOS">("ALL");
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
 
   // Batch Delete Dropdown & Modal States
@@ -83,19 +88,40 @@ export default function EventsPage() {
     }
   }, [recentEvents]);
 
+  // Counts for category badges
+  const categoryStats = useMemo(() => {
+    const plates = events.filter((e) => !!(e as any).plate_number || (e as any).type === "PLATE_DETECTED").length;
+    const persons = events.filter((e) => e.score >= 0.03).length;
+    const videos = events.filter((e) => !!e.video_path).length;
+    return { all: events.length, plates, persons, videos };
+  }, [events]);
+
   // Filtered Events List
   const filteredEvents = useMemo(() => {
     return events.filter((evt) => {
+      // Camera filter
       if (selectedCameraId !== "ALL" && evt.camera_id !== Number(selectedCameraId)) {
         return false;
       }
+      // Date filter
       if (selectedDate) {
         const evtDate = new Date(evt.timestamp).toISOString().split("T")[0];
         if (evtDate !== selectedDate) return false;
       }
+      // Category filter (Placa, Pessoa/Movimento, Vídeo)
+      if (filterCategory === "PLATES") {
+        const isPlate = !!(evt as any).plate_number || (evt as any).type === "PLATE_DETECTED";
+        if (!isPlate) return false;
+      } else if (filterCategory === "PERSONS") {
+        // High confidence motion/person alert
+        if (evt.score < 0.03) return false;
+      } else if (filterCategory === "VIDEOS") {
+        if (!evt.video_path) return false;
+      }
+
       return true;
     });
-  }, [events, selectedCameraId, selectedDate]);
+  }, [events, selectedCameraId, selectedDate, filterCategory]);
 
   const activeEvent = selectedEventIndex !== null && filteredEvents[selectedEventIndex]
     ? filteredEvents[selectedEventIndex]
@@ -352,6 +378,118 @@ export default function EventsPage() {
           </button>
         </div>
       </header>
+
+      {/* Interactive Category & Camera Filter Pills Bar */}
+      <div className="w-full px-6 py-2.5 bg-slate-900/90 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0 backdrop-blur-sm z-20">
+        {/* Category Filter Pills (Todos, Placas, Pessoas, Vídeos) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
+            <span>Filtros:</span>
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setFilterCategory("ALL")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+              filterCategory === "ALL"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
+                : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60"
+            }`}
+          >
+            <span>Todos os Eventos</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filterCategory === "ALL" ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400"
+            }`}>
+              {categoryStats.all}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterCategory("PLATES")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+              filterCategory === "PLATES"
+                ? "bg-amber-600 text-white shadow-md shadow-amber-600/25"
+                : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60"
+            }`}
+          >
+            <Car className="w-3.5 h-3.5 text-amber-400" />
+            <span>Placas / Veículos</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filterCategory === "PLATES" ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400"
+            }`}>
+              {categoryStats.plates}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterCategory("PERSONS")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+              filterCategory === "PERSONS"
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
+                : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60"
+            }`}
+          >
+            <User className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Pessoas / Movimento</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filterCategory === "PERSONS" ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400"
+            }`}>
+              {categoryStats.persons}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterCategory("VIDEOS")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
+              filterCategory === "VIDEOS"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
+                : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60"
+            }`}
+          >
+            <Video className="w-3.5 h-3.5 text-purple-400" />
+            <span>Com Gravação MP4</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filterCategory === "VIDEOS" ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400"
+            }`}>
+              {categoryStats.videos}
+            </span>
+          </button>
+        </div>
+
+        {/* Quick Camera Filter Chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-mono text-slate-400 uppercase">Câmeras:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedCameraId("ALL")}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+              selectedCameraId === "ALL"
+                ? "bg-slate-200 text-slate-900 font-bold"
+                : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+            }`}
+          >
+            Todas
+          </button>
+          {cameras.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setSelectedCameraId(String(c.id))}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                selectedCameraId === String(c.id)
+                  ? "bg-blue-600 text-white font-bold shadow-sm"
+                  : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Success Notification Banner */}
       {batchDeleteResult && (
