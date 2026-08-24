@@ -95,12 +95,12 @@ export function Header({
       </div>
 
       {/* Right: Controls, Telemetry & Navigation */}
-      <div className="flex items-center gap-2 sm:gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         {/* Telemetry (CPU & RAM) Compact Pill */}
         {metrics && (
           <div
             title={`Servidor: CPU ${metrics.cpu_percent}% | RAM ${metrics.ram_used_mb}MB (${metrics.ram_percent}%)`}
-            className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-300"
+            className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-300 shadow-inner"
           >
             <div className="flex items-center gap-1">
               <Cpu className="w-3 h-3 text-blue-400" />
@@ -121,7 +121,7 @@ export function Header({
         {/* Engine Status Dot */}
         <div
           title={isConnected ? "Engine Conectada via WebSocket" : "Desconectado da Engine"}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]"
         >
           <span className="relative flex h-2 w-2">
             {isConnected && (
@@ -133,7 +133,7 @@ export function Header({
               }`}
             />
           </span>
-          <span className="text-slate-400 hidden xl:inline font-medium">
+          <span className="text-slate-400 hidden sm:inline font-medium">
             {isConnected ? "Online" : "Offline"}
           </span>
         </div>
@@ -141,65 +141,69 @@ export function Header({
         <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
 
         {/* Navigation Links */}
-        <Link
-          href="/settings"
-          title="Leitura de Placas (LPR)"
-          className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
-        >
-          <Car className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden lg:inline">Placas</span>
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/settings"
+            title="Leitura de Placas (LPR)"
+            className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
+          >
+            <Car className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Placas</span>
+          </Link>
 
-        <Link
-          href="/events"
-          title="Gravações de Movimento"
-          className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
-        >
-          <Film className="w-3.5 h-3.5 text-blue-400" />
-          <span className="hidden lg:inline">Gravações</span>
-        </Link>
+          <Link
+            href="/events"
+            title="Gravações de Movimento"
+            className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
+          >
+            <Film className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden md:inline">Gravações</span>
+          </Link>
 
-        <Link
-          href="/settings"
-          title="Configurações do Sistema"
-          className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
-        >
-          <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden lg:inline">Ajustes</span>
-        </Link>
+          <Link
+            href="/settings"
+            title="Configurações do Sistema"
+            className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">Ajustes</span>
+          </Link>
+        </div>
 
         <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
 
         {/* Action Buttons */}
-        <button
-          onClick={onScanClick}
-          title="Escanear câmeras na rede local"
-          className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 transition"
-        >
-          <Scan className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="hidden sm:inline">Escanear</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onScanClick}
+            title="Escanear câmeras na rede local"
+            className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 transition"
+          >
+            <Scan className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Escanear</span>
+          </button>
 
-        <button
-          onClick={onAddCameraClick}
-          className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-sm shadow-blue-500/20 transition active:scale-95"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Adicionar</span>
-        </button>
+          <button
+            onClick={onAddCameraClick}
+            className="flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-sm shadow-blue-500/20 transition active:scale-95"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Adicionar</span>
+          </button>
 
-        {/* Toggle Sidebar */}
-        <button
-          onClick={onToggleSidebar}
-          title={isSidebarOpen ? "Ocultar Eventos" : "Exibir Eventos"}
-          className="flex items-center justify-center w-8 h-8 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition"
-        >
-          {isSidebarOpen ? (
-            <PanelRightClose className="w-3.5 h-3.5" />
-          ) : (
-            <PanelRightOpen className="w-3.5 h-3.5" />
-          )}
-        </button>
+          {/* Toggle Sidebar */}
+          <button
+            onClick={onToggleSidebar}
+            title={isSidebarOpen ? "Ocultar Eventos" : "Exibir Eventos"}
+            className="flex items-center justify-center w-8 h-8 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition shrink-0"
+          >
+            {isSidebarOpen ? (
+              <PanelRightClose className="w-3.5 h-3.5" />
+            ) : (
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
       </div>
     </header>
   );
