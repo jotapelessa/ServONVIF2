@@ -331,13 +331,12 @@ class TelegramService:
         json_bytes: bytes,
         filename: str,
         reason: str = "Alteração de Configurações"
-    ) -> bool:
+    ) -> tuple[bool, str]:
         if not self.is_configured:
-            logger.debug("Telegram não configurado. Ignorando envio de backup.")
-            return False
+            return False, "Bot do Telegram não configurado. Adicione o Token do Bot e o Chat ID na aba 'Bot do Telegram'."
 
         if not getattr(settings, "TELEGRAM_ENABLED", True):
-            return False
+            return False, "O serviço do Telegram está desativado nas configurações."
 
         now = datetime.now()
         date_str = now.strftime("%d/%m/%Y às %H:%M:%S")
@@ -367,13 +366,19 @@ class TelegramService:
                 response = await client.post(url, data=data, files=files)
                 if response.status_code == 200:
                     logger.info(f"☁️ Cópia de backup JSON enviada com sucesso para o Telegram ({filename}, Motivo: {reason})")
-                    return True
+                    return True, "Arquivo universal de backup (.json) enviado com sucesso para o seu Telegram!"
                 else:
-                    logger.warning(f"Falha ao enviar backup para o Telegram: status {response.status_code} - {response.text}")
-                    return False
+                    err_desc = response.text
+                    try:
+                        err_json = response.json()
+                        err_desc = err_json.get("description", err_desc)
+                    except Exception:
+                        pass
+                    logger.warning(f"Falha ao enviar backup para o Telegram: {err_desc}")
+                    return False, f"Erro do Telegram: {err_desc}"
         except Exception as e:
             logger.error(f"Erro ao enviar documento de backup ao Telegram: {e}")
-            return False
+            return False, f"Falha de conexão com Telegram: {str(e)}"
 
     async def send_test_message(self, custom_token: Optional[str] = None, custom_chat_id: Optional[str] = None) -> tuple[bool, str]:
         token = custom_token or self.bot_token

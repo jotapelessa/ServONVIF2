@@ -43,10 +43,10 @@ async def build_full_backup_dict() -> Dict[str, Any]:
         "devices": devices,
     }
 
-async def dispatch_telegram_backup(reason: str = "Alteração de Configurações") -> bool:
+async def dispatch_telegram_backup(reason: str = "Alteração de Configurações") -> tuple[bool, str]:
     """Gera o JSON mais recente e despacha automaticamente para o Telegram."""
     if not telegram_service.is_configured:
-        return False
+        return False, "Bot do Telegram não configurado."
 
     try:
         backup_dict = await build_full_backup_dict()
@@ -61,4 +61,4 @@ async def dispatch_telegram_backup(reason: str = "Alteração de Configurações
         )
     except Exception as e:
         logger.error(f"Erro ao gerar e despachar backup para o Telegram: {e}")
-        return False
+        return False, f"Erro interno ao gerar backup: {str(e)}"

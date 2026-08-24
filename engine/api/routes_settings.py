@@ -419,13 +419,16 @@ async def send_manual_telegram_backup():
     Manually sends a fresh universal JSON backup document to the configured Telegram channel/chat.
     """
     if not telegram_service.is_configured:
-        raise HTTPException(status_code=400, detail="Bot do Telegram não está configurado.")
+        raise HTTPException(
+            status_code=400,
+            detail="Bot do Telegram não está configurado! Insira seu Bot Token e Chat ID na aba 'Bot do Telegram' e clique em Salvar."
+        )
 
-    success = await dispatch_telegram_backup(reason="Backup Manual Solicitado pelo Usuário")
+    success, msg = await dispatch_telegram_backup(reason="Backup Manual Solicitado pelo Usuário")
     if not success:
-        raise HTTPException(status_code=500, detail="Falha ao despachar backup para a nuvem do Telegram.")
+        raise HTTPException(status_code=400, detail=msg)
 
-    return {"success": True, "message": "Arquivo universal de backup (.json) enviado com sucesso para o Telegram!"}
+    return {"success": True, "message": msg}
 
 @router.post("/import-config")
 async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(get_db)):
