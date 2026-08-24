@@ -1,8 +1,10 @@
 FROM python:3.11-slim
 
-# Install system dependencies (FFmpeg, OpenCV libGL, networking tools)
+# Install system dependencies (FFmpeg, OpenCV libGL, Tesseract OCR, networking tools)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-por \
     libsm6 \
     libxext6 \
     libgl1 \

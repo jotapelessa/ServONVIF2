@@ -12,7 +12,29 @@ from engine.api.websocket_hub import ws_hub
 
 try:
     import pytesseract
+    from PIL import Image
     PYTESSERACT_AVAILABLE = True
+
+    # Auto-discover Tesseract binary across Windows, Linux, and macOS
+    import shutil
+    if not shutil.which("tesseract"):
+        if os.name == "nt":
+            windows_paths = [
+                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+                os.path.expandvars(r"%USERPROFILE%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
+            ]
+            for wp in windows_paths:
+                if os.path.exists(wp):
+                    pytesseract.pytesseract.tesseract_cmd = wp
+                    break
+        elif os.path.exists("/opt/homebrew/bin/tesseract"):
+            pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+        elif os.path.exists("/usr/local/bin/tesseract"):
+            pytesseract.pytesseract.tesseract_cmd = "/usr/local/bin/tesseract"
+        elif os.path.exists("/usr/bin/tesseract"):
+            pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 except ImportError:
     PYTESSERACT_AVAILABLE = False
 

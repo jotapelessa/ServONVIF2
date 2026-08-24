@@ -28,34 +28,42 @@ O projeto é estruturado em 3 pilares:
 
 ---
 
-## 🚀 Como Executar
+## 🚀 Como Executar (Inicialização em 1 Clique)
 
-### 1. Executando o Motor Nativo (`engine/`)
-
-```bash
-cd engine
-pip install -r requirements.txt
-python main.py
+### 🪟 Windows 10/11
+Dê um duplo-clique no arquivo ou execute no Prompt/PowerShell:
+```bat
+iniciar_servonvif_windows.bat
 ```
-> O servidor iniciará em `http://0.0.0.0:8080`.
-> Documentação OpenAPI Swagger disponível em: `http://localhost:8080/docs`.
 
-### 2. Executando a Interface Web (`ui/`)
-
+### 🍎 macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+No Terminal:
 ```bash
-cd ui
-npm install
-npm run dev
+./iniciar_servonvif_mac.sh
 ```
-> Acesse o painel em `http://localhost:3000`.
 
-Para gerar o build estático para empacotar com Tauri ou servir diretamente pela Engine:
+### 🐧 Linux (Ubuntu, Debian, Fedora, Arch)
+No Terminal:
 ```bash
-npm run build
+./iniciar_servonvif_linux.sh
+```
+
+### 🐳 Docker / Docker Compose
+```bash
+docker-compose up -d --build
 ```
 
 ---
 
+## 🌐 Portas & Endereços Padrão
+* **Painel Web:** [http://localhost:3005](http://localhost:3005)
+* **Backend API & Swagger:** [http://localhost:8080/docs](http://localhost:8080/docs)
+* **WebSocket de Eventos (TV/Tablets):** `ws://IP_LOCAL:8080/ws/events`
+* **Mosaico ao Vivo:** [http://localhost:3005/cameras/](http://localhost:3005/cameras/)
+* **Controle de Backup & Standby:** [http://localhost:3005/settings/backup](http://localhost:3005/settings/backup)
+
+---
+
 ## 📄 Documentação Completa da Arquitetura
-Consulte o arquivo de arquitetura aprovado:
-- [`hybrid_ip_monitoring_architecture.md`](file:///Users/jotapelessa/.gemini/antigravity/brain/607238d4-cb15-4213-b398-67e884ade917/hybrid_ip_monitoring_architecture.md)
+Consulte o arquivo de arquitetura:
+- `hybrid_ip_monitoring_architecture.md`

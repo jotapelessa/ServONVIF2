@@ -27,6 +27,19 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+:: 3. Verificar Tesseract OCR (Opcional para Leitura de Placas LPR)
+where tesseract >nul 2>nul
+if %errorlevel% neq 0 (
+    if not exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
+        if not exist "%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe" (
+            echo [INFO] Tesseract OCR nao detectado. (Recomendado para Leitura de Placas ANPR/LPR)
+            echo Caso deseje reconhecimento automatico de placas Mercosul, instale em:
+            echo https://github.com/UB-Mannheim/tesseract/wiki
+            echo.
+        )
+    )
+)
+
 echo [1/4] Verificando ambiente virtual Python (.venv)...
 if not exist ".venv" (
     echo Criando ambiente virtual Python...
@@ -35,8 +48,8 @@ if not exist ".venv" (
 
 echo [2/4] Instalando/Verificando dependencias do Backend...
 call .venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r engine\requirements.txt
+python -m pip install --upgrade pip --quiet
+pip install -r engine\requirements.txt --quiet
 
 echo.
 echo [3/4] Instalando/Verificando dependencias do Frontend UI...
