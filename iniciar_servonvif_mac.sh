@@ -80,8 +80,8 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
-# Iniciar Backend
-PYTHONPATH=. python3 engine/main.py &
+# Iniciar Backend com prevenção de suspensão de sistema (caffeinate)
+caffeinate -s -i -m env PYTHONPATH=. python3 engine/main.py &
 
 # Iniciar Frontend
 cd ui

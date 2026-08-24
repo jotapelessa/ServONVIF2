@@ -14,11 +14,14 @@ from engine.api.routes_devices import router as devices_router
 from engine.api.routes_vehicles import router as vehicles_router
 from engine.api.websocket_hub import ws_hub
 from engine.core.camera_manager import camera_manager
+from engine.core.power_manager import power_manager
 from engine.services.retention_worker import retention_worker
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    logger.info("Initializing 24/7 Power Management...")
+    power_manager.start()
     logger.info("Initializing SQLite database...")
     await init_db()
     logger.info("Loading persisted system settings from SQLite...")
@@ -35,6 +38,8 @@ async def lifespan(app: FastAPI):
     retention_worker.stop()
     logger.info("Stopping all camera streams...")
     camera_manager.stop_all()
+    logger.info("Releasing Power Management assertions...")
+    power_manager.stop()
 
 app = FastAPI(
     title=settings.APP_NAME,
