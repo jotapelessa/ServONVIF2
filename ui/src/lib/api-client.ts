@@ -128,6 +128,37 @@ export const apiClient = {
     return res.json();
   },
 
+  async setROI(
+    cameraId: number,
+    roi_polygon: number[][],
+    ignore_polygons?: number[][][]
+  ): Promise<Camera> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/roi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roi_polygon, ignore_polygons }),
+    });
+    if (!res.ok) throw new Error("Failed to set ROI");
+    return res.json();
+  },
+
+  async captureSnapshot(cameraId: number, sendTelegram: boolean = true): Promise<{
+    success: boolean;
+    camera_id: number;
+    camera_name: string;
+    timestamp: string;
+    thumbnail_url: string;
+    thumbnail_path: string;
+    message: string;
+  }> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/snapshot?send_telegram=${sendTelegram}`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao capturar foto/snapshot da câmera");
+    return data;
+  },
+
   async getEvents(limit = 60, cameraId?: number): Promise<MotionEvent[]> {
     const url = cameraId !== undefined
       ? `${API_BASE}/api/events/?limit=${limit}&camera_id=${cameraId}`

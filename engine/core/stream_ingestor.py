@@ -10,11 +10,13 @@ import numpy as np
 from loguru import logger
 
 from engine.database.models import Camera, MotionEvent
+from engine.database.db import async_session_factory
 from engine.core.ring_buffer import CircularRingBuffer
 from engine.core.motion_detector import MotionDetector
 from engine.core.media_writer import MediaWriter
 from engine.services.mjpeg_streamer import mjpeg_streamer
 from engine.services.telegram_bot import telegram_service
+from engine.services.lpr_engine import lpr_engine
 from engine.api.websocket_hub import ws_hub
 from engine.config.settings import settings
 
@@ -23,6 +25,7 @@ class StreamIngestor:
     Dedicated Zero-Latency worker for IP Camera streams:
     - Decoupled Ultra-Low-Latency Frame Grabber (always consumes latest RTSP frame, eliminating buffering lag).
     - Asynchronous Motion Detection & Instant WebSocket Alert Dispatch (sub-100ms response time).
+    - Periodic Background LPR Inspection for parked/stationary vehicles and live motion ANPR.
     - Asynchronous disk writes & Telegram notifications in background workers.
     """
     def __init__(self, camera: Camera, db_save_event_cb: Callable):
@@ -51,6 +54,8 @@ class StreamIngestor:
         self._post_event_countdown = 0
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._last_alert_time = 0.0
+        self._last_periodic_lpr_time = 0.0
+        self._stationary_plates_seen: dict[str, float] = {}
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         if self.is_running:
@@ -176,6 +181,11 @@ class StreamIngestor:
                     self._last_alert_time = now_monotonic
                     self._handle_motion_start_instant(frame, score, orig_bboxes)
 
+            # Periodic LPR scan for parked/stationary vehicles (every 12 seconds)
+            if now_monotonic - self._last_periodic_lpr_time > 12.0:
+                self._last_periodic_lpr_time = now_monotonic
+                self._trigger_lpr_scan(frame, is_motion=False)
+
             if self._is_recording_event:
                 self._event_frames.append(frame)
                 if not is_motion:
@@ -186,6 +196,60 @@ class StreamIngestor:
             # Keep steady processing cadence without blocking grabber
             time.sleep(0.04)
 
+    def _trigger_lpr_scan(self, frame: np.ndarray, is_motion: bool = False) -> None:
+        """
+        Runs non-blocking license plate OCR candidate search in a background thread.
+        Notifies Web Panel, Android TV PiP and Telegram Vault when a plate is found.
+        """
+        def _lpr_worker():
+            try:
+                candidates = lpr_engine.find_plate_candidates(
+                    frame,
+                    getattr(self.camera, "roi_polygon", None)
+                )
+                if not candidates:
+                    return
+
+                now_t = time.time()
+                for cand in candidates:
+                    plate = cand["plate_number"]
+                    last_seen = self._stationary_plates_seen.get(plate, 0.0)
+
+                    # Anti-spam for parked car: suppress repeated notifications if stationary (< 10 minutes)
+                    if not is_motion and (now_t - last_seen < 600.0):
+                        continue
+
+                    self._stationary_plates_seen[plate] = now_t
+
+                    now_dt = datetime.utcnow()
+                    thumb_path = MediaWriter.save_thumbnail(
+                        camera_id=self.camera.id,
+                        timestamp=now_dt,
+                        frame_bgr=frame,
+                        bounding_boxes=[cand["bbox"]]
+                    )
+
+                    if self._loop and self._loop.is_running():
+                        async def _run_plate_detection(p=plate, conf=cand["confidence"], path=thumb_path):
+                            try:
+                                async with async_session_factory() as session:
+                                    await lpr_engine.process_plate_detection(
+                                        session=session,
+                                        camera_id=self.camera.id,
+                                        camera_name=self.camera.name,
+                                        raw_plate=p,
+                                        confidence=conf,
+                                        snapshot_path=path
+                                    )
+                            except Exception as db_err:
+                                logger.error(f"Error in LPR detection database commit: {db_err}")
+
+                        asyncio.run_coroutine_threadsafe(_run_plate_detection(), self._loop)
+            except Exception as e:
+                logger.debug(f"Background LPR scan error for [{self.camera.id}] {self.camera.name}: {e}")
+
+        threading.Thread(target=_lpr_worker, daemon=True).start()
+
     def _handle_motion_start_instant(self, current_frame: np.ndarray, score: float, bboxes: list) -> None:
         """
         INSTANT ALERT: Dispatches WebSocket to TV/Tablets in milliseconds (<50ms).
@@ -194,6 +258,9 @@ class StreamIngestor:
         self._is_recording_event = True
         self._post_event_countdown = int(settings.POST_EVENT_SECONDS * 15)
         now = datetime.utcnow()
+
+        # Trigger immediate LPR on motion start
+        self._trigger_lpr_scan(current_frame, is_motion=True)
 
         # Retrieve pre-event window
         pre_frames = self.ring_buffer.get_window(pre_seconds=settings.PRE_EVENT_SECONDS)

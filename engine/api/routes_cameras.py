@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,9 @@ from engine.database.db import get_db
 from engine.database.models import Camera
 from engine.core.camera_manager import camera_manager
 from engine.core.discovery import ONVIFDiscovery
+from engine.core.media_writer import MediaWriter
 from engine.services.backup_service import dispatch_telegram_backup
+from engine.services.telegram_bot import telegram_service
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])
 
@@ -114,12 +117,62 @@ async def update_camera_roi(camera_id: int, payload: ROISetPayload, db: AsyncSes
 
     if payload.roi_polygon is not None:
         camera.roi_polygon = payload.roi_polygon
-    if payload.ignore_polygons is not None:
-        camera.ignore_polygons = payload.ignore_polygons
-
-    await db.commit()
-    await db.refresh(camera)
-
     camera_manager.update_camera_config(camera)
     asyncio.create_task(dispatch_telegram_backup(reason=f"Zonas de Detecção (Ciano/Roxa) Atualizadas: {camera.name}"))
     return camera
+
+@router.post("/{camera_id}/snapshot")
+async def capture_camera_snapshot(
+    camera_id: int,
+    send_telegram: bool = True,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Captures an instant high-resolution frame snapshot from the active RTSP ingestor.
+    Saves to media directory and optionally dispatches to Telegram Cloud Vault.
+    """
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    ingestor = camera_manager.ingestors.get(camera_id)
+    if not ingestor:
+        raise HTTPException(status_code=400, detail="Camera stream is not active")
+
+    with ingestor._frame_lock:
+        if ingestor._latest_frame is None:
+            raise HTTPException(status_code=503, detail="No frame available from camera stream")
+        frame = ingestor._latest_frame.copy()
+
+    now = datetime.utcnow()
+    thumb_path = MediaWriter.save_thumbnail(
+        camera_id=camera_id,
+        timestamp=now,
+        frame_bgr=frame
+    )
+
+    time_str = now.strftime("%H-%M-%S")
+    date_str = now.strftime("%Y-%m-%d")
+    thumb_url = f"/api/events/thumbnail/{camera_id}/{date_str}/{time_str}_thumb.jpg"
+
+    if send_telegram and telegram_service.is_configured:
+        asyncio.create_task(
+            telegram_service.send_photo_alert(
+                camera_id=camera_id,
+                camera_name=camera.name,
+                timestamp_str=now.strftime("%d/%m/%Y %H:%M:%S"),
+                photo_path=thumb_path,
+                score=1.0,
+                event_dt=now
+            )
+        )
+
+    return {
+        "success": True,
+        "camera_id": camera_id,
+        "camera_name": camera.name,
+        "timestamp": now.isoformat(),
+        "thumbnail_url": thumb_url,
+        "thumbnail_path": thumb_path,
+        "message": f"Snapshot em alta resolução capturado com sucesso para {camera.name}!"
+    }

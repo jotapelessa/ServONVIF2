@@ -1,9 +1,10 @@
 "use client";
 
-import { Camera } from "@/lib/api-client";
+import { useState } from "react";
+import { Camera, apiClient } from "@/lib/api-client";
 import { LiveView } from "./LiveView";
 import { useAlertStore } from "@/store/useCameraStore";
-import { Sliders, ShieldAlert, Maximize2, Settings } from "lucide-react";
+import { Sliders, ShieldAlert, Maximize2, Settings, Camera as CameraIcon, Check, Loader2 } from "lucide-react";
 
 interface CameraCardProps {
   camera: Camera;
@@ -16,6 +17,23 @@ interface CameraCardProps {
 export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDeleteCamera }: CameraCardProps) {
   const activeAlarms = useAlertStore((state) => state.activeAlarms);
   const isAlarming = Boolean(activeAlarms[camera.id] && Date.now() - activeAlarms[camera.id] < 8000);
+  const [snapping, setSnapping] = useState(false);
+  const [snapFeedback, setSnapFeedback] = useState<string | null>(null);
+
+  const handleCaptureSnapshot = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSnapping(true);
+    try {
+      await apiClient.captureSnapshot(camera.id, true);
+      setSnapFeedback("Foto Salva!");
+      setTimeout(() => setSnapFeedback(null), 2500);
+    } catch (err: any) {
+      setSnapFeedback("Erro");
+      setTimeout(() => setSnapFeedback(null), 2500);
+    } finally {
+      setSnapping(false);
+    }
+  };
 
   return (
     <div
@@ -52,6 +70,19 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1">
+          {snapFeedback && (
+            <span className="text-[9px] bg-emerald-500/90 text-white font-bold px-1.5 py-0.5 rounded shadow animate-in fade-in">
+              {snapFeedback}
+            </span>
+          )}
+          <button
+            onClick={handleCaptureSnapshot}
+            disabled={snapping}
+            title="Tirar Foto / Snapshot em Alta Resolução (Salva & Envia ao Telegram)"
+            className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-amber-600 text-slate-200 hover:text-white border border-white/20 shadow transition disabled:opacity-50"
+          >
+            {snapping ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <CameraIcon className="w-3.5 h-3.5" />}
+          </button>
           <button
             onClick={() => onSpotlight(camera)}
             title="Expandir / Modo Destaque"
