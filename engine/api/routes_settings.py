@@ -287,12 +287,18 @@ async def simulate_motion_alert(payload: SimulateMotionPayload):
         "mjpeg_url": f"/api/mjpeg/{payload.camera_id or 1}"
     }
 
+    # Prune any stale/ghost browser sockets first
+    await ws_hub.prune_stale_connections()
+
     await ws_hub.broadcast_event(event_payload)
     logger.info(f"🧪 Simulated Motion Alert Broadcasted: {event_payload['camera_name']} (Score: {event_payload['score']})")
 
+    unique_devs = ws_hub.unique_devices_count
+    active_conns = len(ws_hub.active_clients)
+
     return {
         "success": True,
-        "message": f"Alerta de teste disparado com sucesso para {len(ws_hub.active_connections)} clientes conectados via WebSocket!",
+        "message": f"Alerta de teste disparado com sucesso para {unique_devs} dispositivos físicos ({active_conns} conexões WebSocket ativas)!",
         "payload": event_payload
     }
 

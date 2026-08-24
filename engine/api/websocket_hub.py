@@ -183,6 +183,26 @@ class WebSocketHub:
         for stale in stale_connections:
             self.disconnect(stale)
 
+    @property
+    def unique_devices_count(self) -> int:
+        unique_devs = {info.device_id or info.ip for info in self.active_clients.values()}
+        return len(unique_devs)
+
+    async def prune_stale_connections(self) -> int:
+        """Sends a lightweight ping to verify socket health and prune disconnected sessions."""
+        if not self.active_clients:
+            return 0
+        ping_msg = json.dumps({"type": "HEARTBEAT_PING", "timestamp": datetime.utcnow().isoformat()})
+        dead = []
+        for ws, info in list(self.active_clients.items()):
+            try:
+                await ws.send_text(ping_msg)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+        return len(dead)
+
     async def broadcast_motion_alert(
         self,
         camera_id: int,
