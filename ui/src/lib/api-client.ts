@@ -300,4 +300,40 @@ export const apiClient = {
     if (!res.ok) throw new Error("Falha ao obter métricas de CPU/RAM");
     return res.json();
   },
+
+  // --- Server Lifecycle & Configuration Backup/Restore ---
+  async shutdownServer(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/system/shutdown`, {
+      method: "POST",
+    });
+    return res.json();
+  },
+
+  async restartServer(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/system/restart`, {
+      method: "POST",
+    });
+    return res.json();
+  },
+
+  getExportConfigUrl(): string {
+    return `${API_BASE}/api/settings/export-config`;
+  },
+
+  async importConfig(payload: any): Promise<{
+    success: boolean;
+    message: string;
+    cameras_restored: number;
+    vehicles_restored: number;
+    devices_restored: number;
+  }> {
+    const res = await fetch(`${API_BASE}/api/settings/import-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao importar backup de configurações");
+    return data;
+  },
 };

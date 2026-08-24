@@ -319,3 +319,253 @@ async def test_rtsp_connection(payload: RTSPTestPayload):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Exceção de rede: {e}")
+
+
+# =========================================================================
+# 🔄 SERVER LIFECYCLE CONTROLS (SHUTDOWN & RESTART)
+# =========================================================================
+
+@router.post("/system/shutdown")
+async def shutdown_server():
+    """
+    Gracefully stops the ServONVIF Core Engine across Windows, Linux and macOS.
+    """
+    def _delayed_shutdown():
+        import time, os
+        time.sleep(0.6)
+        logger.info("🛑 ServONVIF Engine shutting down cleanly by user request...")
+        os._exit(0)
+
+    import threading
+    threading.Thread(target=_delayed_shutdown, daemon=True).start()
+    return {
+        "success": True,
+        "message": "Servidor ServONVIF sendo desligado com segurança. Todos os processos foram finalizados."
+    }
+
+@router.post("/system/restart")
+async def restart_server():
+    """
+    Gracefully restarts the ServONVIF Core Engine process.
+    """
+    def _delayed_restart():
+        import time, os, sys, subprocess
+        time.sleep(0.8)
+        logger.info("🔄 ServONVIF Engine restarting...")
+        try:
+            subprocess.Popen([sys.executable] + sys.argv)
+        except Exception as e:
+            logger.error(f"Restart relaunch error: {e}")
+        os._exit(0)
+
+    import threading
+    threading.Thread(target=_delayed_restart, daemon=True).start()
+    return {
+        "success": True,
+        "message": "Reiniciando motor ServONVIF... A conexão será restabelecida em alguns segundos."
+    }
+
+
+# =========================================================================
+# 💾 CONFIGURATION BACKUP & RESTORE (.JSON / UNIVERSAL COMPATIBILITY)
+# =========================================================================
+
+@router.get("/export-config")
+async def export_configuration(db: AsyncSession = Depends(get_db)):
+    """
+    Exports a complete snapshot of all configurations, cameras, plates and devices into a universal JSON backup file.
+    """
+    from engine.database.models import Camera, Vehicle, Device
+    from sqlalchemy.future import select
+
+    # 1. Fetch Cameras
+    cam_res = await db.execute(select(Camera))
+    cameras = [c.model_dump() for c in cam_res.scalars().all()]
+
+    # 2. Fetch Vehicles
+    veh_res = await db.execute(select(Vehicle))
+    vehicles = [v.model_dump() for v in veh_res.scalars().all()]
+
+    # 3. Fetch Devices
+    dev_res = await db.execute(select(Device))
+    devices = [d.model_dump() for d in dev_res.scalars().all()]
+
+    def _json_serial(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return str(obj)
+
+    backup_data = {
+        "format": "SERVONVIF_BACKUP",
+        "version": "1.0",
+        "exported_at": datetime.utcnow().isoformat(),
+        "settings": {
+            "retention_days": settings.RETENTION_DAYS,
+            "default_buffer_seconds": settings.DEFAULT_BUFFER_SECONDS,
+            "telegram_enabled": settings.TELEGRAM_ENABLED,
+            "telegram_bot_token": settings.TELEGRAM_BOT_TOKEN or "",
+            "telegram_chat_id": settings.TELEGRAM_CHAT_ID or "",
+            "telegram_cooldown_seconds": settings.TELEGRAM_COOLDOWN_SECONDS,
+        },
+        "cameras": cameras,
+        "vehicles": vehicles,
+        "devices": devices,
+    }
+
+    import json
+    json_bytes = json.dumps(backup_data, indent=2, default=_json_serial).encode("utf-8")
+    filename = f"servonvif_backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/json"
+        }
+    )
+
+@router.post("/import-config")
+async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Imports and restores configurations, cameras, vehicles, and authorized devices from a backup JSON.
+    """
+    from engine.database.models import Camera, Vehicle, Device
+    from engine.core.camera_manager import camera_manager
+    from sqlalchemy.future import select
+
+    if not isinstance(backup_payload, dict):
+        raise HTTPException(status_code=400, detail="Formato de backup inválido.")
+
+    imported_settings = backup_payload.get("settings", {})
+    imported_cameras = backup_payload.get("cameras", [])
+    imported_vehicles = backup_payload.get("vehicles", [])
+    imported_devices = backup_payload.get("devices", [])
+
+    # 1. Update In-Memory Settings
+    if "telegram_bot_token" in imported_settings:
+        settings.TELEGRAM_BOT_TOKEN = imported_settings["telegram_bot_token"]
+        telegram_service.bot_token = imported_settings["telegram_bot_token"]
+    if "telegram_chat_id" in imported_settings:
+        settings.TELEGRAM_CHAT_ID = imported_settings["telegram_chat_id"]
+        telegram_service.chat_id = imported_settings["telegram_chat_id"]
+    if "telegram_enabled" in imported_settings:
+        settings.TELEGRAM_ENABLED = bool(imported_settings["telegram_enabled"])
+    if "retention_days" in imported_settings:
+        settings.RETENTION_DAYS = int(imported_settings["retention_days"])
+    if "default_buffer_seconds" in imported_settings:
+        settings.DEFAULT_BUFFER_SECONDS = int(imported_settings["default_buffer_seconds"])
+    if "telegram_cooldown_seconds" in imported_settings:
+        settings.TELEGRAM_COOLDOWN_SECONDS = int(imported_settings["telegram_cooldown_seconds"])
+
+    # 2. Upsert Cameras
+    cameras_restored = 0
+    for cam_data in imported_cameras:
+        rtsp = cam_data.get("rtsp_url")
+        if not rtsp:
+            continue
+
+        res = await db.execute(select(Camera).where(Camera.rtsp_url == rtsp))
+        existing_cam = res.scalar_one_or_none()
+
+        if existing_cam:
+            existing_cam.name = cam_data.get("name", existing_cam.name)
+            existing_cam.ip_address = cam_data.get("ip_address", existing_cam.ip_address)
+            existing_cam.onvif_port = cam_data.get("onvif_port", existing_cam.onvif_port)
+            existing_cam.username = cam_data.get("username", existing_cam.username)
+            existing_cam.password = cam_data.get("password", existing_cam.password)
+            existing_cam.sensitivity = cam_data.get("sensitivity", existing_cam.sensitivity)
+            existing_cam.roi_polygon = cam_data.get("roi_polygon", existing_cam.roi_polygon)
+            existing_cam.allowed_device_ids = cam_data.get("allowed_device_ids", existing_cam.allowed_device_ids)
+            existing_cam.is_active = cam_data.get("is_active", True)
+            db.add(existing_cam)
+        else:
+            new_cam = Camera(
+                name=cam_data.get("name", "Câmera Importada"),
+                rtsp_url=rtsp,
+                ip_address=cam_data.get("ip_address"),
+                onvif_port=cam_data.get("onvif_port", 80),
+                username=cam_data.get("username"),
+                password=cam_data.get("password"),
+                sensitivity=cam_data.get("sensitivity", 0.03),
+                roi_polygon=cam_data.get("roi_polygon"),
+                allowed_device_ids=cam_data.get("allowed_device_ids"),
+                is_active=cam_data.get("is_active", True)
+            )
+            db.add(new_cam)
+        cameras_restored += 1
+
+    # 3. Upsert Vehicles
+    vehicles_restored = 0
+    for veh_data in imported_vehicles:
+        plate = veh_data.get("plate_number")
+        if not plate:
+            continue
+        res = await db.execute(select(Vehicle).where(Vehicle.plate_number == plate))
+        existing_veh = res.scalar_one_or_none()
+
+        if existing_veh:
+            existing_veh.owner_name = veh_data.get("owner_name", existing_veh.owner_name)
+            existing_veh.vehicle_model = veh_data.get("vehicle_model", existing_veh.vehicle_model)
+            existing_veh.category = veh_data.get("category", existing_veh.category)
+            existing_veh.notes = veh_data.get("notes", existing_veh.notes)
+            existing_veh.is_active = veh_data.get("is_active", True)
+            db.add(existing_veh)
+        else:
+            new_veh = Vehicle(
+                plate_number=plate,
+                owner_name=veh_data.get("owner_name", "Desconhecido"),
+                vehicle_model=veh_data.get("vehicle_model", "Não informado"),
+                category=veh_data.get("category", "MORADOR"),
+                notes=veh_data.get("notes"),
+                is_active=veh_data.get("is_active", True)
+            )
+            db.add(new_veh)
+        vehicles_restored += 1
+
+    # 4. Upsert Devices
+    devices_restored = 0
+    for dev_data in imported_devices:
+        dev_id = dev_data.get("device_id")
+        if not dev_id:
+            continue
+        res = await db.execute(select(Device).where(Device.device_id == dev_id))
+        existing_dev = res.scalar_one_or_none()
+
+        if existing_dev:
+            existing_dev.device_name = dev_data.get("device_name", existing_dev.device_name)
+            existing_dev.ip_address = dev_data.get("ip_address", existing_dev.ip_address)
+            existing_dev.device_type = dev_data.get("device_type", existing_dev.device_type)
+            existing_dev.status = dev_data.get("status", existing_dev.status)
+            existing_dev.notes = dev_data.get("notes", existing_dev.notes)
+            db.add(existing_dev)
+        else:
+            new_dev = Device(
+                device_id=dev_id,
+                device_name=dev_data.get("device_name", "Dispositivo"),
+                ip_address=dev_data.get("ip_address", "127.0.0.1"),
+                device_type=dev_data.get("device_type", "Android TV"),
+                status=dev_data.get("status", "ALLOWED"),
+                notes=dev_data.get("notes")
+            )
+            db.add(new_dev)
+        devices_restored += 1
+
+    await db.commit()
+
+    # Re-sync cameras in background
+    try:
+        await camera_manager.sync_cameras(db)
+    except Exception as e:
+        logger.warning(f"Failed to auto-sync camera ingestors after import: {e}")
+
+    logger.info(f"✅ Backup successfully imported: {cameras_restored} cameras, {vehicles_restored} vehicles, {devices_restored} devices")
+
+    return {
+        "success": True,
+        "message": f"Configurações restauradas com sucesso! ({cameras_restored} câmeras, {vehicles_restored} placas, {devices_restored} telas)",
+        "cameras_restored": cameras_restored,
+        "vehicles_restored": vehicles_restored,
+        "devices_restored": devices_restored,
+    }
+

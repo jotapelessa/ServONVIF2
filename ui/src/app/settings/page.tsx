@@ -42,10 +42,17 @@ import {
   Car,
   Plus,
   Search,
+  Power,
+  RotateCcw,
+  Download,
+  Upload,
+  FileJson,
+  FolderArchive,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine">("vehicles");
+  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup">("vehicles");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -114,6 +121,16 @@ export default function SettingsPage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logLevelFilter, setLogLevelFilter] = useState("ALL");
   const [copiedLogs, setCopiedLogs] = useState(false);
+
+  // Backup & Server Operations State
+  const [importingBackup, setImportingBackup] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
+  const [isShutdownModalOpen, setIsShutdownModalOpen] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [isShuttingDown, setIsShuttingDown] = useState(false);
+  const [serverShutdownDone, setServerShutdownDone] = useState(false);
+  const [restartCountdown, setRestartCountdown] = useState(8);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -433,6 +450,94 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedWs(false), 2000);
   };
 
+  const handleExportBackup = () => {
+    window.location.href = apiClient.getExportConfigUrl();
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportingBackup(true);
+    setImportResult(null);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const json = JSON.parse(text);
+        const res = await apiClient.importConfig(json);
+        setImportResult({ success: true, message: res.message });
+
+        // Refresh settings, devices, vehicles
+        const settingsData = await apiClient.getSettings();
+        setServerInfo(settingsData);
+        const devicesData = await apiClient.getDevices();
+        setDevices(devicesData);
+        const vehiclesData = await apiClient.getVehicles();
+        setVehicles(vehiclesData);
+      } catch (err: any) {
+        setImportResult({
+          success: false,
+          message: err.message || "Erro ao processar arquivo de backup .json",
+        });
+      } finally {
+        setImportingBackup(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleTriggerRestart = async () => {
+    setIsRestarting(true);
+    setIsRestartModalOpen(true);
+    try {
+      await apiClient.restartServer();
+    } catch (e) {
+      // Connection may close as server restarts
+    }
+
+    let count = 8;
+    setRestartCountdown(count);
+    const interval = setInterval(async () => {
+      count -= 1;
+      setRestartCountdown(count);
+      if (count <= 3) {
+        try {
+          const res = await fetch(`${API_BASE}/api/settings/`);
+          if (res.ok) {
+            clearInterval(interval);
+            setIsRestarting(false);
+            setTimeout(() => {
+              setIsRestartModalOpen(false);
+              window.location.reload();
+            }, 1000);
+          }
+        } catch (e) {
+          // Still restarting
+        }
+      }
+      if (count <= 0) {
+        clearInterval(interval);
+        setIsRestarting(false);
+        setIsRestartModalOpen(false);
+        window.location.reload();
+      }
+    }, 1000);
+  };
+
+  const handleTriggerShutdown = async () => {
+    setIsShuttingDown(true);
+    try {
+      await apiClient.shutdownServer();
+      setServerShutdownDone(true);
+    } catch (e) {
+      setServerShutdownDone(true);
+    } finally {
+      setIsShuttingDown(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0b0f19] text-white flex flex-col">
       {/* Header */}
@@ -593,6 +698,21 @@ export default function SettingsPage() {
             <div className="text-left">
               <div>Motor &amp; Ring Buffer</div>
               <div className="text-[10px] text-slate-400 font-normal">Zero-Latency Ingestor</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("backup")}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "backup"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <FolderArchive className="w-4 h-4 text-purple-400" />
+            <div className="text-left">
+              <div>Backup &amp; Sistema</div>
+              <div className="text-[10px] text-purple-300/80 font-normal">Exportar / Desligar / Reiniciar</div>
             </div>
           </button>
         </aside>
@@ -1702,10 +1822,245 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              {/* ================= TAB: BACKUP & SYSTEM OPERATIONS ================= */}
+              {activeTab === "backup" && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      <FolderArchive className="w-5 h-5 text-purple-400" />
+                      <span>Backup, Restauração &amp; Operação do Servidor</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Exporte todas as configurações, câmeras e placas em formato universal (.json) compatível com Windows, Mac e Linux, ou controle o ciclo de vida do servidor.
+                    </p>
+                  </div>
+
+                  {/* Section 1: Backup & Restore */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Export Card */}
+                    <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-slate-900/40">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-blue-600/10 text-blue-400 border border-blue-500/20">
+                          <Download className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Exportar Configurações</h3>
+                          <p className="text-[11px] text-slate-400">Baixar arquivo .json com todas as regras</p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Gera um arquivo de backup completo contendo:
+                      </p>
+                      <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
+                        <li>Todas as Câmeras (RTSP, sensibilidade, zonas ROI)</li>
+                        <li>Veículos e Placas Cadastradas de Moradores</li>
+                        <li>Dispositivos e Telas Autorizados (Smart TVs, Tablets)</li>
+                        <li>Ajustes do Telegram, Retenção e Buffer de Vídeo</li>
+                      </ul>
+
+                      <button
+                        type="button"
+                        onClick={handleExportBackup}
+                        className="w-full h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 transition active:scale-98"
+                      >
+                        <FileJson className="w-4 h-4" />
+                        <span>Baixar Backup Completo (.json)</span>
+                      </button>
+                    </div>
+
+                    {/* Import Card */}
+                    <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-slate-900/40">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-emerald-600/10 text-emerald-400 border border-emerald-500/20">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Restaurar de um Arquivo</h3>
+                          <p className="text-[11px] text-slate-400">Carregar backup .json para o ServONVIF</p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Selecione o arquivo <code className="text-emerald-400 font-mono">.json</code> exportado anteriormente para sincronizar todas as configurações instantaneamente.
+                      </p>
+
+                      <div className="pt-2">
+                        <label className="w-full h-10 px-4 rounded-xl border border-dashed border-slate-700 hover:border-emerald-500 bg-slate-950/60 hover:bg-emerald-500/5 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition">
+                          <Upload className="w-4 h-4 text-emerald-400" />
+                          <span>{importingBackup ? "Importando configurações..." : "Selecionar Arquivo de Backup (.json)"}</span>
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleImportBackup}
+                            disabled={importingBackup}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {importResult && (
+                        <div
+                          className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                            importResult.success
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                              : "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                          }`}
+                        >
+                          {importResult.success ? (
+                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                          )}
+                          <span>{importResult.message}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Server Lifecycle Controls */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                        <Power className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Controle de Ciclo de Vida do Servidor</h3>
+                        <p className="text-[11px] text-slate-400">
+                          Reinicie o motor ou desligue os processos com segurança (Windows, Linux e Mac)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                      {/* Restart Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsRestartModalOpen(true)}
+                        className="h-12 px-5 rounded-xl bg-amber-600/10 hover:bg-amber-600/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-2.5 transition active:scale-98"
+                      >
+                        <RotateCcw className="w-4 h-4 text-amber-400" />
+                        <span>Reiniciar Servidor ServONVIF</span>
+                      </button>
+
+                      {/* Shutdown Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsShutdownModalOpen(true)}
+                        className="h-12 px-5 rounded-xl bg-rose-600/10 hover:bg-rose-600/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center justify-center gap-2.5 transition active:scale-98"
+                      >
+                        <Power className="w-4 h-4 text-rose-400" />
+                        <span>Desligar Servidor</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </main>
       </div>
+
+      {/* ================= MODAL: CONFIRMAR REINICIALIZAÇÃO ================= */}
+      {isRestartModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="card-dark rounded-2xl w-full max-w-md p-6 border border-white/10 shadow-2xl space-y-5 bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                <RotateCcw className={`w-6 h-6 ${isRestarting ? "animate-spin" : ""}`} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {isRestarting ? "Reiniciando Servidor..." : "Confirmar Reinicialização"}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {isRestarting ? `Restabelecendo conexão em ${restartCountdown}s...` : "O motor ServONVIF e os fluxos RTSP serão recarregados."}
+                </p>
+              </div>
+            </div>
+
+            {isRestarting ? (
+              <div className="py-4 flex flex-col items-center justify-center space-y-3">
+                <div className="w-12 h-12 rounded-full border-4 border-amber-500/20 border-t-amber-400 animate-spin" />
+                <p className="text-xs text-slate-300 text-center">
+                  Aguardando reconexão da API (porta 8080)...
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRestartModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTriggerRestart}
+                  className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow-md shadow-amber-600/20 transition flex items-center gap-2"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Sim, Reiniciar Agora</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: CONFIRMAR DESLIGAMENTO ================= */}
+      {isShutdownModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="card-dark rounded-2xl w-full max-w-md p-6 border border-white/10 shadow-2xl space-y-5 bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-rose-600/10 text-rose-400 border border-rose-500/20">
+                <Power className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {serverShutdownDone ? "Servidor Desligado" : "Desligar o Servidor?"}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {serverShutdownDone ? "Todos os processos foram finalizados com segurança." : "As câmeras, conexões e alertas de TV serão pausados."}
+                </p>
+              </div>
+            </div>
+
+            {serverShutdownDone ? (
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 space-y-2">
+                <p className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>ServONVIF Core Engine encerrado.</span>
+                </p>
+                <p className="text-slate-400">
+                  Para ligar novamente no Windows, dê dois cliques em <code className="text-blue-400">iniciar_servonvif_windows.bat</code>. No Linux/Mac execute <code className="text-blue-400">./iniciar_servonvif_linux.sh</code>.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsShutdownModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTriggerShutdown}
+                  disabled={isShuttingDown}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl shadow-md shadow-rose-600/20 transition flex items-center gap-2"
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>{isShuttingDown ? "Desligando..." : "Sim, Desligar"}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
