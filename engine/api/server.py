@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from engine.config.settings import settings
-from engine.database.db import init_db
+from engine.database.db import init_db, load_persisted_system_settings
 from engine.api.routes_cameras import router as cameras_router
 from engine.api.routes_events import router as events_router
 from engine.api.routes_stream import router as stream_router
@@ -21,6 +21,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing SQLite database...")
     await init_db()
+    logger.info("Loading persisted system settings from SQLite...")
+    await load_persisted_system_settings()
     logger.info("Starting active camera streams...")
     await camera_manager.load_and_start_all_active_cameras()
     logger.info("Starting RetentionWorker...")

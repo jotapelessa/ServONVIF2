@@ -13,7 +13,7 @@ import numpy as np
 from loguru import logger
 
 from engine.config.settings import settings
-from engine.database.db import get_db
+from engine.database.db import get_db, set_system_setting
 from engine.services.telegram_bot import telegram_service
 from engine.services.retention_worker import retention_worker
 from engine.core.log_buffer import log_buffer
@@ -154,27 +154,34 @@ async def update_settings(payload: SettingsUpdate):
         settings.TELEGRAM_BOT_TOKEN = payload.telegram_bot_token
         telegram_service.bot_token = payload.telegram_bot_token
         telegram_service.base_url = f"https://api.telegram.org/bot{payload.telegram_bot_token}"
+        await set_system_setting("telegram_bot_token", payload.telegram_bot_token)
 
     if payload.telegram_chat_id is not None:
         settings.TELEGRAM_CHAT_ID = payload.telegram_chat_id
         telegram_service.chat_id = payload.telegram_chat_id
+        await set_system_setting("telegram_chat_id", payload.telegram_chat_id)
 
     if payload.telegram_enabled is not None:
         settings.TELEGRAM_ENABLED = payload.telegram_enabled
+        await set_system_setting("telegram_enabled", payload.telegram_enabled)
 
     if payload.telegram_paused is not None:
         settings.TELEGRAM_PAUSED = payload.telegram_paused
+        await set_system_setting("telegram_paused", payload.telegram_paused)
 
     if payload.telegram_cooldown_seconds is not None:
         settings.TELEGRAM_COOLDOWN_SECONDS = payload.telegram_cooldown_seconds
+        await set_system_setting("telegram_cooldown_seconds", payload.telegram_cooldown_seconds)
 
     if payload.retention_days is not None:
         settings.RETENTION_DAYS = payload.retention_days
+        await set_system_setting("retention_days", payload.retention_days)
 
     if payload.default_buffer_seconds is not None:
         settings.DEFAULT_BUFFER_SECONDS = payload.default_buffer_seconds
+        await set_system_setting("default_buffer_seconds", payload.default_buffer_seconds)
 
-    return {"message": "Configurações atualizadas com sucesso!"}
+    return {"message": "Configurações salvas e persistidas no SQLite com sucesso!"}
 
 @router.post("/telegram/test")
 async def test_telegram_connection(payload: Optional[TelegramTestPayload] = None):
@@ -454,23 +461,30 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
     imported_vehicles = backup_payload.get("vehicles", [])
     imported_devices = backup_payload.get("devices", [])
 
-    # 1. Update In-Memory Settings
+    # 1. Update In-Memory & Persisted SQLite Settings
     if "telegram_bot_token" in imported_settings:
         settings.TELEGRAM_BOT_TOKEN = imported_settings["telegram_bot_token"]
         telegram_service.bot_token = imported_settings["telegram_bot_token"]
+        await set_system_setting("telegram_bot_token", imported_settings["telegram_bot_token"])
     if "telegram_chat_id" in imported_settings:
         settings.TELEGRAM_CHAT_ID = imported_settings["telegram_chat_id"]
         telegram_service.chat_id = imported_settings["telegram_chat_id"]
+        await set_system_setting("telegram_chat_id", imported_settings["telegram_chat_id"])
     if "telegram_enabled" in imported_settings:
         settings.TELEGRAM_ENABLED = bool(imported_settings["telegram_enabled"])
+        await set_system_setting("telegram_enabled", settings.TELEGRAM_ENABLED)
     if "telegram_paused" in imported_settings:
         settings.TELEGRAM_PAUSED = bool(imported_settings["telegram_paused"])
+        await set_system_setting("telegram_paused", settings.TELEGRAM_PAUSED)
     if "retention_days" in imported_settings:
         settings.RETENTION_DAYS = int(imported_settings["retention_days"])
+        await set_system_setting("retention_days", settings.RETENTION_DAYS)
     if "default_buffer_seconds" in imported_settings:
         settings.DEFAULT_BUFFER_SECONDS = int(imported_settings["default_buffer_seconds"])
+        await set_system_setting("default_buffer_seconds", settings.DEFAULT_BUFFER_SECONDS)
     if "telegram_cooldown_seconds" in imported_settings:
         settings.TELEGRAM_COOLDOWN_SECONDS = int(imported_settings["telegram_cooldown_seconds"])
+        await set_system_setting("telegram_cooldown_seconds", settings.TELEGRAM_COOLDOWN_SECONDS)
 
     # 2. Upsert Cameras
     cameras_restored = 0

@@ -79,3 +79,11 @@ class PlateDetectionLog(SQLModel, table=True):
     vehicle_model: Optional[str] = None
     snapshot_path: Optional[str] = None
     detected_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+class SystemSetting(SQLModel, table=True):
+    __tablename__ = "system_settings"
+
+    key: str = Field(primary_key=True, index=True)
+    value: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
