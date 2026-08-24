@@ -34,23 +34,45 @@ class MediaWriter:
         thumb_path = cam_dir / thumb_filename
 
         output_frame = frame_bgr.copy()
-        if bounding_boxes:
-            for (x, y, w, h) in bounding_boxes:
-                cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-        # Add timestamp watermark
-        cv2.putText(
-            output_frame,
-            timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-            (10, 25),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA
-        )
+        # Watermark & Bounding Boxes
+        if getattr(settings, "TELEGRAM_WATERMARK_ENABLED", True):
+            if bounding_boxes:
+                for (x, y, w, h) in bounding_boxes:
+                    cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-        cv2.imwrite(str(thumb_path), output_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # Add timestamp watermark
+            cv2.putText(
+                output_frame,
+                timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA
+            )
+
+        # Photo Quality & Scaling: "minima" (640px), "media" (1280px HD), "maxima" (Native 5MP)
+        quality_mode = getattr(settings, "TELEGRAM_PHOTO_QUALITY", "media").lower()
+        jpeg_quality = 85
+        h, w = output_frame.shape[:2]
+
+        if quality_mode == "minima":
+            jpeg_quality = 70
+            if w > 640:
+                scale = 640.0 / w
+                output_frame = cv2.resize(output_frame, (640, int(h * scale)), interpolation=cv2.INTER_AREA)
+        elif quality_mode == "media":
+            jpeg_quality = 85
+            if w > 1280:
+                scale = 1280.0 / w
+                output_frame = cv2.resize(output_frame, (1280, int(h * scale)), interpolation=cv2.INTER_AREA)
+        elif quality_mode == "maxima":
+            jpeg_quality = 95
+            # Preserves full native sensor resolution (e.g., 5MP 2560x1920)
+
+        cv2.imwrite(str(thumb_path), output_frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
         return str(thumb_path)
 
     @staticmethod

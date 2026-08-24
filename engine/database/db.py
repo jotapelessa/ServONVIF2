@@ -90,6 +90,19 @@ async def load_persisted_system_settings() -> None:
                     settings.TELEGRAM_COOLDOWN_SECONDS = int(all_settings["telegram_cooldown_seconds"])
                 except Exception:
                     pass
+            if "telegram_video_duration_seconds" in all_settings and all_settings["telegram_video_duration_seconds"]:
+                try:
+                    settings.TELEGRAM_VIDEO_DURATION_SECONDS = int(all_settings["telegram_video_duration_seconds"])
+                except Exception:
+                    pass
+            if "telegram_photo_quality" in all_settings and all_settings["telegram_photo_quality"]:
+                settings.TELEGRAM_PHOTO_QUALITY = str(all_settings["telegram_photo_quality"])
+            if "telegram_dispatch_mode" in all_settings and all_settings["telegram_dispatch_mode"]:
+                settings.TELEGRAM_DISPATCH_MODE = str(all_settings["telegram_dispatch_mode"])
+            if "telegram_include_prebuffer" in all_settings and all_settings["telegram_include_prebuffer"] is not None:
+                settings.TELEGRAM_INCLUDE_PREBUFFER = all_settings["telegram_include_prebuffer"].lower() == "true"
+            if "telegram_watermark_enabled" in all_settings and all_settings["telegram_watermark_enabled"] is not None:
+                settings.TELEGRAM_WATERMARK_ENABLED = all_settings["telegram_watermark_enabled"].lower() == "true"
             if "retention_days" in all_settings and all_settings["retention_days"]:
                 try:
                     settings.RETENTION_DAYS = int(all_settings["retention_days"])

@@ -57,6 +57,11 @@ export interface SettingsResponse {
   telegram_chat_id?: string;
   telegram_bot_configured?: boolean;
   telegram_cooldown_seconds?: number;
+  telegram_video_duration_seconds?: number;
+  telegram_photo_quality?: "minima" | "media" | "maxima";
+  telegram_dispatch_mode?: "all" | "photo_only" | "video_only";
+  telegram_include_prebuffer?: boolean;
+  telegram_watermark_enabled?: boolean;
   processing_paused?: boolean;
   storage?: {
     total_files: number;

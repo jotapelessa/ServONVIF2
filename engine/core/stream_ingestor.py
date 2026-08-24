@@ -210,10 +210,15 @@ class StreamIngestor:
 
                 if self._is_recording_event:
                     self._event_frames.append(frame.copy())
+                    duration_sec = getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10)
+                    max_frames = int(max(fps, 10.0) * duration_sec)
                     if not is_motion:
                         self._post_event_countdown -= 1
-                        if self._post_event_countdown <= 0:
+                        if self._post_event_countdown <= 0 or len(self._event_frames) >= max_frames:
                             self._handle_motion_end_async(fps)
+                    elif len(self._event_frames) >= max_frames:
+                        # Max configured duration reached during continuous movement
+                        self._handle_motion_end_async(fps)
 
             # 3. Periodic LPR scan for parked/stationary vehicles (every 15 seconds)
             if now_monotonic - self._last_periodic_lpr_time > 15.0:
@@ -283,14 +288,16 @@ class StreamIngestor:
         Disk I/O and Telegram are pushed to background threads so WebSocket is NEVER blocked!
         """
         self._is_recording_event = True
-        self._post_event_countdown = int(settings.POST_EVENT_SECONDS * 15)
+        duration_sec = getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10)
+        self._post_event_countdown = int(duration_sec * 12)
         now = datetime.utcnow()
 
         # Trigger immediate LPR on motion start
         self._trigger_lpr_scan(current_frame, is_motion=True)
 
-        # Retrieve pre-event window
-        pre_frames = self.ring_buffer.get_window(pre_seconds=settings.PRE_EVENT_SECONDS)
+        # Retrieve pre-event window (if enabled in settings)
+        include_pre = getattr(settings, "TELEGRAM_INCLUDE_PREBUFFER", True)
+        pre_frames = self.ring_buffer.get_window(pre_seconds=settings.PRE_EVENT_SECONDS) if include_pre else []
         self._event_frames = list(pre_frames) + [current_frame]
 
         # 1. INSTANT NOTIFICATION TO WEBSOCKET CLIENTS

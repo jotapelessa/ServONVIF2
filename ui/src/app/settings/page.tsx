@@ -52,6 +52,10 @@ import {
   AlertTriangle,
   Pause,
   Play,
+  Image as ImageIcon,
+  Film,
+  Gauge,
+  Eye,
 } from "lucide-react";
 
 const TAB_SLUG_MAP: Record<string, "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup"> = {
@@ -164,6 +168,11 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [telegramPaused, setTelegramPaused] = useState(false);
   const [telegramCooldown, setTelegramCooldown] = useState(30);
+  const [telegramVideoDuration, setTelegramVideoDuration] = useState(10);
+  const [telegramPhotoQuality, setTelegramPhotoQuality] = useState<"minima" | "media" | "maxima">("media");
+  const [telegramDispatchMode, setTelegramDispatchMode] = useState<"all" | "photo_only" | "video_only">("all");
+  const [telegramIncludePrebuffer, setTelegramIncludePrebuffer] = useState(true);
+  const [telegramWatermarkEnabled, setTelegramWatermarkEnabled] = useState(true);
 
   const [retentionDays, setRetentionDays] = useState(7);
   const [bufferSeconds, setBufferSeconds] = useState(5);
@@ -220,6 +229,11 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         setTelegramEnabled(data.telegram_enabled ?? true);
         setTelegramPaused(data.telegram_paused ?? false);
         setTelegramCooldown(data.telegram_cooldown_seconds || 30);
+        setTelegramVideoDuration(data.telegram_video_duration_seconds || 10);
+        setTelegramPhotoQuality((data.telegram_photo_quality as any) || "media");
+        setTelegramDispatchMode((data.telegram_dispatch_mode as any) || "all");
+        setTelegramIncludePrebuffer(data.telegram_include_prebuffer ?? true);
+        setTelegramWatermarkEnabled(data.telegram_watermark_enabled ?? true);
         setRetentionDays(data.retention_days || 7);
         setBufferSeconds(data.default_buffer_seconds || 5);
         setIsProcessingPaused(data.processing_paused ?? false);
@@ -478,6 +492,11 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         telegram_enabled: telegramEnabled,
         telegram_paused: telegramPaused,
         telegram_cooldown_seconds: Number(telegramCooldown),
+        telegram_video_duration_seconds: Number(telegramVideoDuration),
+        telegram_photo_quality: telegramPhotoQuality,
+        telegram_dispatch_mode: telegramDispatchMode,
+        telegram_include_prebuffer: telegramIncludePrebuffer,
+        telegram_watermark_enabled: telegramWatermarkEnabled,
         retention_days: Number(retentionDays),
         default_buffer_seconds: Number(bufferSeconds),
       });
@@ -1967,26 +1986,266 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                       </button>
                     </div>
 
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1.5">Bot Token do Telegram</label>
-                      <input
-                        type="password"
-                        value={telegramToken}
-                        onChange={(e) => setTelegramToken(e.target.value)}
-                        placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-blue-500"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-300 block mb-1.5">Bot Token do Telegram</label>
+                        <input
+                          type="password"
+                          value={telegramToken}
+                          onChange={(e) => setTelegramToken(e.target.value)}
+                          placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-slate-300 block mb-1.5">Chat ID do Destinatário</label>
+                        <input
+                          type="text"
+                          value={telegramChatId}
+                          onChange={(e) => setTelegramChatId(e.target.value)}
+                          placeholder="123456789 ou -100123456789"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1.5">Chat ID do Destinatário</label>
-                      <input
-                        type="text"
-                        value={telegramChatId}
-                        onChange={(e) => setTelegramChatId(e.target.value)}
-                        placeholder="123456789 ou -100123456789"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-blue-500"
-                      />
+                    {/* ================= ADVANCED MEDIA DISPATCH CONFIGURATION ================= */}
+                    <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/90 space-y-5 shadow-inner">
+                      <div className="flex items-center gap-2.5 pb-2 border-b border-slate-800/80">
+                        <Film className="w-4 h-4 text-sky-400" />
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                          Configurações Avançadas de Mídia (Fotos &amp; Vídeos MP4)
+                        </h3>
+                      </div>
+
+                      {/* 1. Video Duration */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <Video className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Duração do Vídeo Gravado</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-500/20">
+                            {telegramVideoDuration} Segundos
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Define a duração do clipe MP4 gravado e enviado para o Telegram quando um movimento ou placa for detectada.
+                        </p>
+                        <div className="grid grid-cols-5 gap-2 pt-1">
+                          {[5, 10, 15, 20, 30].map((sec) => (
+                            <button
+                              key={sec}
+                              type="button"
+                              onClick={() => setTelegramVideoDuration(sec)}
+                              className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border flex flex-col items-center justify-center gap-0.5 ${
+                                telegramVideoDuration === sec
+                                  ? "bg-sky-600 text-white border-sky-400 shadow-md shadow-sky-500/25"
+                                  : "bg-slate-950/80 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                              }`}
+                            >
+                              <span>{sec}s</span>
+                              <span className="text-[9px] font-normal opacity-80">
+                                {sec === 5 ? "Rápido" : sec === 10 ? "Padrão" : sec === 30 ? "Completo" : "Médio"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2. Photo Resolution & Quality */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Resolução &amp; Qualidade das Fotos</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 uppercase">
+                            {telegramPhotoQuality === "minima" ? "Mínima (640px)" : telegramPhotoQuality === "media" ? "Média HD (720p)" : "Máxima (5MP Nativa)"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Escolha o equilíbrio ideal entre nitidez de imagem para zoom e economia de dados móveis.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                          {[
+                            {
+                              id: "minima",
+                              title: "Mínima (640x360)",
+                              sub: "~40 KB • Upload Instantâneo",
+                              desc: "Ideal para redes móveis 3G/4G com economia máxima de espaço.",
+                            },
+                            {
+                              id: "media",
+                              title: "Média HD (1280x720)",
+                              sub: "~150 KB • Recomendado",
+                              desc: "Equilíbrio perfeito entre alta nitidez e transmissão ultra-rápida.",
+                            },
+                            {
+                              id: "maxima",
+                              title: "Máxima (5MP Nativa)",
+                              sub: "Sensor Original • Sem Perda",
+                              desc: "Resolução original da câmera para zoom detalhado em rostos e placas.",
+                            },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setTelegramPhotoQuality(opt.id as any)}
+                              className={`p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 ${
+                                telegramPhotoQuality === opt.id
+                                  ? "bg-emerald-950/30 border-emerald-500/60 text-white shadow-md shadow-emerald-500/10"
+                                  : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-white">{opt.title}</span>
+                                  {telegramPhotoQuality === opt.id && (
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  )}
+                                </div>
+                                <div className="text-[10px] font-semibold text-emerald-400 mt-0.5">{opt.sub}</div>
+                              </div>
+                              <p className="text-[10px] text-slate-400 leading-tight">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. Dispatch Mode: Photo + Video / Photo Only / Video Only */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                        <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                          <Send className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Modo de Envio do Alerta</span>
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                          {[
+                            {
+                              id: "all",
+                              label: "📸 Foto + 🎥 Vídeo",
+                              sub: "Foto instantânea (<1s) e clipe MP4 quando terminar a gravação (Recomendado).",
+                            },
+                            {
+                              id: "photo_only",
+                              label: "📸 Apenas Foto",
+                              sub: "Envia apenas a foto com estampa de horário e caixas de detecção.",
+                            },
+                            {
+                              id: "video_only",
+                              label: "🎥 Apenas Vídeo",
+                              sub: "Envia somente a gravação em vídeo MP4 Full HD.",
+                            },
+                          ].map((mode) => (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => setTelegramDispatchMode(mode.id as any)}
+                              className={`p-3 rounded-xl text-left border transition-all ${
+                                telegramDispatchMode === mode.id
+                                  ? "bg-amber-950/30 border-amber-500/60 text-white shadow-md shadow-amber-500/10"
+                                  : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold text-white">{mode.label}</span>
+                                {telegramDispatchMode === mode.id && (
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-400 leading-tight">{mode.sub}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 4. Toggles: Pre-Buffer & Watermark */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                        {/* Pre-buffer toggle */}
+                        <div
+                          onClick={() => setTelegramIncludePrebuffer(!telegramIncludePrebuffer)}
+                          className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 select-none ${
+                            telegramIncludePrebuffer
+                              ? "bg-blue-950/20 border-blue-500/40"
+                              : "bg-slate-950/40 border-slate-800/80 hover:border-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={telegramIncludePrebuffer}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                          />
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-blue-400" />
+                              <span>Pré-Buffer de 3 Segundos</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                              Inclui no vídeo os 3 segundos que aconteceram <em>antes</em> do movimento iniciar (extraídos da memória RAM).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Watermark toggle */}
+                        <div
+                          onClick={() => setTelegramWatermarkEnabled(!telegramWatermarkEnabled)}
+                          className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 select-none ${
+                            telegramWatermarkEnabled
+                              ? "bg-purple-950/20 border-purple-500/40"
+                              : "bg-slate-950/40 border-slate-800/80 hover:border-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={telegramWatermarkEnabled}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded text-purple-600 focus:ring-0 cursor-pointer"
+                          />
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                              <span>Data/Hora &amp; Bounding Box</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                              Desenha estampa com timestamp oficial e retângulo demarcando o objeto ou veículo detectado.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. Cooldown Between Alerts */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Intervalo Mínimo Anti-Spam (Cooldown)</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20">
+                            {telegramCooldown} Segundos
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Tempo de espera antes de enviar um novo alerta da mesma câmera para evitar mensagens repetitivas.
+                        </p>
+                        <div className="grid grid-cols-5 gap-2 pt-1">
+                          {[5, 10, 30, 60, 120].map((sec) => (
+                            <button
+                              key={sec}
+                              type="button"
+                              onClick={() => setTelegramCooldown(sec)}
+                              className={`py-1.5 px-1 rounded-xl text-xs font-bold transition-all border flex items-center justify-center ${
+                                telegramCooldown === sec
+                                  ? "bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/25"
+                                  : "bg-slate-950/80 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                              }`}
+                            >
+                              {sec}s
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 pt-3">
@@ -1996,7 +2255,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-600/25"
                       >
                         <Save className="w-4 h-4" />
-                        <span>{saving ? "Salvando..." : "Salvar Configurações do Telegram"}</span>
+                        <span>{saving ? "Salvando..." : "Salvar Todas as Configurações do Telegram"}</span>
                       </button>
 
                       <button

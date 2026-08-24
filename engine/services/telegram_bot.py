@@ -223,6 +223,10 @@ class TelegramService:
             logger.info("⏸️ Telegram Cloud Vault dispatch is PAUSED in settings. Skipping photo alert.")
             return False
 
+        if getattr(settings, "TELEGRAM_DISPATCH_MODE", "all") == "video_only":
+            logger.debug("Telegram dispatch mode is 'video_only'. Skipping photo alert.")
+            return False
+
         if not getattr(settings, "TELEGRAM_ENABLED", True):
             logger.debug("Telegram alerts are disabled in settings.")
             return False
@@ -282,6 +286,10 @@ class TelegramService:
 
         if getattr(settings, "TELEGRAM_PAUSED", False):
             logger.info(f"⏸️ Telegram video dispatch is PAUSED. Skipping clip upload for camera [{camera_id}].")
+            return False
+
+        if getattr(settings, "TELEGRAM_DISPATCH_MODE", "all") == "photo_only":
+            logger.debug("Telegram dispatch mode is 'photo_only'. Skipping video clip upload.")
             return False
 
         if not getattr(settings, "TELEGRAM_ENABLED", True):

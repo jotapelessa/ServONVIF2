@@ -31,6 +31,11 @@ class SettingsUpdate(BaseModel):
     telegram_enabled: Optional[bool] = None
     telegram_paused: Optional[bool] = None
     telegram_cooldown_seconds: Optional[int] = None
+    telegram_video_duration_seconds: Optional[int] = None
+    telegram_photo_quality: Optional[str] = None
+    telegram_dispatch_mode: Optional[str] = None
+    telegram_include_prebuffer: Optional[bool] = None
+    telegram_watermark_enabled: Optional[bool] = None
     retention_days: Optional[int] = None
     default_buffer_seconds: Optional[int] = None
 
@@ -148,6 +153,11 @@ async def get_current_settings():
         "telegram_chat_id": settings.TELEGRAM_CHAT_ID or "",
         "telegram_bot_configured": telegram_service.is_configured,
         "telegram_cooldown_seconds": settings.TELEGRAM_COOLDOWN_SECONDS,
+        "telegram_video_duration_seconds": settings.TELEGRAM_VIDEO_DURATION_SECONDS,
+        "telegram_photo_quality": settings.TELEGRAM_PHOTO_QUALITY,
+        "telegram_dispatch_mode": settings.TELEGRAM_DISPATCH_MODE,
+        "telegram_include_prebuffer": settings.TELEGRAM_INCLUDE_PREBUFFER,
+        "telegram_watermark_enabled": settings.TELEGRAM_WATERMARK_ENABLED,
         "processing_paused": camera_manager.is_processing_paused,
         "storage": storage_stats,
         "system_metrics": sys_metrics,
@@ -177,6 +187,26 @@ async def update_settings(payload: SettingsUpdate):
     if payload.telegram_cooldown_seconds is not None:
         settings.TELEGRAM_COOLDOWN_SECONDS = payload.telegram_cooldown_seconds
         await set_system_setting("telegram_cooldown_seconds", payload.telegram_cooldown_seconds)
+
+    if payload.telegram_video_duration_seconds is not None:
+        settings.TELEGRAM_VIDEO_DURATION_SECONDS = payload.telegram_video_duration_seconds
+        await set_system_setting("telegram_video_duration_seconds", payload.telegram_video_duration_seconds)
+
+    if payload.telegram_photo_quality is not None:
+        settings.TELEGRAM_PHOTO_QUALITY = payload.telegram_photo_quality
+        await set_system_setting("telegram_photo_quality", payload.telegram_photo_quality)
+
+    if payload.telegram_dispatch_mode is not None:
+        settings.TELEGRAM_DISPATCH_MODE = payload.telegram_dispatch_mode
+        await set_system_setting("telegram_dispatch_mode", payload.telegram_dispatch_mode)
+
+    if payload.telegram_include_prebuffer is not None:
+        settings.TELEGRAM_INCLUDE_PREBUFFER = payload.telegram_include_prebuffer
+        await set_system_setting("telegram_include_prebuffer", payload.telegram_include_prebuffer)
+
+    if payload.telegram_watermark_enabled is not None:
+        settings.TELEGRAM_WATERMARK_ENABLED = payload.telegram_watermark_enabled
+        await set_system_setting("telegram_watermark_enabled", payload.telegram_watermark_enabled)
 
     if payload.retention_days is not None:
         settings.RETENTION_DAYS = payload.retention_days

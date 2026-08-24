@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     TELEGRAM_ENABLED: bool = False
     TELEGRAM_PAUSED: bool = False
     TELEGRAM_COOLDOWN_SECONDS: int = 10
+    TELEGRAM_VIDEO_DURATION_SECONDS: int = 10
+    TELEGRAM_PHOTO_QUALITY: str = "media"  # "minima", "media", "maxima"
+    TELEGRAM_DISPATCH_MODE: str = "all"  # "all", "photo_only", "video_only"
+    TELEGRAM_INCLUDE_PREBUFFER: bool = True
+    TELEGRAM_WATERMARK_ENABLED: bool = True
 
     # Security
     JWT_SECRET: str = "change_me_in_production_super_secret_key"
