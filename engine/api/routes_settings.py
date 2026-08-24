@@ -4,14 +4,16 @@ import os
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 import cv2
 import numpy as np
 from loguru import logger
 
 from engine.config.settings import settings
+from engine.database.db import get_db
 from engine.services.telegram_bot import telegram_service
 from engine.services.retention_worker import retention_worker
 from engine.core.log_buffer import log_buffer
