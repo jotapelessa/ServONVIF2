@@ -37,21 +37,33 @@ export function Header({
     ram_used_mb: number;
     ram_total_mb: number;
   } | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("001.006.053");
 
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchMetrics() {
+    async function loadInitialData() {
       try {
-        const data = await apiClient.getMetrics();
-        if (isMounted) setMetrics(data);
+        const [metricData, settingsData] = await Promise.all([
+          apiClient.getMetrics().catch(() => null),
+          apiClient.getSettings().catch(() => null),
+        ]);
+        if (isMounted) {
+          if (metricData) setMetrics(metricData);
+          if (settingsData?.version) setAppVersion(settingsData.version);
+        }
       } catch (e) {
-        // Silently ignore during reconnection
+        // Silently ignore during initial boot
       }
     }
 
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 3500);
+    loadInitialData();
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiClient.getMetrics();
+        if (isMounted) setMetrics(data);
+      } catch (e) {}
+    }, 3500);
 
     return () => {
       isMounted = false;
@@ -71,8 +83,11 @@ export function Header({
             <span className="text-sm font-bold text-white tracking-wide">
               ServONVIF <span className="text-blue-400">PRO</span>
             </span>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              v1.0
+            <span
+              className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              title={`Versão do Software: ${appVersion}`}
+            >
+              v{appVersion}
             </span>
           </div>
           <span className="text-[10px] text-slate-400 hidden sm:inline">Central de Monitoramento IP</span>

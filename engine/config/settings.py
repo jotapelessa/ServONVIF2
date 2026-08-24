@@ -1,9 +1,11 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings
+from engine.config.version import APP_VERSION
 
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "ServONVIF Core Engine"
+    VERSION: str = APP_VERSION
     DEBUG: bool = False
     PORT: int = 8080
     HOST: str = "0.0.0.0"

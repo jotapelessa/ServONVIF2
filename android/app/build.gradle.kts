@@ -11,8 +11,8 @@ android {
         applicationId = "com.servonvif.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.9.1"
+        versionCode = 53
+        versionName = "001.006.053"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -91,6 +91,7 @@ export default function SettingsPage() {
 
   // Read-only server info
   const [serverInfo, setServerInfo] = useState<{
+    version?: string;
     local_ip: string;
     port: number;
     server_ws_url: string;
@@ -551,9 +552,15 @@ export default function SettingsPage() {
             <span>Voltar ao Monitor</span>
           </Link>
           <div className="h-4 w-px bg-slate-700" />
-          <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+          <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2 flex-wrap">
             <Sliders className="w-5 h-5 text-blue-500" />
             <span>Central de Controle &amp; Dispositivos</span>
+            <span
+              className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              title="Versão Oficial do Sistema (Formato 9 dígitos: 000.000.000)"
+            >
+              v{serverInfo?.version || "001.006.053"}
+            </span>
           </h1>
         </div>
 

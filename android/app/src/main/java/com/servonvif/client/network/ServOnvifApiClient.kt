@@ -78,7 +78,7 @@ class ServOnvifApiClient(private val configRepo: ServerConfigRepository) {
             "manufacturer_model" to fullModel,
             "mac_address" to mac,
             "hardware_fingerprint" to fingerprint,
-            "app_version" to "1.6.0"
+            "app_version" to "001.006.053"
         )
 
         val jsonString = gson.toJson(jsonPayload)

@@ -130,6 +130,7 @@ async def get_current_settings():
     sys_metrics = get_system_metrics()
     return {
         "app_name": settings.APP_NAME,
+        "version": settings.VERSION,
         "port": settings.PORT,
         "local_ip": local_ip,
         "server_ws_url": f"ws://{local_ip}:{settings.PORT}/ws/events",
