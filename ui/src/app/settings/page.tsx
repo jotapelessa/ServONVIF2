@@ -128,6 +128,8 @@ export default function SettingsPage() {
   // Backup & Server Operations State
   const [importingBackup, setImportingBackup] = useState(false);
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [sendingTelegramBackup, setSendingTelegramBackup] = useState(false);
+  const [telegramBackupResult, setTelegramBackupResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isRestartModalOpen, setIsRestartModalOpen] = useState(false);
   const [isShutdownModalOpen, setIsShutdownModalOpen] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -457,6 +459,19 @@ export default function SettingsPage() {
 
   const handleExportBackup = () => {
     window.location.href = apiClient.getExportConfigUrl();
+  };
+
+  const handleSendTelegramBackup = async () => {
+    setSendingTelegramBackup(true);
+    setTelegramBackupResult(null);
+    try {
+      const res = await apiClient.sendTelegramBackup();
+      setTelegramBackupResult({ success: true, message: res.message });
+    } catch (e: any) {
+      setTelegramBackupResult({ success: false, message: e.message || "Erro ao enviar backup para o Telegram" });
+    } finally {
+      setSendingTelegramBackup(false);
+    }
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1961,20 +1976,49 @@ export default function SettingsPage() {
                         Gera um arquivo de backup completo contendo:
                       </p>
                       <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
-                        <li>Todas as Câmeras (RTSP, sensibilidade, zonas ROI)</li>
+                        <li>Todas as Câmeras (RTSP, sensibilidade, zonas ROI e exclusão)</li>
                         <li>Veículos e Placas Cadastradas de Moradores</li>
                         <li>Dispositivos e Telas Autorizados (Smart TVs, Tablets)</li>
                         <li>Ajustes do Telegram, Retenção e Buffer de Vídeo</li>
                       </ul>
 
-                      <button
-                        type="button"
-                        onClick={handleExportBackup}
-                        className="w-full h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 transition active:scale-98"
-                      >
-                        <FileJson className="w-4 h-4" />
-                        <span>Baixar Backup Completo (.json)</span>
-                      </button>
+                      <div className="flex flex-col gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleExportBackup}
+                          className="w-full h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 transition active:scale-98"
+                        >
+                          <FileJson className="w-4 h-4" />
+                          <span>Baixar Backup Completo (.json)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSendTelegramBackup}
+                          disabled={sendingTelegramBackup}
+                          className="w-full h-10 px-4 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 text-sky-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                        >
+                          <Send className="w-3.5 h-3.5 text-sky-400" />
+                          <span>{sendingTelegramBackup ? "Enviando para o Telegram..." : "Enviar Cópia para o Telegram Agora"}</span>
+                        </button>
+                      </div>
+
+                      {telegramBackupResult && (
+                        <div
+                          className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                            telegramBackupResult.success
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                              : "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                          }`}
+                        >
+                          {telegramBackupResult.success ? (
+                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                          )}
+                          <span>{telegramBackupResult.message}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Import Card */}

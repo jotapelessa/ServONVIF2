@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from engine.database.db import get_db
 from engine.database.models import Camera
 from engine.core.camera_manager import camera_manager
 from engine.core.discovery import ONVIFDiscovery
+from engine.services.backup_service import dispatch_telegram_backup
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])
 
@@ -56,6 +58,7 @@ async def create_camera(payload: CameraCreate, db: AsyncSession = Depends(get_db
     if camera.is_active:
         await camera_manager.start_camera(camera)
 
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Nova Câmera Adicionada: {camera.name}"))
     return camera
 
 @router.get("/{camera_id}", response_model=Camera)
@@ -86,6 +89,7 @@ async def update_camera(camera_id: int, payload: CameraUpdate, db: AsyncSession 
     else:
         camera_manager.stop_camera(camera.id)
 
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Câmera Atualizada: {camera.name} (Sensibilidade/Ajustes)"))
     return camera
 
 @router.delete("/{camera_id}")
@@ -94,9 +98,12 @@ async def delete_camera(camera_id: int, db: AsyncSession = Depends(get_db)):
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    cam_name = camera.name
     camera_manager.stop_camera(camera_id)
     await db.delete(camera)
     await db.commit()
+
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Câmera Removida: {cam_name}"))
     return {"message": "Camera deleted successfully"}
 
 @router.post("/{camera_id}/roi", response_model=Camera)
@@ -114,4 +121,5 @@ async def update_camera_roi(camera_id: int, payload: ROISetPayload, db: AsyncSes
     await db.refresh(camera)
 
     camera_manager.update_camera_config(camera)
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Zonas de Detecção (Ciano/Roxa) Atualizadas: {camera.name}"))
     return camera

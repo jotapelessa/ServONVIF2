@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -9,6 +10,7 @@ from loguru import logger
 from engine.database.db import get_db
 from engine.database.models import Device
 from engine.api.websocket_hub import ws_hub
+from engine.services.backup_service import dispatch_telegram_backup
 
 router = APIRouter(prefix="/api/devices", tags=["Devices"])
 
@@ -195,6 +197,8 @@ async def update_device(device_id_or_pk: str, payload: DeviceUpdatePayload, db: 
     await db.commit()
     await db.refresh(dev)
 
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Dispositivo Atualizado: {dev.device_name} (Status: {dev.status})"))
+
     return {
         "success": True,
         "message": f"Dispositivo '{dev.device_name}' atualizado para status '{dev.status}'.",
@@ -216,6 +220,8 @@ async def delete_device(device_id_or_pk: str, db: AsyncSession = Depends(get_db)
     if not dev:
         raise HTTPException(status_code=404, detail="Dispositivo não encontrado")
 
+    dev_name = dev.device_name
     await db.delete(dev)
     await db.commit()
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Dispositivo Excluído: {dev_name}"))
     return {"success": True, "message": f"Dispositivo removido com sucesso."}

@@ -340,8 +340,18 @@ export const apiClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Falha ao importar backup de configurações");
-    return data;
+    if (!res.ok) throw new Error("Falha ao importar backup de configurações");
+    return res.json();
+  },
+
+  async sendTelegramBackup(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/backup/telegram`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Falha ao enviar backup" }));
+      throw new Error(err.detail || "Erro ao enviar backup ao Telegram");
+    }
+    return res.json();
   },
 };

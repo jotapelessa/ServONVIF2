@@ -1,6 +1,8 @@
 import io
 import socket
 import os
+import json
+import asyncio
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
@@ -16,6 +18,7 @@ from engine.config.settings import settings
 from engine.database.db import get_db, set_system_setting
 from engine.services.telegram_bot import telegram_service
 from engine.services.retention_worker import retention_worker
+from engine.services.backup_service import build_full_backup_dict, dispatch_telegram_backup, _json_serial
 from engine.core.log_buffer import log_buffer
 from engine.api.websocket_hub import ws_hub
 
@@ -180,6 +183,9 @@ async def update_settings(payload: SettingsUpdate):
     if payload.default_buffer_seconds is not None:
         settings.DEFAULT_BUFFER_SECONDS = payload.default_buffer_seconds
         await set_system_setting("default_buffer_seconds", payload.default_buffer_seconds)
+
+    # Dispara backup automático para o Telegram em segundo plano
+    asyncio.create_task(dispatch_telegram_backup(reason="Atualização de Configurações Gerais"))
 
     return {"message": "Configurações salvas e persistidas no SQLite com sucesso!"}
 
@@ -390,48 +396,11 @@ async def restart_server():
 # =========================================================================
 
 @router.get("/export-config")
-async def export_configuration(db: AsyncSession = Depends(get_db)):
+async def export_configuration():
     """
     Exports a complete snapshot of all configurations, cameras, plates and devices into a universal JSON backup file.
     """
-    from engine.database.models import Camera, Vehicle, Device
-    from sqlalchemy.future import select
-
-    # 1. Fetch Cameras
-    cam_res = await db.execute(select(Camera))
-    cameras = [c.model_dump() for c in cam_res.scalars().all()]
-
-    # 2. Fetch Vehicles
-    veh_res = await db.execute(select(Vehicle))
-    vehicles = [v.model_dump() for v in veh_res.scalars().all()]
-
-    # 3. Fetch Devices
-    dev_res = await db.execute(select(Device))
-    devices = [d.model_dump() for d in dev_res.scalars().all()]
-
-    def _json_serial(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return str(obj)
-
-    backup_data = {
-        "format": "SERVONVIF_BACKUP",
-        "version": "1.0",
-        "exported_at": datetime.utcnow().isoformat(),
-        "settings": {
-            "retention_days": settings.RETENTION_DAYS,
-            "default_buffer_seconds": settings.DEFAULT_BUFFER_SECONDS,
-            "telegram_enabled": settings.TELEGRAM_ENABLED,
-            "telegram_bot_token": settings.TELEGRAM_BOT_TOKEN or "",
-            "telegram_chat_id": settings.TELEGRAM_CHAT_ID or "",
-            "telegram_cooldown_seconds": settings.TELEGRAM_COOLDOWN_SECONDS,
-        },
-        "cameras": cameras,
-        "vehicles": vehicles,
-        "devices": devices,
-    }
-
-    import json
+    backup_data = await build_full_backup_dict()
     json_bytes = json.dumps(backup_data, indent=2, default=_json_serial).encode("utf-8")
     filename = f"servonvif_backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
 
@@ -443,6 +412,20 @@ async def export_configuration(db: AsyncSession = Depends(get_db)):
             "Content-Type": "application/json"
         }
     )
+
+@router.post("/backup/telegram")
+async def send_manual_telegram_backup():
+    """
+    Manually sends a fresh universal JSON backup document to the configured Telegram channel/chat.
+    """
+    if not telegram_service.is_configured:
+        raise HTTPException(status_code=400, detail="Bot do Telegram não está configurado.")
+
+    success = await dispatch_telegram_backup(reason="Backup Manual Solicitado pelo Usuário")
+    if not success:
+        raise HTTPException(status_code=500, detail="Falha ao despachar backup para a nuvem do Telegram.")
+
+    return {"success": True, "message": "Arquivo universal de backup (.json) enviado com sucesso para o Telegram!"}
 
 @router.post("/import-config")
 async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(get_db)):
@@ -590,6 +573,9 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
         logger.warning(f"Failed to auto-sync camera ingestors after import: {e}")
 
     logger.info(f"✅ Backup successfully imported: {cameras_restored} cameras, {vehicles_restored} vehicles, {devices_restored} devices")
+
+    # Envia cópia atualizada para o Telegram
+    asyncio.create_task(dispatch_telegram_backup(reason="Restauração de Backup Concluída"))
 
     return {
         "success": True,

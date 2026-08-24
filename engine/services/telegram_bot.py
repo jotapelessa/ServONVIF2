@@ -326,6 +326,55 @@ class TelegramService:
             logger.error(f"Failed to send Telegram video: {e}")
             return False
 
+    async def send_backup_document(
+        self,
+        json_bytes: bytes,
+        filename: str,
+        reason: str = "Alteração de Configurações"
+    ) -> bool:
+        if not self.is_configured:
+            logger.debug("Telegram não configurado. Ignorando envio de backup.")
+            return False
+
+        if not getattr(settings, "TELEGRAM_ENABLED", True):
+            return False
+
+        now = datetime.now()
+        date_str = now.strftime("%d/%m/%Y às %H:%M:%S")
+        tag_date = f"#d{now.strftime('%d_%m_%Y')}"
+        tag_month = f"#{now.strftime('%B%Y').lower()}"
+        size_kb = len(json_bytes) / 1024
+
+        caption = (
+            f"📦 <b>ServONVIF • Backup Automático de Configurações</b>\n\n"
+            f"📅 <b>Data e Hora:</b> <code>{date_str}</code>\n"
+            f"🏷️ <b>Motivo:</b> {reason}\n"
+            f"🔢 <b>Versão do Servidor:</b> <code>{settings.VERSION}</code>\n"
+            f"💾 <b>Tamanho:</b> <code>{size_kb:.1f} KB</code>\n\n"
+            f"💡 <i>Guarde este arquivo .json. Você pode restaurar todas as câmeras, zonas e placas a qualquer momento no ServONVIF!</i>\n\n"
+            f"#backup #servonvif #cloudvault #restauracao {tag_date} {tag_month}"
+        )
+
+        url = f"{self.base_url}/sendDocument"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                files = {"document": (filename, json_bytes, "application/json")}
+                data = {
+                    "chat_id": self.chat_id,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                }
+                response = await client.post(url, data=data, files=files)
+                if response.status_code == 200:
+                    logger.info(f"☁️ Cópia de backup JSON enviada com sucesso para o Telegram ({filename}, Motivo: {reason})")
+                    return True
+                else:
+                    logger.warning(f"Falha ao enviar backup para o Telegram: status {response.status_code} - {response.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"Erro ao enviar documento de backup ao Telegram: {e}")
+            return False
+
     async def send_test_message(self, custom_token: Optional[str] = None, custom_chat_id: Optional[str] = None) -> tuple[bool, str]:
         token = custom_token or self.bot_token
         chat_id = custom_chat_id or self.chat_id

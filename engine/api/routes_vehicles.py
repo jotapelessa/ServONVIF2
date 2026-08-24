@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from engine.database.db import get_db
 from engine.database.models import Vehicle, PlateDetectionLog
 from engine.services.lpr_engine import lpr_engine
+from engine.services.backup_service import dispatch_telegram_backup
 
 router = APIRouter(prefix="/api/vehicles", tags=["vehicles-lpr"])
 
@@ -66,6 +68,7 @@ async def create_vehicle(payload: VehicleCreate, session: AsyncSession = Depends
     session.add(vehicle)
     await session.commit()
     await session.refresh(vehicle)
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Novo Veículo Cadastrado: {vehicle.plate_number} ({vehicle.owner_name})"))
     return vehicle
 
 @router.patch("/{vehicle_id}", response_model=Vehicle)
@@ -97,6 +100,7 @@ async def update_vehicle(
     session.add(vehicle)
     await session.commit()
     await session.refresh(vehicle)
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Veículo Atualizado: {vehicle.plate_number} ({vehicle.owner_name})"))
     return vehicle
 
 @router.delete("/{vehicle_id}")
@@ -108,9 +112,11 @@ async def delete_vehicle(vehicle_id: int, session: AsyncSession = Depends(get_db
     if not vehicle:
         raise HTTPException(status_code=404, detail="Veículo não encontrado.")
 
+    plate_name = vehicle.plate_number
     await session.delete(vehicle)
     await session.commit()
-    return {"success": True, "message": f"Veículo {vehicle.plate_number} removido com sucesso."}
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Veículo Excluído: {plate_name}"))
+    return {"success": True, "message": f"Veículo {plate_name} removido com sucesso."}
 
 @router.get("/logs", response_model=List[PlateDetectionLog])
 async def list_plate_logs(
