@@ -57,6 +57,7 @@ export interface SettingsResponse {
   telegram_chat_id?: string;
   telegram_bot_configured?: boolean;
   telegram_cooldown_seconds?: number;
+  processing_paused?: boolean;
   storage?: {
     total_files: number;
     total_size_mb: number;
@@ -369,7 +370,31 @@ export const apiClient = {
     return res.json();
   },
 
-  // --- Server Lifecycle & Configuration Backup/Restore ---
+  // --- Server Lifecycle, Standby & Configuration Backup/Restore ---
+  async pauseProcessing(): Promise<{ success: boolean; paused: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/processing/pause`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao pausar processamento");
+    return data;
+  },
+
+  async resumeProcessing(): Promise<{ success: boolean; paused: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/processing/resume`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao retomar processamento");
+    return data;
+  },
+
+  async getProcessingStatus(): Promise<{ paused: boolean; status: string; active_cameras: number; message: string }> {
+    const res = await fetch(`${API_BASE}/api/settings/processing/status`);
+    if (!res.ok) throw new Error("Falha ao obter status de processamento");
+    return res.json();
+  },
+
   async shutdownServer(): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${API_BASE}/api/settings/system/shutdown`, {
       method: "POST",

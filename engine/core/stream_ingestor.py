@@ -56,6 +56,18 @@ class StreamIngestor:
         self._last_alert_time = 0.0
         self._last_periodic_lpr_time = 0.0
         self._stationary_plates_seen: dict[str, float] = {}
+        self.is_paused = False
+
+    def pause(self) -> None:
+        """Pauses frame grabbing, MOG2 and LPR processing to drop CPU to 0%."""
+        self.is_paused = True
+        logger.info(f"⏸️ StreamIngestor PAUSED for camera [{self.camera.id}] {self.camera.name} (Standby Mode)")
+
+    def resume(self) -> None:
+        """Resumes active frame grabbing, MOG2 and LPR processing instantly."""
+        self.is_paused = False
+        self._new_frame_event.set()
+        logger.info(f"▶️ StreamIngestor RESUMED for camera [{self.camera.id}] {self.camera.name}")
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         if self.is_running:
@@ -120,6 +132,10 @@ class StreamIngestor:
         cap = self._create_capture(rtsp_url)
 
         while self.is_running:
+            if self.is_paused:
+                time.sleep(0.4)
+                continue
+
             ret, frame = cap.read()
             if not ret or frame is None:
                 logger.warning(f"RTSP stream dropped for [{self.camera.id}] {self.camera.name}. Reconnecting...")
@@ -148,6 +164,10 @@ class StreamIngestor:
         motion_interval = 1.0 / 8.0  # 8 FPS is optimal for human/vehicle detection
 
         while self.is_running:
+            if self.is_paused:
+                time.sleep(0.4)
+                continue
+
             # Wait for fresh frame from grabber
             if not self._new_frame_event.wait(timeout=0.2):
                 continue

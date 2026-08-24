@@ -18,6 +18,21 @@ class CameraManager:
     def __init__(self):
         self.ingestors: Dict[int, StreamIngestor] = {}
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.is_processing_paused: bool = False
+
+    def pause_processing(self) -> None:
+        """Pauses video decoding, motion analysis, and OCR on all cameras (drops CPU to 0%)."""
+        self.is_processing_paused = True
+        for ingestor in self.ingestors.values():
+            ingestor.pause()
+        logger.info("⏸️ All camera processing PAUSED globally (Server in Standby Mode)")
+
+    def resume_processing(self) -> None:
+        """Resumes active video decoding, motion analysis, and OCR on all cameras."""
+        self.is_processing_paused = False
+        for ingestor in self.ingestors.values():
+            ingestor.resume()
+        logger.info("▶️ All camera processing RESUMED globally")
 
     async def initialize(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -36,6 +51,9 @@ class CameraManager:
             self.stop_camera(camera.id)
 
         ingestor = StreamIngestor(camera=camera, db_save_event_cb=self._save_event_to_db)
+        if self.is_processing_paused:
+            ingestor.pause()
+
         loop = self._loop
         if loop is None:
             try:

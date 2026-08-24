@@ -50,6 +50,8 @@ import {
   FileJson,
   FolderArchive,
   AlertTriangle,
+  Pause,
+  Play,
 } from "lucide-react";
 
 const TAB_SLUG_MAP: Record<string, "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup"> = {
@@ -201,6 +203,11 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [serverShutdownDone, setServerShutdownDone] = useState(false);
   const [restartCountdown, setRestartCountdown] = useState(8);
 
+  // Dynamic Processing & Standby State (0% CPU)
+  const [isProcessingPaused, setIsProcessingPaused] = useState(false);
+  const [togglingProcessing, setTogglingProcessing] = useState(false);
+  const [processingFeedback, setProcessingFeedback] = useState<{ success: boolean; message: string } | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -215,6 +222,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         setTelegramCooldown(data.telegram_cooldown_seconds || 30);
         setRetentionDays(data.retention_days || 7);
         setBufferSeconds(data.default_buffer_seconds || 5);
+        setIsProcessingPaused(data.processing_paused ?? false);
       } catch (e) {
         console.error("Failed to load settings:", e);
       } finally {
@@ -224,7 +232,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     load();
     fetchDevices();
 
-    // Setup Live WebSocket to detect device pings in real-time
+    // Setup Live WebSocket to detect device pings and processing status in real-time
     const wsUrl = `ws://${window.location.hostname}:8080/ws/events?device_type=Web%20Dashboard`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -236,6 +244,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
           setLastPingedDeviceId(data.device_id);
           setLastPingInfo(data);
           fetchDevices();
+        } else if (data.type === "PROCESSING_STATUS_CHANGED") {
+          setIsProcessingPaused(Boolean(data.paused));
         }
       } catch (e) {
         // Ignore non-json
@@ -610,6 +620,36 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         window.location.reload();
       }
     }, 1000);
+  };
+
+  const handlePauseProcessing = async () => {
+    setTogglingProcessing(true);
+    setProcessingFeedback(null);
+    try {
+      const res = await apiClient.pauseProcessing();
+      setIsProcessingPaused(true);
+      setProcessingFeedback({ success: true, message: res.message });
+      setTimeout(() => setProcessingFeedback(null), 4000);
+    } catch (err: any) {
+      setProcessingFeedback({ success: false, message: err.message || "Erro ao pausar processamento" });
+    } finally {
+      setTogglingProcessing(false);
+    }
+  };
+
+  const handleResumeProcessing = async () => {
+    setTogglingProcessing(true);
+    setProcessingFeedback(null);
+    try {
+      const res = await apiClient.resumeProcessing();
+      setIsProcessingPaused(false);
+      setProcessingFeedback({ success: true, message: res.message });
+      setTimeout(() => setProcessingFeedback(null), 4000);
+    } catch (err: any) {
+      setProcessingFeedback({ success: false, message: err.message || "Erro ao retomar processamento" });
+    } finally {
+      setTogglingProcessing(false);
+    }
   };
 
   const handleTriggerShutdown = async () => {
@@ -2272,7 +2312,81 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     </div>
                   </div>
 
-                  {/* Section 2: Server Lifecycle Controls */}
+                  {/* Section 2: Real-Time Processing & Standby Controls (0% CPU) */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl border ${
+                          isProcessingPaused
+                            ? "bg-amber-600/10 text-amber-400 border-amber-500/20"
+                            : "bg-emerald-600/10 text-emerald-400 border-emerald-500/20"
+                        }`}>
+                          {isProcessingPaused ? <PauseCircle className="w-5 h-5" /> : <PlayCircle className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white">Processamento em Tempo Real &amp; Standby</h3>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              isProcessingPaused
+                                ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                            }`}>
+                              {isProcessingPaused ? "⏸️ Standby (0% CPU)" : "🟢 Ativo (Processando)"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {isProcessingPaused
+                              ? "O processamento de vídeo, MOG2 e ANPR estão pausados. A CPU está em 0%, mas a API e interface continuam respondendo."
+                              : "Monitoramento contínuo em execução. O sistema analisa movimentos e placas em tempo real."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        {isProcessingPaused ? (
+                          <button
+                            type="button"
+                            onClick={handleResumeProcessing}
+                            disabled={togglingProcessing}
+                            className="h-11 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition active:scale-98 disabled:opacity-50"
+                          >
+                            <Play className="w-4 h-4 fill-white" />
+                            <span>{togglingProcessing ? "Retomando..." : "Retomar Processamento"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handlePauseProcessing}
+                            disabled={togglingProcessing}
+                            className="h-11 px-5 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-98 disabled:opacity-50"
+                          >
+                            <Pause className="w-4 h-4 fill-amber-400" />
+                            <span>{togglingProcessing ? "Pausando..." : "Pausar Servidor / Detecções (0% CPU)"}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {processingFeedback && (
+                      <div
+                        className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 animate-in fade-in ${
+                          processingFeedback.success
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                            : "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                        }`}
+                      >
+                        {processingFeedback.success ? (
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                        )}
+                        <span>{processingFeedback.message}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 3: Server Lifecycle Controls */}
                   <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">

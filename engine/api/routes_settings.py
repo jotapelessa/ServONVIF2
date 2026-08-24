@@ -20,6 +20,7 @@ from engine.services.telegram_bot import telegram_service
 from engine.services.retention_worker import retention_worker
 from engine.services.backup_service import build_full_backup_dict, dispatch_telegram_backup, _json_serial
 from engine.core.log_buffer import log_buffer
+from engine.core.camera_manager import camera_manager
 from engine.api.websocket_hub import ws_hub
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -147,6 +148,7 @@ async def get_current_settings():
         "telegram_chat_id": settings.TELEGRAM_CHAT_ID or "",
         "telegram_bot_configured": telegram_service.is_configured,
         "telegram_cooldown_seconds": settings.TELEGRAM_COOLDOWN_SECONDS,
+        "processing_paused": camera_manager.is_processing_paused,
         "storage": storage_stats,
         "system_metrics": sys_metrics,
     }
@@ -346,6 +348,66 @@ async def test_rtsp_connection(payload: RTSPTestPayload):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Exceção de rede: {e}")
+
+
+# =========================================================================
+# ⏸️ DYNAMIC PROCESSING CONTROLS (PAUSE / RESUME STANDBY 0% CPU)
+# =========================================================================
+
+@router.get("/processing/status")
+async def get_processing_status():
+    """
+    Returns whether camera ingestion, MOG2, and LPR analysis are paused or active.
+    """
+    return {
+        "paused": camera_manager.is_processing_paused,
+        "status": "paused" if camera_manager.is_processing_paused else "active",
+        "active_cameras": len(camera_manager.ingestors),
+        "message": "Processamento pausado (Standby 0% CPU)" if camera_manager.is_processing_paused else "Processamento em tempo real ativo"
+    }
+
+@router.post("/processing/pause")
+async def pause_camera_processing():
+    """
+    Instantly pauses RTSP grabbing, MOG2 motion detection, and LPR OCR across all cameras.
+    Drops server CPU to ~0% without shutting down the web server or Telegram bot.
+    """
+    camera_manager.pause_processing()
+    
+    # Broadcast processing status to all connected WebSocket clients
+    await ws_hub.broadcast_event({
+        "type": "PROCESSING_STATUS_CHANGED",
+        "paused": True,
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": "⏸️ Processamento e detecções pausados pelo usuário (Standby 0% CPU)"
+    })
+
+    return {
+        "success": True,
+        "paused": True,
+        "message": "Processamento do servidor pausado com sucesso! O uso de CPU foi reduzido a 0%."
+    }
+
+@router.post("/processing/resume")
+async def resume_camera_processing():
+    """
+    Instantly resumes RTSP grabbing, MOG2 motion detection, and LPR OCR across all cameras.
+    """
+    camera_manager.resume_processing()
+
+    # Broadcast processing status to all connected WebSocket clients
+    await ws_hub.broadcast_event({
+        "type": "PROCESSING_STATUS_CHANGED",
+        "paused": False,
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": "▶️ Processamento e detecções retomados com sucesso!"
+    })
+
+    return {
+        "success": True,
+        "paused": False,
+        "message": "Processamento em tempo real retomado com sucesso! Monitoramento e alertas ativos."
+    }
 
 
 # =========================================================================
