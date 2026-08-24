@@ -393,8 +393,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSaving(true);
     setSaveSuccess(false);
     try {
@@ -407,6 +407,8 @@ export default function SettingsPage() {
         retention_days: Number(retentionDays),
         default_buffer_seconds: Number(bufferSeconds),
       });
+      const data = await apiClient.getSettings();
+      setServerInfo(data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (e) {
@@ -1785,16 +1787,32 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="flex items-center gap-3 pt-2">
+                    <div className="flex flex-wrap items-center gap-3 pt-3">
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-600/25"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{saving ? "Salvando..." : "Salvar Configurações do Telegram"}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleTestTelegram}
                         disabled={testingTelegram || !telegramToken}
-                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-xs font-medium border border-slate-700 transition-colors flex items-center gap-2"
+                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-2"
                       >
                         <Send className="w-3.5 h-3.5 text-sky-400" />
                         <span>{testingTelegram ? "Enviando teste..." : "Testar Envio de Mensagem"}</span>
                       </button>
+
+                      {serverInfo?.telegram_bot_configured && (
+                        <div className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Bot Ativo &amp; Sincronizado</span>
+                        </div>
+                      )}
                     </div>
 
                     {telegramTestResult && (
@@ -1895,18 +1913,28 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="pt-2">
+                    <div className="flex items-center gap-3 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveSettings()}
+                        disabled={saving}
+                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-amber-600/25"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{saving ? "Salvando..." : "Salvar Política de Armazenamento"}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleManualCleanup}
                         disabled={runningCleanup}
-                        className="bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2"
+                        className="bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>{runningCleanup ? "Executando limpeza..." : "Executar Limpeza Manual Agora"}</span>
                       </button>
-                      {cleanupResult && <div className="text-xs text-slate-300 mt-2">{cleanupResult}</div>}
                     </div>
+                    {cleanupResult && <div className="text-xs text-slate-300 mt-2">{cleanupResult}</div>}
                   </div>
                 </div>
               )}
@@ -1938,8 +1966,20 @@ export default function SettingsPage() {
                         className="w-48 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">
-                        Recomendado: 5 segundos. Mantém os 5 segundos anteriores à detecção no vídeo salvo.
+                        Recomendado: 5 a 8 segundos. Mantém os segundos anteriores à detecção no clipe salvo.
                       </p>
+                    </div>
+
+                    <div className="pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveSettings()}
+                        disabled={saving}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-emerald-600/25"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{saving ? "Salvando..." : "Salvar Parâmetros do Motor"}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
