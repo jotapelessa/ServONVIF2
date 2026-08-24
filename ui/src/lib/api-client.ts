@@ -10,6 +10,7 @@ export interface Camera {
   is_active: boolean;
   sensitivity: number;
   roi_polygon?: number[][];
+  ignore_polygons?: number[][][];
   allowed_device_ids?: string[];
   created_at: string;
   updated_at: string;
@@ -81,11 +82,18 @@ export const apiClient = {
     if (!res.ok) throw new Error("Failed to delete camera");
   },
 
-  async updateROI(cameraId: number, roi_polygon: number[][]): Promise<Camera> {
+  async updateROI(
+    cameraId: number,
+    payload: {
+      roi_polygon?: number[][] | null;
+      ignore_polygons?: number[][][] | null;
+    } | number[][]
+  ): Promise<Camera> {
+    const bodyPayload = Array.isArray(payload) ? { roi_polygon: payload } : payload;
     const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/roi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roi_polygon }),
+      body: JSON.stringify(bodyPayload),
     });
     if (!res.ok) throw new Error("Failed to update ROI");
     return res.json();

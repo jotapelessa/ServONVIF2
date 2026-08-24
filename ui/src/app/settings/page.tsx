@@ -35,6 +35,7 @@ import {
   Edit2,
   Lock,
   PauseCircle,
+  PlayCircle,
   CheckCircle,
   HelpCircle,
   Radio,
@@ -84,6 +85,7 @@ export default function SettingsPage() {
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [telegramPaused, setTelegramPaused] = useState(false);
   const [telegramCooldown, setTelegramCooldown] = useState(30);
 
   const [retentionDays, setRetentionDays] = useState(7);
@@ -143,6 +145,7 @@ export default function SettingsPage() {
         setTelegramToken(data.telegram_bot_token || "");
         setTelegramChatId(data.telegram_chat_id || "");
         setTelegramEnabled(data.telegram_enabled ?? true);
+        setTelegramPaused(data.telegram_paused ?? false);
         setTelegramCooldown(data.telegram_cooldown_seconds || 30);
         setRetentionDays(data.retention_days || 7);
         setBufferSeconds(data.default_buffer_seconds || 5);
@@ -397,6 +400,7 @@ export default function SettingsPage() {
         telegram_bot_token: telegramToken,
         telegram_chat_id: telegramChatId,
         telegram_enabled: telegramEnabled,
+        telegram_paused: telegramPaused,
         telegram_cooldown_seconds: Number(telegramCooldown),
         retention_days: Number(retentionDays),
         default_buffer_seconds: Number(bufferSeconds),
@@ -1689,6 +1693,61 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-4">
+                    {/* Pause / Resume Media Uploads Banner */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-inner">
+                      <div className="flex items-center gap-3.5">
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                          telegramPaused
+                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                        }`}>
+                          {telegramPaused ? <PauseCircle className="w-6 h-6" /> : <PlayCircle className="w-6 h-6" />}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                            <span>Envio de Arquivos &amp; Mídias (Fotos e Vídeos)</span>
+                            {telegramPaused ? (
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                <PauseCircle className="w-3 h-3" /> PAUSADO
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                <PlayCircle className="w-3 h-3" /> TRANSMISSÃO ATIVA
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {telegramPaused
+                              ? "O envio de fotos e vídeos para o Telegram está pausado. O servidor continua gravando localmente e emitindo alertas na Smart TV."
+                              : "Fotos e clipes MP4 de eventos são enviados automaticamente para o seu canal/grupo na nuvem."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newPaused = !telegramPaused;
+                          setTelegramPaused(newPaused);
+                          try {
+                            await apiClient.updateSettings({ telegram_paused: newPaused });
+                            setSaveSuccess(true);
+                            setTimeout(() => setSaveSuccess(false), 3000);
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shrink-0 ${
+                          telegramPaused
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
+                            : "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/20"
+                        }`}
+                      >
+                        {telegramPaused ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+                        <span>{telegramPaused ? "Retomar Envio de Arquivos" : "Pausar Envio de Arquivos"}</span>
+                      </button>
+                    </div>
+
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1.5">Bot Token do Telegram</label>
                       <input

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
     TELEGRAM_ENABLED: bool = False
+    TELEGRAM_PAUSED: bool = False
     TELEGRAM_COOLDOWN_SECONDS: int = 10
 
     # Security

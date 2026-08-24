@@ -219,6 +219,14 @@ class TelegramService:
             logger.debug("Telegram is not configured. Skipping alert.")
             return False
 
+        if getattr(settings, "TELEGRAM_PAUSED", False):
+            logger.info("⏸️ Telegram Cloud Vault dispatch is PAUSED in settings. Skipping photo alert.")
+            return False
+
+        if not getattr(settings, "TELEGRAM_ENABLED", True):
+            logger.debug("Telegram alerts are disabled in settings.")
+            return False
+
         if not self.can_send_for_camera(camera_id):
             logger.debug(f"Telegram alert for camera {camera_id} suppressed by cooldown.")
             return False
@@ -270,6 +278,13 @@ class TelegramService:
         event_dt: Optional[datetime] = None
     ) -> bool:
         if not self.is_configured:
+            return False
+
+        if getattr(settings, "TELEGRAM_PAUSED", False):
+            logger.info(f"⏸️ Telegram video dispatch is PAUSED. Skipping clip upload for camera [{camera_id}].")
+            return False
+
+        if not getattr(settings, "TELEGRAM_ENABLED", True):
             return False
 
         path_obj = Path(video_path)

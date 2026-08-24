@@ -29,6 +29,7 @@ async def init_db() -> None:
             "ALTER TABLE devices ADD COLUMN hardware_fingerprint VARCHAR",
             "ALTER TABLE devices ADD COLUMN app_version VARCHAR",
             "ALTER TABLE cameras ADD COLUMN allowed_device_ids JSON",
+            "ALTER TABLE cameras ADD COLUMN ignore_polygons JSON",
         ]:
             try:
                 await conn.execute(text(col_def))

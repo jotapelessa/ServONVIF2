@@ -251,19 +251,19 @@ export function CameraSpotlightModal({
           <div className="flex items-center gap-3">
             <div className="flex flex-col text-right">
               <span className="text-[10px] uppercase font-bold text-slate-400">
-                Sensibilidade MOG2
+                Sensibilidade
               </span>
               <span className="text-xs font-mono font-bold text-blue-400">
-                {(sensitivity * 100).toFixed(0)}%
+                {Math.round(sensitivity * 500)} / 50
               </span>
             </div>
             <input
               type="range"
-              min="0.01"
-              max="0.10"
-              step="0.005"
-              value={sensitivity}
-              onChange={(e) => handleSensitivityChange(parseFloat(e.target.value))}
+              min="0"
+              max="50"
+              step="1"
+              value={Math.round(sensitivity * 500)}
+              onChange={(e) => handleSensitivityChange(parseInt(e.target.value))}
               className="w-28 accent-blue-500 cursor-pointer"
             />
           </div>

@@ -25,6 +25,7 @@ class SettingsUpdate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     telegram_enabled: Optional[bool] = None
+    telegram_paused: Optional[bool] = None
     telegram_cooldown_seconds: Optional[int] = None
     retention_days: Optional[int] = None
     default_buffer_seconds: Optional[int] = None
@@ -138,6 +139,7 @@ async def get_current_settings():
         "retention_days": settings.RETENTION_DAYS,
         "default_buffer_seconds": settings.DEFAULT_BUFFER_SECONDS,
         "telegram_enabled": settings.TELEGRAM_ENABLED,
+        "telegram_paused": settings.TELEGRAM_PAUSED,
         "telegram_bot_token": settings.TELEGRAM_BOT_TOKEN or "",
         "telegram_chat_id": settings.TELEGRAM_CHAT_ID or "",
         "telegram_bot_configured": telegram_service.is_configured,
@@ -159,6 +161,9 @@ async def update_settings(payload: SettingsUpdate):
 
     if payload.telegram_enabled is not None:
         settings.TELEGRAM_ENABLED = payload.telegram_enabled
+
+    if payload.telegram_paused is not None:
+        settings.TELEGRAM_PAUSED = payload.telegram_paused
 
     if payload.telegram_cooldown_seconds is not None:
         settings.TELEGRAM_COOLDOWN_SECONDS = payload.telegram_cooldown_seconds
@@ -458,6 +463,8 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
         telegram_service.chat_id = imported_settings["telegram_chat_id"]
     if "telegram_enabled" in imported_settings:
         settings.TELEGRAM_ENABLED = bool(imported_settings["telegram_enabled"])
+    if "telegram_paused" in imported_settings:
+        settings.TELEGRAM_PAUSED = bool(imported_settings["telegram_paused"])
     if "retention_days" in imported_settings:
         settings.RETENTION_DAYS = int(imported_settings["retention_days"])
     if "default_buffer_seconds" in imported_settings:
@@ -483,6 +490,7 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
             existing_cam.password = cam_data.get("password", existing_cam.password)
             existing_cam.sensitivity = cam_data.get("sensitivity", existing_cam.sensitivity)
             existing_cam.roi_polygon = cam_data.get("roi_polygon", existing_cam.roi_polygon)
+            existing_cam.ignore_polygons = cam_data.get("ignore_polygons", existing_cam.ignore_polygons)
             existing_cam.allowed_device_ids = cam_data.get("allowed_device_ids", existing_cam.allowed_device_ids)
             existing_cam.is_active = cam_data.get("is_active", True)
             db.add(existing_cam)
@@ -494,8 +502,9 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
                 onvif_port=cam_data.get("onvif_port", 80),
                 username=cam_data.get("username"),
                 password=cam_data.get("password"),
-                sensitivity=cam_data.get("sensitivity", 0.03),
+                sensitivity=cam_data.get("sensitivity", 20.0),
                 roi_polygon=cam_data.get("roi_polygon"),
+                ignore_polygons=cam_data.get("ignore_polygons"),
                 allowed_device_ids=cam_data.get("allowed_device_ids"),
                 is_active=cam_data.get("is_active", True)
             )

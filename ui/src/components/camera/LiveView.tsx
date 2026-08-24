@@ -8,9 +8,10 @@ interface LiveViewProps {
   cameraId: number;
   cameraName: string;
   roiPolygon?: number[][] | null;
+  ignorePolygons?: number[][][] | null;
 }
 
-export function LiveView({ cameraId, cameraName, roiPolygon }: LiveViewProps) {
+export function LiveView({ cameraId, cameraName, roiPolygon, ignorePolygons }: LiveViewProps) {
   const [hasError, setHasError] = useState(false);
   const [key, setKey] = useState(0);
 
@@ -34,9 +35,15 @@ export function LiveView({ cameraId, cameraName, roiPolygon }: LiveViewProps) {
   }, [hasError]);
 
   // Convert normalized points [0..1] to SVG polygon points string
-  const svgPoints = roiPolygon && roiPolygon.length >= 3
+  const roiSvgPoints = roiPolygon && roiPolygon.length >= 3
     ? roiPolygon.map(([x, y]) => `${(x * 100).toFixed(2)},${(y * 100).toFixed(2)}`).join(" ")
     : null;
+
+  const ignoreSvgPolygons = ignorePolygons && ignorePolygons.length > 0
+    ? ignorePolygons
+        .filter((poly) => poly && poly.length >= 3)
+        .map((poly) => poly.map(([x, y]) => `${(x * 100).toFixed(2)},${(y * 100).toFixed(2)}`).join(" "))
+    : [];
 
   return (
     <div className="relative w-full h-full bg-black/80 flex items-center justify-center overflow-hidden">
@@ -49,20 +56,35 @@ export function LiveView({ cameraId, cameraName, roiPolygon }: LiveViewProps) {
             onError={() => setHasError(true)}
           />
 
-          {/* Active ROI Visual Overlay */}
-          {svgPoints && (
+          {/* Active ROI (Cyan) & Ignore Zones (Purple) Visual Overlay */}
+          {(roiSvgPoints || ignoreSvgPolygons.length > 0) && (
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none z-10"
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
             >
-              <polygon
-                points={svgPoints}
-                fill="rgba(56, 189, 248, 0.15)"
-                stroke="#38bdf8"
-                strokeWidth="0.8"
-                strokeDasharray="2,2"
-              />
+              {/* Cyan Detection Polygon */}
+              {roiSvgPoints && (
+                <polygon
+                  points={roiSvgPoints}
+                  fill="rgba(56, 189, 248, 0.15)"
+                  stroke="#38bdf8"
+                  strokeWidth="0.8"
+                  strokeDasharray="2,2"
+                />
+              )}
+
+              {/* Purple Ignore Polygons */}
+              {ignoreSvgPolygons.map((pointsStr, idx) => (
+                <polygon
+                  key={idx}
+                  points={pointsStr}
+                  fill="rgba(168, 85, 247, 0.25)"
+                  stroke="#a855f7"
+                  strokeWidth="0.8"
+                  strokeDasharray="3,2"
+                />
+              ))}
             </svg>
           )}
         </>

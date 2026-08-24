@@ -36,6 +36,7 @@ class StreamIngestor:
         self.ring_buffer = CircularRingBuffer(max_duration_seconds=settings.DEFAULT_BUFFER_SECONDS)
         self.motion_detector = MotionDetector(
             roi_polygon=camera.roi_polygon,
+            ignore_polygons=getattr(camera, "ignore_polygons", None),
             sensitivity=camera.sensitivity
         )
 
@@ -86,8 +87,11 @@ class StreamIngestor:
 
     def update_config(self, camera: Camera) -> None:
         self.camera = camera
-        self.motion_detector.update_roi_polygon(camera.roi_polygon)
-        self.motion_detector.sensitivity = camera.sensitivity
+        self.motion_detector.update_zones(
+            roi_polygon=camera.roi_polygon,
+            ignore_polygons=getattr(camera, "ignore_polygons", None),
+            sensitivity=camera.sensitivity
+        )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
         # Ultra-low-latency FFmpeg parameters

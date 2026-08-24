@@ -18,8 +18,9 @@ class CameraCreate(BaseModel):
     onvif_port: Optional[int] = 80
     username: Optional[str] = None
     password: Optional[str] = None
-    sensitivity: Optional[float] = 0.03
+    sensitivity: Optional[float] = 20.0
     roi_polygon: Optional[List[List[float]]] = None
+    ignore_polygons: Optional[List[List[List[float]]]] = None
     allowed_device_ids: Optional[List[str]] = None
 
 class CameraUpdate(BaseModel):
@@ -28,10 +29,12 @@ class CameraUpdate(BaseModel):
     is_active: Optional[bool] = None
     sensitivity: Optional[float] = None
     roi_polygon: Optional[List[List[float]]] = None
+    ignore_polygons: Optional[List[List[List[float]]]] = None
     allowed_device_ids: Optional[List[str]] = None
 
 class ROISetPayload(BaseModel):
-    roi_polygon: List[List[float]]
+    roi_polygon: Optional[List[List[float]]] = None
+    ignore_polygons: Optional[List[List[List[float]]]] = None
 
 @router.get("/", response_model=List[Camera])
 async def list_cameras(db: AsyncSession = Depends(get_db)):
@@ -102,7 +105,11 @@ async def update_camera_roi(camera_id: int, payload: ROISetPayload, db: AsyncSes
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    camera.roi_polygon = payload.roi_polygon
+    if payload.roi_polygon is not None:
+        camera.roi_polygon = payload.roi_polygon
+    if payload.ignore_polygons is not None:
+        camera.ignore_polygons = payload.ignore_polygons
+
     await db.commit()
     await db.refresh(camera)
 

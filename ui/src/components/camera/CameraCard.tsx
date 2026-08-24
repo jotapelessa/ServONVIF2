@@ -93,6 +93,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
           cameraId={camera.id}
           cameraName={camera.name}
           roiPolygon={camera.roi_polygon}
+          ignorePolygons={camera.ignore_polygons}
         />
       </div>
 
