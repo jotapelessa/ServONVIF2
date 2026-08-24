@@ -207,8 +207,8 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
       }
 
       const updated = await apiClient.updateROI(camera.id, {
-        roi_polygon: roiPoints.length >= 3 ? roiPoints : undefined,
-        ignore_polygons: finalIgnoreList.length > 0 ? finalIgnoreList : undefined,
+        roi_polygon: roiPoints.length >= 3 ? roiPoints : null,
+        ignore_polygons: finalIgnoreList.length > 0 ? finalIgnoreList : null,
       });
 
       onSaved(updated);

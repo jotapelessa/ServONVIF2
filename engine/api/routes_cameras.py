@@ -115,8 +115,12 @@ async def update_camera_roi(camera_id: int, payload: ROISetPayload, db: AsyncSes
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    if payload.roi_polygon is not None:
-        camera.roi_polygon = payload.roi_polygon
+    camera.roi_polygon = payload.roi_polygon
+    camera.ignore_polygons = payload.ignore_polygons
+
+    await db.commit()
+    await db.refresh(camera)
+
     camera_manager.update_camera_config(camera)
     asyncio.create_task(dispatch_telegram_backup(reason=f"Zonas de Detecção (Ciano/Roxa) Atualizadas: {camera.name}"))
     return camera
