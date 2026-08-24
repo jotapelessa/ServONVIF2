@@ -34,7 +34,28 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-export default function EventsPage() {
+const EVENT_FILTER_MAP: Record<string, "ALL" | "PLATES" | "PERSONS" | "VIDEOS"> = {
+  all: "ALL",
+  todos: "ALL",
+  placas: "PLATES",
+  plates: "PLATES",
+  veiculos: "PLATES",
+  pessoas: "PERSONS",
+  persons: "PERSONS",
+  movimento: "PERSONS",
+  videos: "VIDEOS",
+  gravacoes: "VIDEOS",
+  mp4: "VIDEOS",
+};
+
+const EVENT_FILTER_REVERSE: Record<string, string> = {
+  ALL: "todos",
+  PLATES: "placas",
+  PERSONS: "pessoas",
+  VIDEOS: "videos",
+};
+
+export default function EventsPage({ initialFilter }: { initialFilter?: string }) {
   useWebSocket();
   const recentEvents = useAlertStore((state) => state.recentEvents);
 
@@ -43,8 +64,41 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCameraId, setSelectedCameraId] = useState<string>("ALL");
   const [selectedDate, setSelectedDate] = useState<string>("");
-  const [filterCategory, setFilterCategory] = useState<"ALL" | "PLATES" | "PERSONS" | "VIDEOS">("ALL");
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "PLATES" | "PERSONS" | "VIDEOS">(() => {
+    if (initialFilter && EVENT_FILTER_MAP[initialFilter.toLowerCase()]) {
+      return EVENT_FILTER_MAP[initialFilter.toLowerCase()];
+    }
+    return "ALL";
+  });
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
+
+  const handleSwitchCategory = (cat: "ALL" | "PLATES" | "PERSONS" | "VIDEOS") => {
+    setFilterCategory(cat);
+    const slug = EVENT_FILTER_REVERSE[cat] || "todos";
+    if (typeof window !== "undefined") {
+      window.history.pushState(null, "", `/events/${slug}`);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      const lastSeg = segments[segments.length - 1]?.toLowerCase();
+      if (lastSeg && EVENT_FILTER_MAP[lastSeg]) {
+        setFilterCategory(EVENT_FILTER_MAP[lastSeg]);
+      }
+    }
+
+    const onPopState = () => {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      const lastSeg = segments[segments.length - 1]?.toLowerCase();
+      if (lastSeg && EVENT_FILTER_MAP[lastSeg]) {
+        setFilterCategory(EVENT_FILTER_MAP[lastSeg]);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Batch Delete Dropdown & Modal States
   const [isDeleteMenuOpen, setIsDeleteMenuOpen] = useState(false);
@@ -390,7 +444,7 @@ export default function EventsPage() {
 
           <button
             type="button"
-            onClick={() => setFilterCategory("ALL")}
+            onClick={() => handleSwitchCategory("ALL")}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
               filterCategory === "ALL"
                 ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
@@ -407,7 +461,7 @@ export default function EventsPage() {
 
           <button
             type="button"
-            onClick={() => setFilterCategory("PLATES")}
+            onClick={() => handleSwitchCategory("PLATES")}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
               filterCategory === "PLATES"
                 ? "bg-amber-600 text-white shadow-md shadow-amber-600/25"
@@ -425,7 +479,7 @@ export default function EventsPage() {
 
           <button
             type="button"
-            onClick={() => setFilterCategory("PERSONS")}
+            onClick={() => handleSwitchCategory("PERSONS")}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
               filterCategory === "PERSONS"
                 ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
@@ -443,7 +497,7 @@ export default function EventsPage() {
 
           <button
             type="button"
-            onClick={() => setFilterCategory("VIDEOS")}
+            onClick={() => handleSwitchCategory("VIDEOS")}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
               filterCategory === "VIDEOS"
                 ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"

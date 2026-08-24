@@ -52,8 +52,81 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup">("vehicles");
+const TAB_SLUG_MAP: Record<string, "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup"> = {
+  vehicles: "vehicles",
+  placas: "vehicles",
+  lpr: "vehicles",
+  devices: "devices",
+  dispositivos: "devices",
+  tests: "tests",
+  testes: "tests",
+  simulacoes: "tests",
+  logs: "logs",
+  diagnostico: "logs",
+  tv: "tv",
+  smarttv: "tv",
+  tablet: "tv",
+  telegram: "telegram",
+  bot: "telegram",
+  storage: "storage",
+  armazenamento: "storage",
+  retencao: "storage",
+  engine: "engine",
+  motor: "engine",
+  buffer: "engine",
+  backup: "backup",
+  sistema: "backup",
+  restauracao: "backup",
+};
+
+const TAB_REVERSE_MAP: Record<string, string> = {
+  vehicles: "placas",
+  devices: "devices",
+  tests: "tests",
+  logs: "logs",
+  tv: "tv",
+  telegram: "telegram",
+  storage: "storage",
+  engine: "engine",
+  backup: "backup",
+};
+
+export default function SettingsPage({ initialTab }: { initialTab?: string }) {
+  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup">(() => {
+    if (initialTab && TAB_SLUG_MAP[initialTab.toLowerCase()]) {
+      return TAB_SLUG_MAP[initialTab.toLowerCase()];
+    }
+    return "vehicles";
+  });
+
+  const handleSwitchTab = (tab: "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup") => {
+    setActiveTab(tab);
+    const slug = TAB_REVERSE_MAP[tab] || tab;
+    if (typeof window !== "undefined") {
+      window.history.pushState(null, "", `/settings/${slug}`);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      const lastSeg = segments[segments.length - 1]?.toLowerCase();
+      if (lastSeg && TAB_SLUG_MAP[lastSeg]) {
+        setActiveTab(TAB_SLUG_MAP[lastSeg]);
+      }
+    }
+
+    const onPopState = () => {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      const lastSeg = segments[segments.length - 1]?.toLowerCase();
+      if (lastSeg && TAB_SLUG_MAP[lastSeg]) {
+        setActiveTab(TAB_SLUG_MAP[lastSeg]);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -599,7 +672,7 @@ export default function SettingsPage() {
         {/* Navigation Sidebar */}
         <aside className="w-64 shrink-0 space-y-1.5">
           <button
-            onClick={() => setActiveTab("vehicles")}
+            onClick={() => handleSwitchTab("vehicles")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "vehicles"
                 ? "bg-amber-600 text-white shadow-lg shadow-amber-600/25 font-semibold"
@@ -614,7 +687,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("devices")}
+            onClick={() => handleSwitchTab("devices")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "devices"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -629,7 +702,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("tests")}
+            onClick={() => handleSwitchTab("tests")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "tests"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -644,7 +717,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("logs")}
+            onClick={() => handleSwitchTab("logs")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "logs"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -661,7 +734,7 @@ export default function SettingsPage() {
           <div className="h-px bg-slate-800 my-2" />
 
           <button
-            onClick={() => setActiveTab("tv")}
+            onClick={() => handleSwitchTab("tv")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "tv"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -676,7 +749,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("telegram")}
+            onClick={() => handleSwitchTab("telegram")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "telegram"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -691,7 +764,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("storage")}
+            onClick={() => handleSwitchTab("storage")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "storage"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -706,7 +779,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("engine")}
+            onClick={() => handleSwitchTab("engine")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "engine"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
@@ -721,7 +794,7 @@ export default function SettingsPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab("backup")}
+            onClick={() => handleSwitchTab("backup")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === "backup"
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-semibold"
