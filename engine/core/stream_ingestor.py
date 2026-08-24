@@ -210,6 +210,11 @@ class StreamIngestor:
 
                 if self._is_recording_event:
                     self._event_frames.append(frame.copy())
+
+                    # Continuous multi-frame LPR scanning during vehicle movement (every 3rd frame)
+                    if len(self._event_frames) % 3 == 0:
+                        self._trigger_lpr_scan(frame.copy(), is_motion=True, motion_bboxes=orig_bboxes)
+
                     duration_sec = getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10)
                     max_frames = int(max(fps, 10.0) * duration_sec)
                     if not is_motion:
@@ -228,7 +233,12 @@ class StreamIngestor:
             # Keep smooth cadence without CPU spin
             time.sleep(0.03)
 
-    def _trigger_lpr_scan(self, frame: np.ndarray, is_motion: bool = False) -> None:
+    def _trigger_lpr_scan(
+        self,
+        frame: np.ndarray,
+        is_motion: bool = False,
+        motion_bboxes: Optional[List[Tuple[int, int, int, int]]] = None
+    ) -> None:
         """
         Runs non-blocking license plate OCR candidate search in a background thread.
         Notifies Web Panel, Android TV PiP and Telegram Vault when a plate is found.
@@ -236,8 +246,9 @@ class StreamIngestor:
         def _lpr_worker():
             try:
                 candidates = lpr_engine.find_plate_candidates(
-                    frame,
-                    getattr(self.camera, "roi_polygon", None)
+                    frame_bgr=frame,
+                    roi_polygon=getattr(self.camera, "roi_polygon", None),
+                    motion_bboxes=motion_bboxes
                 )
                 if not candidates:
                     return
@@ -247,8 +258,9 @@ class StreamIngestor:
                     plate = cand["plate_number"]
                     last_seen = self._stationary_plates_seen.get(plate, 0.0)
 
-                    # Anti-spam for parked car: suppress repeated notifications if stationary (< 10 minutes)
-                    if not is_motion and (now_t - last_seen < 600.0):
+                    # Anti-spam for parked car (10 min) or moving vehicle pass (15 seconds)
+                    cooldown = 15.0 if is_motion else 600.0
+                    if (now_t - last_seen < cooldown):
                         continue
 
                     self._stationary_plates_seen[plate] = now_t

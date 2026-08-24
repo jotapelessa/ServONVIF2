@@ -121,120 +121,161 @@ class LPREngine:
     def find_plate_candidates(
         cls,
         frame_bgr: np.ndarray,
-        roi_polygon: Optional[List[List[float]]] = None
+        roi_polygon: Optional[List[List[float]]] = None,
+        motion_bboxes: Optional[List[Tuple[int, int, int, int]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Scans a frame for vehicle license plate regions using OpenCV edge morphology & Tesseract OCR.
-        Works seamlessly for parked/stationary cars as well as vehicles in movement.
+        Optimized for:
+        - Brazilian Car Plates (Mercosul & Standard Gray - aspect ratio ~3.08)
+        - Brazilian Motorcycle Plates (Mercosul & Standard - aspect ratio ~1.35, 2 lines)
+        - Fast moving vehicles across sidewalk/street with motion blur & contrast variations.
         """
         if not PYTESSERACT_AVAILABLE or frame_bgr is None:
             return []
 
         h, w = frame_bgr.shape[:2]
-        scan_area = frame_bgr
-        offset_x, offset_y = 0, 0
+        scan_areas = []
 
-        # Crop to ROI if defined
-        if roi_polygon and len(roi_polygon) >= 3:
-            pts = []
-            for pt in roi_polygon:
-                px = int(round(pt[0] * w)) if pt[0] <= 1.0 else int(pt[0])
-                py = int(round(pt[1] * h)) if pt[1] <= 1.0 else int(pt[1])
-                pts.append([px, py])
-            pts_arr = np.array(pts)
-            rx, ry, rw, rh = cv2.boundingRect(pts_arr)
-            rx = max(0, rx)
-            ry = max(0, ry)
-            rw = min(w - rx, rw)
-            rh = min(h - ry, rh)
-            if rw > 80 and rh > 40:
-                scan_area = frame_bgr[ry:ry+rh, rx:rx+rw]
-                offset_x, offset_y = rx, ry
+        # 1. If motion bounding boxes exist, prioritize scanning those specific moving vehicle crops
+        if motion_bboxes:
+            for (bx, by, bw, bh) in motion_bboxes:
+                if bw >= 60 and bh >= 40:
+                    pad_w = int(bw * 0.15)
+                    pad_h = int(bh * 0.15)
+                    cx = max(0, bx - pad_w)
+                    cy = max(0, by - pad_h)
+                    cw = min(w - cx, bw + (pad_w * 2))
+                    ch = min(h - cy, bh + (pad_h * 2))
+                    crop = frame_bgr[cy:cy+ch, cx:cx+cw]
+                    if crop.shape[0] >= 40 and crop.shape[1] >= 60:
+                        scan_areas.append((crop, cx, cy))
 
-        sh, sw = scan_area.shape[:2]
-        if sh < 40 or sw < 80:
-            return []
+        # 2. Also scan ROI or full frame
+        if not scan_areas:
+            scan_area = frame_bgr
+            offset_x, offset_y = 0, 0
+            if roi_polygon and len(roi_polygon) >= 3:
+                pts = []
+                for pt in roi_polygon:
+                    px = int(round(pt[0] * w)) if pt[0] <= 1.0 else int(pt[0])
+                    py = int(round(pt[1] * h)) if pt[1] <= 1.0 else int(pt[1])
+                    pts.append([px, py])
+                pts_arr = np.array(pts)
+                rx, ry, rw, rh = cv2.boundingRect(pts_arr)
+                rx = max(0, rx)
+                ry = max(0, ry)
+                rw = min(w - rx, rw)
+                rh = min(h - ry, rh)
+                if rw > 60 and rh > 40:
+                    scan_area = frame_bgr[ry:ry+rh, rx:rx+rw]
+                    offset_x, offset_y = rx, ry
+            scan_areas.append((scan_area, offset_x, offset_y))
 
         candidates: List[Dict[str, Any]] = []
         found_plates = set()
 
-        # 1. Grayscale & Bilateral Filtering
-        gray = cv2.cvtColor(scan_area, cv2.COLOR_BGR2GRAY)
-        blur = cv2.bilateralFilter(gray, 11, 17, 17)
-
-        # 2. Blackhat morphology to isolate dark text on light plate background
-        rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
-        blackhat = cv2.morphologyEx(blur, cv2.MORPH_BLACKHAT, rect_kernel)
-
-        # 3. Sobel edge detection
-        grad_x = cv2.Sobel(blackhat, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
-        grad_x = np.absolute(grad_x)
-        min_val, max_val = np.min(grad_x), np.max(grad_x)
-        if max_val > min_val:
-            grad_x = (255 * ((grad_x - min_val) / (max_val - min_val))).astype("uint8")
-        else:
-            grad_x = grad_x.astype("uint8")
-
-        # 4. Closing & Otsu Binarization
-        grad_x = cv2.morphologyEx(grad_x, cv2.MORPH_CLOSE, rect_kernel)
-        _, thresh = cv2.threshold(grad_x, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-
-        # 5. Find contours for candidate rectangular plate boxes
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        matched_boxes = []
-        for cnt in contours:
-            x, y, cw, ch = cv2.boundingRect(cnt)
-            aspect_ratio = cw / float(ch)
-            area = cw * ch
-
-            # Standard Brazilian Plate aspect ratio is ~3.08 (40x13cm)
-            if 2.3 <= aspect_ratio <= 4.8 and 1800 <= area <= 55000 and cw >= 80 and ch >= 22:
-                diff_from_ratio = abs(aspect_ratio - 3.08)
-                matched_boxes.append((diff_from_ratio, x, y, cw, ch))
-
-        matched_boxes.sort(key=lambda item: item[0])
-
-        # Evaluate top 2 best matching rectangular regions to keep CPU usage low
-        for _, x, y, cw, ch in matched_boxes[:2]:
-            # Add padding
-            pad_x = int(cw * 0.08)
-            pad_y = int(ch * 0.15)
-            px = max(0, x - pad_x)
-            py = max(0, y - pad_y)
-            pw = min(sw - px, cw + (pad_x * 2))
-            ph = min(sh - py, ch + (pad_y * 2))
-
-            plate_patch = scan_area[py:py+ph, px:px+pw]
-            if plate_patch.shape[0] < 15 or plate_patch.shape[1] < 45:
+        for (curr_area, off_x, off_y) in scan_areas[:2]:
+            sh, sw = curr_area.shape[:2]
+            if sh < 30 or sw < 50:
                 continue
 
-            # Preprocess patch for OCR
-            patch_gray = cv2.cvtColor(plate_patch, cv2.COLOR_BGR2GRAY)
-            # Resize to standard height for OCR accuracy
-            scale = 100.0 / patch_gray.shape[0]
-            resized = cv2.resize(patch_gray, (int(patch_gray.shape[1] * scale), 100), interpolation=cv2.INTER_CUBIC)
-            patch_thresh = cv2.adaptiveThreshold(
-                resized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9
-            )
+            # 1. Grayscale & CLAHE contrast enhancement
+            gray = cv2.cvtColor(curr_area, cv2.COLOR_BGR2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+            contrast_gray = clahe.apply(gray)
+            blur = cv2.bilateralFilter(contrast_gray, 9, 75, 75)
 
-            # Run Tesseract with license plate whitelist
-            try:
-                ocr_text = pytesseract.image_to_string(
-                    patch_thresh,
-                    config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            # 2. Blackhat morphology to isolate dark text on light plate background
+            rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
+            blackhat = cv2.morphologyEx(blur, cv2.MORPH_BLACKHAT, rect_kernel)
+
+            # 3. Sobel edge detection
+            grad_x = cv2.Sobel(blackhat, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+            grad_x = np.absolute(grad_x)
+            min_val, max_val = np.min(grad_x), np.max(grad_x)
+            if max_val > min_val:
+                grad_x = (255 * ((grad_x - min_val) / (max_val - min_val))).astype("uint8")
+            else:
+                grad_x = grad_x.astype("uint8")
+
+            # 4. Closing & Otsu Binarization
+            grad_x = cv2.morphologyEx(grad_x, cv2.MORPH_CLOSE, rect_kernel)
+            _, thresh = cv2.threshold(grad_x, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+            # 5. Find contours for candidate plate boxes (Cars & Motorcycles)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            matched_boxes = []
+            for cnt in contours:
+                x, y, cw, ch = cv2.boundingRect(cnt)
+                aspect_ratio = cw / float(ch)
+                area = cw * ch
+
+                # A) Car Plate Ratio: ~3.08 (Range 2.0 to 5.2)
+                is_car = (2.0 <= aspect_ratio <= 5.2 and 700 <= area <= 65000 and cw >= 45 and ch >= 14)
+                # B) Motorcycle Plate Ratio: ~1.35 (Range 1.05 to 1.95)
+                is_moto = (1.05 <= aspect_ratio <= 1.95 and 550 <= area <= 45000 and cw >= 32 and ch >= 24)
+
+                if is_car:
+                    score = abs(aspect_ratio - 3.08)
+                    matched_boxes.append((score, x, y, cw, ch, "CAR"))
+                elif is_moto:
+                    score = abs(aspect_ratio - 1.35)
+                    matched_boxes.append((score, x, y, cw, ch, "MOTO"))
+
+            matched_boxes.sort(key=lambda item: item[0])
+
+            # Evaluate top 3 best matching regions
+            for _, x, y, cw, ch, vtype in matched_boxes[:3]:
+                # Add padding
+                pad_x = int(cw * 0.10)
+                pad_y = int(ch * 0.15)
+                px = max(0, x - pad_x)
+                py = max(0, y - pad_y)
+                pw = min(sw - px, cw + (pad_x * 2))
+                ph = min(sh - py, ch + (pad_y * 2))
+
+                plate_patch = curr_area[py:py+ph, px:px+pw]
+                if plate_patch.shape[0] < 12 or plate_patch.shape[1] < 30:
+                    continue
+
+                # Preprocess patch for OCR
+                patch_gray = cv2.cvtColor(plate_patch, cv2.COLOR_BGR2GRAY)
+                scale = 100.0 / patch_gray.shape[0]
+                resized = cv2.resize(patch_gray, (int(patch_gray.shape[1] * scale), 100), interpolation=cv2.INTER_CUBIC)
+                
+                # Try both Adaptive Threshold & Otsu for maximum readability
+                patch_thresh = cv2.adaptiveThreshold(
+                    resized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9
                 )
-                cleaned = cls.clean_plate_text(ocr_text)
 
-                # Also try plain resized
-                if len(cleaned) != 7:
-                    ocr_text_plain = pytesseract.image_to_string(
-                        resized,
-                        config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                    )
-                    cleaned_plain = cls.clean_plate_text(ocr_text_plain)
-                    if len(cleaned_plain) == 7:
-                        cleaned = cleaned_plain
+                # For motorcycles, use PSM 6 (multi-line block) or PSM 11; for cars use PSM 7 & PSM 6
+                psm_modes = ["--psm 6", "--psm 7"] if vtype == "MOTO" else ["--psm 7", "--psm 6"]
+
+                cleaned = ""
+                for psm in psm_modes:
+                    try:
+                        ocr_text = pytesseract.image_to_string(
+                            patch_thresh,
+                            config=f"{psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                        )
+                        cand_cleaned = cls.clean_plate_text(ocr_text)
+                        if len(cand_cleaned) == 7:
+                            cleaned = cand_cleaned
+                            break
+                        
+                        # Fallback to plain resized
+                        ocr_plain = pytesseract.image_to_string(
+                            resized,
+                            config=f"{psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                        )
+                        cand_plain = cls.clean_plate_text(ocr_plain)
+                        if len(cand_plain) == 7:
+                            cleaned = cand_plain
+                            break
+                    except Exception:
+                        pass
 
                 is_valid, plate_type = cls.validate_plate(cleaned)
                 if not is_valid and len(cleaned) == 7:
@@ -245,13 +286,11 @@ class LPREngine:
                     found_plates.add(cleaned)
                     candidates.append({
                         "plate_number": cleaned,
-                        "plate_type": plate_type,
-                        "confidence": 0.94,
-                        "bbox": (offset_x + px, offset_y + py, pw, ph),
+                        "plate_type": f"{plate_type} ({'Moto' if vtype == 'MOTO' else 'Carro'})",
+                        "confidence": 0.95,
+                        "bbox": (off_x + px, off_y + py, pw, ph),
                         "plate_patch": plate_patch
                     })
-            except Exception as e:
-                logger.debug(f"Candidate OCR evaluation error: {e}")
 
         return candidates
 
