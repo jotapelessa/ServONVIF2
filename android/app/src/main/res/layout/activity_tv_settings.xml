@@ -355,6 +355,115 @@
                 android:nextFocusDown="@+id/swTvSoundAlert" />
         </LinearLayout>
 
+        <!-- MOSAIC DEFAULT PREFERENCES GROUP -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔲 Personalização do Mosaico de Câmeras:"
+            android:textColor="#E2E8F0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Layout Selector -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <Button
+                android:id="@+id/btnSetMosaic2x2"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="2x2 Quad (4x)"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaic1Plus3"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="1+3 Destaque"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaic1x1"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="1x1 Tela Cheia"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaicPatrol"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="🔄 Auto-Patrulha"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+        </LinearLayout>
+
+        <!-- Fit Mode Selector -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnSetFitCover"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="📐 Preencher Sem Bordas (Cover)"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetFitContain"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="📐 Proporção Exata (Contain)"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+        </LinearLayout>
+
         <!-- Switches -->
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/swTvSoundAlert"

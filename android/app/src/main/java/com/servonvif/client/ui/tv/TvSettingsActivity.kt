@@ -2,13 +2,11 @@ package com.servonvif.client.ui.tv
 
 import android.app.Activity
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
-import androidx.core.content.ContextCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
@@ -44,9 +42,19 @@ class TvSettingsActivity : Activity() {
     private lateinit var btnDur15s: Button
     private lateinit var btnDur30s: Button
 
+    // Mosaic Preferences Buttons
+    private lateinit var btnSetMosaic2x2: Button
+    private lateinit var btnSetMosaic1Plus3: Button
+    private lateinit var btnSetMosaic1x1: Button
+    private lateinit var btnSetMosaicPatrol: Button
+    private lateinit var btnSetFitCover: Button
+    private lateinit var btnSetFitContain: Button
+
     private var selectedPosition = ServerConfigRepository.POSITION_TOP_RIGHT
     private var selectedSize = ServerConfigRepository.SIZE_MINI
     private var selectedDuration = 10
+    private var selectedMosaicLayout = ServerConfigRepository.LAYOUT_2X2
+    private var selectedMosaicFit = ServerConfigRepository.FIT_COVER
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,6 +92,13 @@ class TvSettingsActivity : Activity() {
         btnDur10s = findViewById(R.id.btnDur10s)
         btnDur15s = findViewById(R.id.btnDur15s)
         btnDur30s = findViewById(R.id.btnDur30s)
+
+        btnSetMosaic2x2 = findViewById(R.id.btnSetMosaic2x2)
+        btnSetMosaic1Plus3 = findViewById(R.id.btnSetMosaic1Plus3)
+        btnSetMosaic1x1 = findViewById(R.id.btnSetMosaic1x1)
+        btnSetMosaicPatrol = findViewById(R.id.btnSetMosaicPatrol)
+        btnSetFitCover = findViewById(R.id.btnSetFitCover)
+        btnSetFitContain = findViewById(R.id.btnSetFitContain)
     }
 
     private fun setupFocusEffects() {
@@ -91,6 +106,8 @@ class TvSettingsActivity : Activity() {
             btnPosTopRight, btnPosTopLeft, btnPosBottomRight, btnPosBottomLeft, btnPosCenter,
             btnSizeMicro, btnSizeMini, btnSizeCompact, btnSizeLarge,
             btnDur5s, btnDur10s, btnDur15s, btnDur30s,
+            btnSetMosaic2x2, btnSetMosaic1Plus3, btnSetMosaic1x1, btnSetMosaicPatrol,
+            btnSetFitCover, btnSetFitContain,
             btnTestConnection, btnSaveSettings
         )
 
@@ -114,10 +131,13 @@ class TvSettingsActivity : Activity() {
         selectedPosition = configRepo.pipPosition
         selectedSize = configRepo.pipSize
         selectedDuration = configRepo.pipDurationSeconds
+        selectedMosaicLayout = configRepo.mosaicLayout
+        selectedMosaicFit = configRepo.mosaicFitMode
 
         updatePositionUI()
         updateSizeUI()
         updateDurationUI()
+        updateMosaicUI()
     }
 
     private fun updatePositionUI() {
@@ -142,6 +162,16 @@ class TvSettingsActivity : Activity() {
         btnDur30s.setBackgroundResource(if (selectedDuration == 30) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
     }
 
+    private fun updateMosaicUI() {
+        btnSetMosaic2x2.setBackgroundResource(if (selectedMosaicLayout == ServerConfigRepository.LAYOUT_2X2) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSetMosaic1Plus3.setBackgroundResource(if (selectedMosaicLayout == ServerConfigRepository.LAYOUT_1_PLUS_3) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSetMosaic1x1.setBackgroundResource(if (selectedMosaicLayout == ServerConfigRepository.LAYOUT_1X1) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSetMosaicPatrol.setBackgroundResource(if (selectedMosaicLayout == ServerConfigRepository.LAYOUT_PATROL) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+
+        btnSetFitCover.setBackgroundResource(if (selectedMosaicFit == ServerConfigRepository.FIT_COVER) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+        btnSetFitContain.setBackgroundResource(if (selectedMosaicFit == ServerConfigRepository.FIT_CONTAIN) R.drawable.btn_tv_action_blue_selector else R.drawable.btn_tv_action_dark_selector)
+    }
+
     private fun setupListeners() {
         btnPosTopRight.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_RIGHT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
         btnPosTopLeft.setOnClickListener { selectedPosition = ServerConfigRepository.POSITION_TOP_LEFT; configRepo.pipPosition = selectedPosition; updatePositionUI() }
@@ -158,6 +188,14 @@ class TvSettingsActivity : Activity() {
         btnDur10s.setOnClickListener { selectedDuration = 10; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
         btnDur15s.setOnClickListener { selectedDuration = 15; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
         btnDur30s.setOnClickListener { selectedDuration = 30; configRepo.pipDurationSeconds = selectedDuration; updateDurationUI() }
+
+        btnSetMosaic2x2.setOnClickListener { selectedMosaicLayout = ServerConfigRepository.LAYOUT_2X2; configRepo.mosaicLayout = selectedMosaicLayout; updateMosaicUI() }
+        btnSetMosaic1Plus3.setOnClickListener { selectedMosaicLayout = ServerConfigRepository.LAYOUT_1_PLUS_3; configRepo.mosaicLayout = selectedMosaicLayout; updateMosaicUI() }
+        btnSetMosaic1x1.setOnClickListener { selectedMosaicLayout = ServerConfigRepository.LAYOUT_1X1; configRepo.mosaicLayout = selectedMosaicLayout; updateMosaicUI() }
+        btnSetMosaicPatrol.setOnClickListener { selectedMosaicLayout = ServerConfigRepository.LAYOUT_PATROL; configRepo.mosaicLayout = selectedMosaicLayout; updateMosaicUI() }
+
+        btnSetFitCover.setOnClickListener { selectedMosaicFit = ServerConfigRepository.FIT_COVER; configRepo.mosaicFitMode = selectedMosaicFit; updateMosaicUI() }
+        btnSetFitContain.setOnClickListener { selectedMosaicFit = ServerConfigRepository.FIT_CONTAIN; configRepo.mosaicFitMode = selectedMosaicFit; updateMosaicUI() }
 
         btnTestConnection.setOnClickListener {
             val ip = etServerIp.text.toString().trim()
@@ -194,6 +232,8 @@ class TvSettingsActivity : Activity() {
                 configRepo.pipPosition = selectedPosition
                 configRepo.pipSize = selectedSize
                 configRepo.pipDurationSeconds = selectedDuration
+                configRepo.mosaicLayout = selectedMosaicLayout
+                configRepo.mosaicFitMode = selectedMosaicFit
 
                 Toast.makeText(this, "Configurações salvas com sucesso!", Toast.LENGTH_SHORT).show()
                 finish()
