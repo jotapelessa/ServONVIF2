@@ -184,6 +184,26 @@ class LPREngine:
             mjpeg_url=f"/api/mjpeg/{camera_id}"
         )
 
+        # Telegram Cloud Vault Notification
+        from engine.services.telegram_bot import telegram_service
+        if telegram_service.is_configured:
+            plate_info = {
+                "plate_number": cleaned_plate,
+                "owner_name": owner_name if is_registered else "Desconhecido",
+                "category": category,
+                "vehicle_model": vehicle_model if is_registered else "Veículo"
+            }
+            if snapshot_path:
+                await telegram_service.send_photo_alert(
+                    camera_id=camera_id,
+                    camera_name=camera_name,
+                    timestamp_str=datetime.utcnow().strftime("%d/%m/%Y %H:%M:%S"),
+                    photo_path=snapshot_path,
+                    score=confidence,
+                    plate_info=plate_info,
+                    event_dt=datetime.utcnow()
+                )
+
         return event_payload
 
 lpr_engine = LPREngine()

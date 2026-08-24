@@ -238,7 +238,8 @@ class StreamIngestor:
                             camera_name=self.camera.name,
                             timestamp_str=now.strftime("%d/%m/%Y %H:%M:%S"),
                             photo_path=thumb_path,
-                            score=score
+                            score=score,
+                            event_dt=now
                         ),
                         self._loop
                     )
@@ -290,7 +291,10 @@ class StreamIngestor:
                             telegram_service.send_video_clip(
                                 camera_id=self.camera.id,
                                 camera_name=self.camera.name,
-                                video_path=video_path
+                                video_path=video_path,
+                                score=score,
+                                duration_seconds=duration,
+                                event_dt=now
                             ),
                             self._loop
                         )

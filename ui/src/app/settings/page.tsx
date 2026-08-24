@@ -1722,6 +1722,37 @@ export default function SettingsPage() {
                         <span>{telegramTestResult.message}</span>
                       </div>
                     )}
+
+                    {/* Telegram Cloud Vault & Smart Hashtags Guide Card */}
+                    <div className="card-dark p-5 rounded-2xl border border-sky-500/20 bg-sky-950/20 space-y-3">
+                      <div className="flex items-center gap-2.5">
+                        <Sparkles className="w-4 h-4 text-sky-400" />
+                        <h3 className="text-xs font-bold text-sky-300 uppercase tracking-wider">
+                          Telegram Cloud Vault • Busca Semântica por Hashtags
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Cada foto e vídeo salvo no Telegram funciona como um <strong className="text-white">Drive Ilimitado na Nuvem</strong> indexado por hashtags clicáveis. Você pode pesquisar instantaneamente no Telegram usando:
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
+                        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                          <span className="text-slate-400 font-semibold block mb-1">📅 Por Data &amp; Período:</span>
+                          <code className="text-sky-300 text-[11px]">#agosto2026 #d24_08_2026 #dia24 #segunda #manha #h07</code>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                          <span className="text-slate-400 font-semibold block mb-1">🚗 Por Placa &amp; Veículo:</span>
+                          <code className="text-emerald-300 text-[11px]">#placa_bra2e19 #bra2e19 #byd #dolphin #corolla #morador</code>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                          <span className="text-slate-400 font-semibold block mb-1">👤 Por Pessoa Identificada:</span>
+                          <code className="text-purple-300 text-[11px]">#joao #paulo #jotape #clara #pedro #visitante</code>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                          <span className="text-slate-400 font-semibold block mb-1">📍 Por Local &amp; Câmera:</span>
+                          <code className="text-amber-300 text-[11px]">#portao_principal #garagem #entrada #cam1 #movimento</code>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </form>
               )}
