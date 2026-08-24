@@ -160,68 +160,76 @@ class LPREngine:
         # 5. Find contours for candidate rectangular plate boxes
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        matched_boxes = []
         for cnt in contours:
             x, y, cw, ch = cv2.boundingRect(cnt)
             aspect_ratio = cw / float(ch)
             area = cw * ch
 
             # Standard Brazilian Plate aspect ratio is ~3.08 (40x13cm)
-            if 2.0 <= aspect_ratio <= 5.2 and 1200 <= area <= 65000 and cw >= 70 and ch >= 20:
-                # Add padding
-                pad_x = int(cw * 0.08)
-                pad_y = int(ch * 0.15)
-                px = max(0, x - pad_x)
-                py = max(0, y - pad_y)
-                pw = min(sw - px, cw + (pad_x * 2))
-                ph = min(sh - py, ch + (pad_y * 2))
+            if 2.3 <= aspect_ratio <= 4.8 and 1800 <= area <= 55000 and cw >= 80 and ch >= 22:
+                diff_from_ratio = abs(aspect_ratio - 3.08)
+                matched_boxes.append((diff_from_ratio, x, y, cw, ch))
 
-                plate_patch = scan_area[py:py+ph, px:px+pw]
-                if plate_patch.shape[0] < 15 or plate_patch.shape[1] < 45:
-                    continue
+        matched_boxes.sort(key=lambda item: item[0])
 
-                # Preprocess patch for OCR
-                patch_gray = cv2.cvtColor(plate_patch, cv2.COLOR_BGR2GRAY)
-                # Resize to standard height for OCR accuracy
-                scale = 100.0 / patch_gray.shape[0]
-                resized = cv2.resize(patch_gray, (int(patch_gray.shape[1] * scale), 100), interpolation=cv2.INTER_CUBIC)
-                patch_thresh = cv2.adaptiveThreshold(
-                    resized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9
+        # Evaluate top 2 best matching rectangular regions to keep CPU usage low
+        for _, x, y, cw, ch in matched_boxes[:2]:
+            # Add padding
+            pad_x = int(cw * 0.08)
+            pad_y = int(ch * 0.15)
+            px = max(0, x - pad_x)
+            py = max(0, y - pad_y)
+            pw = min(sw - px, cw + (pad_x * 2))
+            ph = min(sh - py, ch + (pad_y * 2))
+
+            plate_patch = scan_area[py:py+ph, px:px+pw]
+            if plate_patch.shape[0] < 15 or plate_patch.shape[1] < 45:
+                continue
+
+            # Preprocess patch for OCR
+            patch_gray = cv2.cvtColor(plate_patch, cv2.COLOR_BGR2GRAY)
+            # Resize to standard height for OCR accuracy
+            scale = 100.0 / patch_gray.shape[0]
+            resized = cv2.resize(patch_gray, (int(patch_gray.shape[1] * scale), 100), interpolation=cv2.INTER_CUBIC)
+            patch_thresh = cv2.adaptiveThreshold(
+                resized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9
+            )
+
+            # Run Tesseract with license plate whitelist
+            try:
+                ocr_text = pytesseract.image_to_string(
+                    patch_thresh,
+                    config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
                 )
+                cleaned = cls.clean_plate_text(ocr_text)
 
-                # Run Tesseract with license plate whitelist
-                try:
-                    ocr_text = pytesseract.image_to_string(
-                        patch_thresh,
+                # Also try plain resized
+                if len(cleaned) != 7:
+                    ocr_text_plain = pytesseract.image_to_string(
+                        resized,
                         config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
                     )
-                    cleaned = cls.clean_plate_text(ocr_text)
+                    cleaned_plain = cls.clean_plate_text(ocr_text_plain)
+                    if len(cleaned_plain) == 7:
+                        cleaned = cleaned_plain
 
-                    # Also try plain resized
-                    if len(cleaned) != 7:
-                        ocr_text_plain = pytesseract.image_to_string(
-                            resized,
-                            config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                        )
-                        cleaned_plain = cls.clean_plate_text(ocr_text_plain)
-                        if len(cleaned_plain) == 7:
-                            cleaned = cleaned_plain
-
+                is_valid, plate_type = cls.validate_plate(cleaned)
+                if not is_valid and len(cleaned) == 7:
+                    cleaned = cls.repair_mercosul_ocr(cleaned)
                     is_valid, plate_type = cls.validate_plate(cleaned)
-                    if not is_valid and len(cleaned) == 7:
-                        cleaned = cls.repair_mercosul_ocr(cleaned)
-                        is_valid, plate_type = cls.validate_plate(cleaned)
 
-                    if is_valid and cleaned not in found_plates:
-                        found_plates.add(cleaned)
-                        candidates.append({
-                            "plate_number": cleaned,
-                            "plate_type": plate_type,
-                            "confidence": 0.94,
-                            "bbox": (offset_x + px, offset_y + py, pw, ph),
-                            "plate_patch": plate_patch
-                        })
-                except Exception as e:
-                    logger.debug(f"Candidate OCR evaluation error: {e}")
+                if is_valid and cleaned not in found_plates:
+                    found_plates.add(cleaned)
+                    candidates.append({
+                        "plate_number": cleaned,
+                        "plate_type": plate_type,
+                        "confidence": 0.94,
+                        "bbox": (offset_x + px, offset_y + py, pw, ph),
+                        "plate_patch": plate_patch
+                    })
+            except Exception as e:
+                logger.debug(f"Candidate OCR evaluation error: {e}")
 
         return candidates
 
