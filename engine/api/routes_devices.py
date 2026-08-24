@@ -17,6 +17,8 @@ class DevicePingPayload(BaseModel):
     device_name: Optional[str] = None
     device_type: Optional[str] = None
     manufacturer_model: Optional[str] = None
+    mac_address: Optional[str] = None
+    hardware_fingerprint: Optional[str] = None
     app_version: Optional[str] = None
 
 class DeviceUpdatePayload(BaseModel):
@@ -48,6 +50,8 @@ async def list_devices(db: AsyncSession = Depends(get_db)):
             "ip_address": dev.ip_address,
             "device_type": dev.device_type,
             "manufacturer_model": dev.manufacturer_model,
+            "mac_address": dev.mac_address,
+            "hardware_fingerprint": dev.hardware_fingerprint,
             "status": dev.status,
             "notes": dev.notes,
             "is_online": is_online,
@@ -70,12 +74,26 @@ async def register_device_ping(payload: DevicePingPayload, request: Request, db:
     device_type = payload.device_type or ("Android TV" if client_ip != "127.0.0.1" else "Web Browser")
     model = payload.manufacturer_model or "Genérico / Desconhecido"
 
-    # Search for existing device record
-    res = await db.execute(select(Device).where((Device.device_id == device_id) | (Device.ip_address == client_ip)))
+    # Multi-Key Hardware Matching: ID -> MAC -> Fingerprint -> IP
+    dev = None
+    res = await db.execute(select(Device).where(Device.device_id == device_id))
     dev = res.scalars().first()
+
+    if not dev and payload.mac_address:
+        res_mac = await db.execute(select(Device).where(Device.mac_address == payload.mac_address))
+        dev = res_mac.scalars().first()
+
+    if not dev and payload.hardware_fingerprint:
+        res_fp = await db.execute(select(Device).where(Device.hardware_fingerprint == payload.hardware_fingerprint))
+        dev = res_fp.scalars().first()
+
+    if not dev:
+        res_ip = await db.execute(select(Device).where(Device.ip_address == client_ip))
+        dev = res_ip.scalars().first()
 
     now = datetime.utcnow()
     if dev:
+        # Update dynamic IP and ping metadata without creating duplicate device
         dev.last_seen = now
         dev.last_ping_at = now
         dev.ip_address = client_ip
@@ -84,7 +102,13 @@ async def register_device_ping(payload: DevicePingPayload, request: Request, db:
             dev.manufacturer_model = payload.manufacturer_model
         if payload.device_type:
             dev.device_type = payload.device_type
-        if dev.device_name.startswith("Dispositivo Desconhecido") and payload.device_name:
+        if payload.mac_address and not dev.mac_address:
+            dev.mac_address = payload.mac_address
+        if payload.hardware_fingerprint and not dev.hardware_fingerprint:
+            dev.hardware_fingerprint = payload.hardware_fingerprint
+        if payload.app_version:
+            dev.app_version = payload.app_version
+        if (dev.device_name.startswith("Dispositivo Desconhecido") or dev.device_name.startswith("Android TV (")) and payload.device_name:
             dev.device_name = payload.device_name
     else:
         name = payload.device_name or f"{device_type} ({model} - {client_ip})"
@@ -94,6 +118,9 @@ async def register_device_ping(payload: DevicePingPayload, request: Request, db:
             ip_address=client_ip,
             device_type=device_type,
             manufacturer_model=model,
+            mac_address=payload.mac_address,
+            hardware_fingerprint=payload.hardware_fingerprint,
+            app_version=payload.app_version,
             status="ALLOWED",
             ping_count=1,
             last_ping_at=now,
@@ -104,7 +131,7 @@ async def register_device_ping(payload: DevicePingPayload, request: Request, db:
     await db.commit()
     await db.refresh(dev)
 
-    logger.info(f"🎯 PING TEST RECEIVED from [{dev.device_name}] (IP: {client_ip}, Model: {model})! Ping #{dev.ping_count}")
+    logger.info(f"🎯 PING TEST RECEIVED from [{dev.device_name}] (ID: {dev.device_id}, IP: {client_ip}, Model: {model})! Ping #{dev.ping_count}")
 
     # Broadcast event to Web UI so the web dashboard live-highlights this device immediately!
     await ws_hub.broadcast_event({

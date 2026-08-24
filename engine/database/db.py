@@ -25,6 +25,9 @@ async def init_db() -> None:
             "ALTER TABLE devices ADD COLUMN manufacturer_model VARCHAR",
             "ALTER TABLE devices ADD COLUMN ping_count INTEGER DEFAULT 0",
             "ALTER TABLE devices ADD COLUMN last_ping_at DATETIME",
+            "ALTER TABLE devices ADD COLUMN mac_address VARCHAR",
+            "ALTER TABLE devices ADD COLUMN hardware_fingerprint VARCHAR",
+            "ALTER TABLE devices ADD COLUMN app_version VARCHAR",
             "ALTER TABLE cameras ADD COLUMN allowed_device_ids JSON",
         ]:
             try:

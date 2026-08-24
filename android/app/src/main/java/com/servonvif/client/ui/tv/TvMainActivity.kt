@@ -658,7 +658,8 @@ class TvMainActivity : Activity() {
     private fun startLiveWebSocketListener() {
         try {
             liveWsManager?.stop()
-            liveWsManager = WebSocketManager(configRepo.wsBaseUrl) { event ->
+            val wsUrl = configRepo.getWsUrlWithDeviceIdentity(this)
+            liveWsManager = WebSocketManager(wsUrl) { event ->
                 mainHandler.post {
                     if (event.type == "MOTION_ALERT") {
                         triggerMotionOnCamera(event.cameraId, event.cameraName)

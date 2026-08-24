@@ -352,10 +352,14 @@ async def restart_server():
     """
     def _delayed_restart():
         import time, os, sys, subprocess
+        from pathlib import Path
         time.sleep(0.8)
         logger.info("🔄 ServONVIF Engine restarting...")
         try:
-            subprocess.Popen([sys.executable] + sys.argv)
+            root_dir = str(Path(__file__).resolve().parent.parent.parent)
+            env = os.environ.copy()
+            env["PYTHONPATH"] = root_dir
+            subprocess.Popen([sys.executable, "-m", "engine.main"], cwd=root_dir, env=env)
         except Exception as e:
             logger.error(f"Restart relaunch error: {e}")
         os._exit(0)

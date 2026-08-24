@@ -31,15 +31,33 @@ class WebSocketHub:
     def active_connections(self) -> Set[WebSocket]:
         return set(self.active_clients.keys())
 
-    async def connect(self, websocket: WebSocket, device_id: Optional[str] = None, device_type: Optional[str] = None) -> None:
+    async def connect(
+        self,
+        websocket: WebSocket,
+        device_id: Optional[str] = None,
+        device_name: Optional[str] = None,
+        device_type: Optional[str] = None,
+        manufacturer_model: Optional[str] = None,
+        mac_address: Optional[str] = None,
+        hardware_fingerprint: Optional[str] = None,
+    ) -> None:
         await websocket.accept()
 
         client_ip = websocket.client.host if websocket.client else "127.0.0.1"
         dev_id = device_id or f"dev_{client_ip.replace('.', '_')}"
         dev_type = device_type or ("Android TV" if client_ip != "127.0.0.1" else "Web Browser")
+        model = manufacturer_model or "Hardware / Desconhecido"
 
-        # 1. Register or Load from Database asynchronously
-        status = await self._sync_device_to_db(dev_id, client_ip, dev_type)
+        # 1. Register or Load from Database asynchronously with Multi-Key Hardware Matching
+        status = await self._sync_device_to_db(
+            device_id=dev_id,
+            ip=client_ip,
+            device_type=dev_type,
+            device_name=device_name,
+            manufacturer_model=model,
+            mac_address=mac_address,
+            hardware_fingerprint=hardware_fingerprint
+        )
 
         client_info = WebSocketClientInfo(
             websocket=websocket,
@@ -53,35 +71,73 @@ class WebSocketHub:
         self.ip_status_cache[client_ip] = status
         self.ip_status_cache[dev_id] = status
 
-        logger.info(f"📱 WebSocket client connected: {client_ip} ({dev_type}) [Status: {status}]. Total active: {len(self.active_clients)}")
+        logger.info(f"📱 WebSocket client connected: {dev_id} ({dev_type} - {model}) at IP {client_ip} [Status: {status}]. Total active: {len(self.active_clients)}")
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_clients:
             info = self.active_clients.pop(websocket)
-            logger.info(f"WebSocket client disconnected: {info.ip} ({info.device_type}). Remaining: {len(self.active_clients)}")
+            logger.info(f"WebSocket client disconnected: {info.device_id} @ {info.ip} ({info.device_type}). Remaining: {len(self.active_clients)}")
 
-    async def _sync_device_to_db(self, device_id: str, ip: str, device_type: str) -> str:
+    async def _sync_device_to_db(
+        self,
+        device_id: str,
+        ip: str,
+        device_type: str,
+        device_name: Optional[str] = None,
+        manufacturer_model: Optional[str] = None,
+        mac_address: Optional[str] = None,
+        hardware_fingerprint: Optional[str] = None
+    ) -> str:
         try:
             async with async_session_factory() as session:
+                # Multi-key lookup: By Hardware Device ID, MAC Address, Hardware Fingerprint, or IP
+                device = None
+
+                # 1. Direct hardware device_id match
                 res = await session.execute(select(Device).where(Device.device_id == device_id))
                 device = res.scalars().first()
+
+                # 2. MAC address match
+                if not device and mac_address:
+                    res_mac = await session.execute(select(Device).where(Device.mac_address == mac_address))
+                    device = res_mac.scalars().first()
+
+                # 3. Hardware fingerprint match
+                if not device and hardware_fingerprint:
+                    res_fp = await session.execute(select(Device).where(Device.hardware_fingerprint == hardware_fingerprint))
+                    device = res_fp.scalars().first()
+
+                # 4. Fallback IP match
                 if not device:
                     res_ip = await session.execute(select(Device).where(Device.ip_address == ip))
                     device = res_ip.scalars().first()
 
                 if device:
+                    # Update dynamic network info (IP may change, but device is the same!)
                     device.last_seen = datetime.utcnow()
                     device.ip_address = ip
+                    if mac_address and not device.mac_address:
+                        device.mac_address = mac_address
+                    if hardware_fingerprint and not device.hardware_fingerprint:
+                        device.hardware_fingerprint = hardware_fingerprint
+                    if manufacturer_model and (not device.manufacturer_model or device.manufacturer_model.startswith("Genérico")):
+                        device.manufacturer_model = manufacturer_model
+                    if device_name and (device.device_name.startswith("Dispositivo") or device.device_name.startswith("Android")):
+                        device.device_name = device_name
                     session.add(device)
                     await session.commit()
                     return device.status
                 else:
-                    # Create new registered device (Default: ALLOWED)
+                    # Create new registered device
+                    final_name = device_name or f"{device_type} ({manufacturer_model or ip})"
                     new_dev = Device(
                         device_id=device_id,
-                        device_name=f"{device_type} ({ip})",
+                        device_name=final_name,
                         ip_address=ip,
                         device_type=device_type,
+                        manufacturer_model=manufacturer_model,
+                        mac_address=mac_address,
+                        hardware_fingerprint=hardware_fingerprint,
                         status="ALLOWED",
                         last_seen=datetime.utcnow()
                     )

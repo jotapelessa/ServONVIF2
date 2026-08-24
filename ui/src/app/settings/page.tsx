@@ -1225,6 +1225,16 @@ export default function SettingsPage() {
                                       <span className="text-slate-300 font-medium">Hardware: {device.manufacturer_model}</span>
                                     </>
                                   )}
+                                  {device.mac_address && device.mac_address !== "UNKNOWN_MAC" && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-mono text-cyan-400/90 text-[11px]">MAC: {device.mac_address}</span>
+                                    </>
+                                  )}
+                                  <span>•</span>
+                                  <span className="font-mono text-purple-300/80 text-[10px]" title={device.device_id}>
+                                    ID: {device.device_id}
+                                  </span>
                                 </div>
                               </div>
                             </div>

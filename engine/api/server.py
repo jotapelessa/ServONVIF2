@@ -62,9 +62,21 @@ app.include_router(vehicles_router)
 async def websocket_events_endpoint(
     websocket: WebSocket,
     device_id: Optional[str] = Query(None),
-    device_type: Optional[str] = Query(None)
+    device_name: Optional[str] = Query(None),
+    device_type: Optional[str] = Query(None),
+    manufacturer_model: Optional[str] = Query(None),
+    mac_address: Optional[str] = Query(None),
+    hardware_fingerprint: Optional[str] = Query(None),
 ):
-    await ws_hub.connect(websocket, device_id=device_id, device_type=device_type)
+    await ws_hub.connect(
+        websocket=websocket,
+        device_id=device_id,
+        device_name=device_name,
+        device_type=device_type,
+        manufacturer_model=manufacturer_model,
+        mac_address=mac_address,
+        hardware_fingerprint=hardware_fingerprint
+    )
     try:
         while True:
             # Keep-alive receive

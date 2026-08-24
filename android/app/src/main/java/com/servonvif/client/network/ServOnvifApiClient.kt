@@ -57,24 +57,18 @@ class ServOnvifApiClient(private val configRepo: ServerConfigRepository) {
      * so that the administrator web panel can immediately highlight the exact device that tested.
      */
     fun pingServer(context: Context? = null): Boolean {
-        val manufacturer = Build.MANUFACTURER ?: "Android"
-        val model = Build.MODEL ?: "Device"
-        val fullModel = "$manufacturer $model"
-
-        val deviceId = try {
-            if (context != null) {
-                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "dev_${Build.SERIAL}"
-            } else {
-                "dev_${Build.BOARD}_${Build.MODEL.replace(" ", "_")}"
-            }
-        } catch (e: Exception) {
-            "dev_android_${Build.MODEL.replace(" ", "_")}"
-        }
-
-        val deviceType = if (Build.MODEL.contains("TV", ignoreCase = true) || Build.DEVICE.contains("tv", ignoreCase = true)) {
-            "Android TV"
+        val fullModel = HardwareIdHelper.getFullModelName()
+        val deviceType = HardwareIdHelper.getDeviceType()
+        val mac = HardwareIdHelper.getMacAddress()
+        val deviceId = if (context != null) {
+            HardwareIdHelper.getPersistentDeviceId(context)
         } else {
-            "Tablet / Mobile"
+            "DEV-${fullModel.replace(" ", "_")}"
+        }
+        val fingerprint = if (context != null) {
+            HardwareIdHelper.getHardwareFingerprint(context)
+        } else {
+            "UNKNOWN_FP"
         }
 
         val jsonPayload = mapOf(
@@ -82,6 +76,8 @@ class ServOnvifApiClient(private val configRepo: ServerConfigRepository) {
             "device_name" to "$deviceType ($fullModel)",
             "device_type" to deviceType,
             "manufacturer_model" to fullModel,
+            "mac_address" to mac,
+            "hardware_fingerprint" to fingerprint,
             "app_version" to "1.6.0"
         )
 

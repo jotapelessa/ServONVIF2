@@ -66,6 +66,27 @@ class ServerConfigRepository(context: Context) {
     val wsBaseUrl: String
         get() = "ws://$serverIp:$serverPort/ws/events"
 
+    fun getWsUrlWithDeviceIdentity(context: Context): String {
+        return try {
+            val devId = HardwareIdHelper.getPersistentDeviceId(context)
+            val devType = HardwareIdHelper.getDeviceType()
+            val model = HardwareIdHelper.getFullModelName()
+            val mac = HardwareIdHelper.getMacAddress()
+            val fingerprint = HardwareIdHelper.getHardwareFingerprint(context)
+
+            val encodedName = java.net.URLEncoder.encode("$devType ($model)", "UTF-8")
+            val encodedType = java.net.URLEncoder.encode(devType, "UTF-8")
+            val encodedModel = java.net.URLEncoder.encode(model, "UTF-8")
+            val encodedDevId = java.net.URLEncoder.encode(devId, "UTF-8")
+            val encodedMac = java.net.URLEncoder.encode(mac, "UTF-8")
+            val encodedFp = java.net.URLEncoder.encode(fingerprint, "UTF-8")
+
+            "$wsBaseUrl?device_id=$encodedDevId&device_name=$encodedName&device_type=$encodedType&manufacturer_model=$encodedModel&mac_address=$encodedMac&hardware_fingerprint=$encodedFp"
+        } catch (e: Exception) {
+            wsBaseUrl
+        }
+    }
+
     fun getMjpegStreamUrl(cameraId: Int): String {
         return "$httpBaseUrl/api/mjpeg/$cameraId"
     }

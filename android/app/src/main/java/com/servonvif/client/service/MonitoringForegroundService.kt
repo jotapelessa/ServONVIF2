@@ -65,7 +65,7 @@ class MonitoringForegroundService : Service() {
     private fun startWebSocketMonitoring() {
         try {
             wsManager?.stop()
-            val serverUrl = configRepo.wsBaseUrl
+            val serverUrl = configRepo.getWsUrlWithDeviceIdentity(this)
             wsManager = WebSocketManager(serverUrl) { event ->
                 handleIncomingAlert(event)
             }
