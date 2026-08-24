@@ -281,9 +281,9 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
   };
 
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden bg-[#0b0f19]">
+    <div className="min-h-screen w-full flex flex-col bg-[#0b0f19]">
       {/* App Header */}
-      <header className="h-16 w-full app-header px-6 flex items-center justify-between z-30 shrink-0">
+      <header className="h-16 w-full app-header px-6 flex items-center justify-between sticky top-0 z-30 shrink-0">
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -605,7 +605,7 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
       </div>
 
       {/* Main Grid Gallery */}
-      <main className="flex-1 p-6 overflow-y-auto min-w-0">
+      <main className="flex-1 p-6 pb-24 min-w-0">
         {loading && events.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-80 gap-3 text-slate-400">
             <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />

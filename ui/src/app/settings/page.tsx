@@ -727,9 +727,9 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       </header>
 
       {/* Main Container */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto p-6 gap-6">
+      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-6 gap-6 pb-24">
         {/* Navigation Sidebar */}
-        <aside className="w-64 shrink-0 space-y-1.5">
+        <aside className="w-full md:w-64 shrink-0 space-y-1.5 md:sticky md:top-20 md:self-start">
           <button
             onClick={() => handleSwitchTab("vehicles")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
