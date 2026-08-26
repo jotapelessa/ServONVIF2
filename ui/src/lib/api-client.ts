@@ -1,5 +1,25 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
-export const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE || "ws://localhost:8080";
+export const getApiBase = (): string => {
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+};
+
+export const getWsBase = (): string => {
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.hostname}:8080`;
+  }
+  return process.env.NEXT_PUBLIC_WS_BASE || "ws://localhost:8080";
+};
+
+export const API_BASE = typeof window !== "undefined"
+  ? `${window.location.protocol}//${window.location.hostname}:8080`
+  : (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080");
+
+export const WS_BASE = typeof window !== "undefined"
+  ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:8080`
+  : (process.env.NEXT_PUBLIC_WS_BASE || "ws://localhost:8080");
 
 export interface Camera {
   id: number;
@@ -90,19 +110,19 @@ export interface SettingsResponse {
 
 export const apiClient = {
   async getCameras(): Promise<Camera[]> {
-    const res = await fetch(`${API_BASE}/api/cameras/`);
+    const res = await fetch(`${getApiBase()}/api/cameras/`);
     if (!res.ok) throw new Error("Failed to fetch cameras");
     return res.json();
   },
 
   async scanCameras(): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/cameras/scan`, { method: "POST" });
+    const res = await fetch(`${getApiBase()}/api/cameras/scan`, { method: "POST" });
     if (!res.ok) throw new Error("Failed to scan cameras");
     return res.json();
   },
 
   async createCamera(data: Partial<Camera>): Promise<Camera> {
-    const res = await fetch(`${API_BASE}/api/cameras/`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -112,7 +132,7 @@ export const apiClient = {
   },
 
   async updateCamera(id: number, data: Partial<Camera>): Promise<Camera> {
-    const res = await fetch(`${API_BASE}/api/cameras/${id}`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -122,7 +142,7 @@ export const apiClient = {
   },
 
   async deleteCamera(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/cameras/${id}`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${id}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete camera");
@@ -136,7 +156,7 @@ export const apiClient = {
     } | number[][]
   ): Promise<Camera> {
     const bodyPayload = Array.isArray(payload) ? { roi_polygon: payload } : payload;
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/roi`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/roi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bodyPayload),
@@ -150,7 +170,7 @@ export const apiClient = {
     roi_polygon: number[][],
     ignore_polygons?: number[][][]
   ): Promise<Camera> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/roi`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/roi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roi_polygon, ignore_polygons }),
@@ -168,7 +188,7 @@ export const apiClient = {
     thumbnail_path: string;
     message: string;
   }> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/snapshot?send_telegram=${sendTelegram}`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/snapshot?send_telegram=${sendTelegram}`, {
       method: "POST",
     });
     const data = await res.json();
@@ -178,7 +198,7 @@ export const apiClient = {
 
   // --- ONVIF Camera Hardware Management ---
   async getOnvifImaging(cameraId: number): Promise<OnvifImagingSettings> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/imaging`);
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/onvif/imaging`);
     if (!res.ok) throw new Error("Falha ao obter ajustes ONVIF da câmera");
     return res.json();
   },
@@ -194,7 +214,7 @@ export const apiClient = {
       wdr?: string;
     }
   ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/imaging`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/onvif/imaging`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -205,7 +225,7 @@ export const apiClient = {
   },
 
   async rebootCamera(cameraId: number): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/reboot`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/onvif/reboot`, {
       method: "POST",
     });
     const data = await res.json();
@@ -214,7 +234,7 @@ export const apiClient = {
   },
 
   async syncCameraTime(cameraId: number): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/sync-time`, {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/onvif/sync-time`, {
       method: "POST",
     });
     const data = await res.json();
@@ -224,15 +244,15 @@ export const apiClient = {
 
   async getEvents(limit = 60, cameraId?: number): Promise<MotionEvent[]> {
     const url = cameraId !== undefined
-      ? `${API_BASE}/api/events/?limit=${limit}&camera_id=${cameraId}`
-      : `${API_BASE}/api/events/?limit=${limit}`;
+      ? `${getApiBase()}/api/events/?limit=${limit}&camera_id=${cameraId}`
+      : `${getApiBase()}/api/events/?limit=${limit}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to fetch events");
     return res.json();
   },
 
   async deleteEvent(eventId: number): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/events/${eventId}`, {
+    const res = await fetch(`${getApiBase()}/api/events/${eventId}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete event");
@@ -243,7 +263,7 @@ export const apiClient = {
     date_str?: string;
     camera_id?: number;
   }): Promise<{ success: boolean; deleted_count: number; message: string }> {
-    const res = await fetch(`${API_BASE}/api/events/batch-delete`, {
+    const res = await fetch(`${getApiBase()}/api/events/batch-delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -254,13 +274,13 @@ export const apiClient = {
   },
 
   async getSettings(): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/`);
+    const res = await fetch(`${getApiBase()}/api/settings/`);
     if (!res.ok) throw new Error("Failed to fetch settings");
     return res.json();
   },
 
   async updateSettings(payload: any): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/`, {
+    const res = await fetch(`${getApiBase()}/api/settings/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -270,7 +290,7 @@ export const apiClient = {
   },
 
   async testTelegram(payload?: { bot_token?: string; chat_id?: string }): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/telegram/test`, {
+    const res = await fetch(`${getApiBase()}/api/settings/telegram/test`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload || {}),
@@ -281,7 +301,7 @@ export const apiClient = {
   },
 
   async testTelegramPhoto(): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/telegram/test-photo`, {
+    const res = await fetch(`${getApiBase()}/api/settings/telegram/test-photo`, {
       method: "POST",
     });
     const data = await res.json();
@@ -290,7 +310,7 @@ export const apiClient = {
   },
 
   async testTelegramVideo(): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/telegram/test-video`, {
+    const res = await fetch(`${getApiBase()}/api/settings/telegram/test-video`, {
       method: "POST",
     });
     const data = await res.json();
@@ -299,7 +319,7 @@ export const apiClient = {
   },
 
   async testTelegramBackup(): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/telegram/test-backup`, {
+    const res = await fetch(`${getApiBase()}/api/settings/telegram/test-backup`, {
       method: "POST",
     });
     const data = await res.json();
@@ -308,7 +328,7 @@ export const apiClient = {
   },
 
   async triggerCleanup(): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/cleanup`, {
+    const res = await fetch(`${getApiBase()}/api/settings/cleanup`, {
       method: "POST",
     });
     if (!res.ok) throw new Error("Failed to run cleanup");
@@ -316,13 +336,13 @@ export const apiClient = {
   },
 
   async getDiagnosticsLogs(limit = 150, level = "ALL"): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/diagnostics/logs?limit=${limit}&level=${level}`);
+    const res = await fetch(`${getApiBase()}/api/settings/diagnostics/logs?limit=${limit}&level=${level}`);
     if (!res.ok) throw new Error("Falha ao obter logs do sistema");
     return res.json();
   },
 
   async simulateMotionAlert(payload?: { camera_id?: number; camera_name?: string; score?: number }): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/diagnostics/simulate-motion`, {
+    const res = await fetch(`${getApiBase()}/api/settings/diagnostics/simulate-motion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload || {}),
@@ -332,7 +352,7 @@ export const apiClient = {
   },
 
   async testRTSP(rtsp_url: string): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/settings/diagnostics/test-rtsp`, {
+    const res = await fetch(`${getApiBase()}/api/settings/diagnostics/test-rtsp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rtsp_url }),
@@ -343,7 +363,7 @@ export const apiClient = {
   },
 
   async getDevices(): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/devices/`);
+    const res = await fetch(`${getApiBase()}/api/devices/`);
     if (!res.ok) throw new Error("Falha ao carregar lista de dispositivos");
     return res.json();
   },
@@ -352,7 +372,7 @@ export const apiClient = {
     deviceIdOrPk: string | number,
     payload: { device_name?: string; status?: string; notes?: string }
   ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/devices/${deviceIdOrPk}`, {
+    const res = await fetch(`${getApiBase()}/api/devices/${deviceIdOrPk}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -363,7 +383,7 @@ export const apiClient = {
   },
 
   async deleteDevice(deviceIdOrPk: string | number): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/devices/${deviceIdOrPk}`, {
+    const res = await fetch(`${getApiBase()}/api/devices/${deviceIdOrPk}`, {
       method: "DELETE",
     });
     const data = await res.json();
@@ -373,7 +393,7 @@ export const apiClient = {
 
   // --- LPR & Vehicles Management ---
   async getVehicles(): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/vehicles/`);
+    const res = await fetch(`${getApiBase()}/api/vehicles/`);
     if (!res.ok) throw new Error("Falha ao carregar veículos cadastrados");
     return res.json();
   },
@@ -385,7 +405,7 @@ export const apiClient = {
     category?: string;
     notes?: string;
   }): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/vehicles/`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -406,7 +426,7 @@ export const apiClient = {
       is_active?: boolean;
     }
   ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/${vehicleId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -417,7 +437,7 @@ export const apiClient = {
   },
 
   async deleteVehicle(vehicleId: number): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/${vehicleId}`, {
       method: "DELETE",
     });
     const data = await res.json();
@@ -426,7 +446,7 @@ export const apiClient = {
   },
 
   async getPlateLogs(limit = 100): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/vehicles/logs?limit=${limit}`);
+    const res = await fetch(`${getApiBase()}/api/vehicles/logs?limit=${limit}`);
     if (!res.ok) throw new Error("Falha ao obter histórico de placas");
     return res.json();
   },
@@ -442,13 +462,13 @@ export const apiClient = {
     last_detected_at: string | null;
     last_owner_name: string | null;
   }> {
-    const res = await fetch(`${API_BASE}/api/vehicles/stats`);
+    const res = await fetch(`${getApiBase()}/api/vehicles/stats`);
     if (!res.ok) throw new Error("Falha ao obter estatísticas de veículos");
     return res.json();
   },
 
   async deletePlateLog(logId: number): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/vehicles/logs/${logId}`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/logs/${logId}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Falha ao excluir registro do histórico");
@@ -456,7 +476,7 @@ export const apiClient = {
   },
 
   async clearAllPlateLogs(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/vehicles/logs/clear/all`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/logs/clear/all`, {
       method: "DELETE",
     });
     const data = await res.json().catch(() => ({}));
@@ -470,7 +490,7 @@ export const apiClient = {
     camera_name?: string;
     confidence?: number;
   }): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/vehicles/simulate-plate`, {
+    const res = await fetch(`${getApiBase()}/api/vehicles/simulate-plate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -487,14 +507,14 @@ export const apiClient = {
     ram_total_mb: number;
     system_ram_used_mb: number;
   }> {
-    const res = await fetch(`${API_BASE}/api/settings/metrics`);
+    const res = await fetch(`${getApiBase()}/api/settings/metrics`);
     if (!res.ok) throw new Error("Falha ao obter métricas de CPU/RAM");
     return res.json();
   },
 
   // --- Server Lifecycle, Standby & Configuration Backup/Restore ---
   async pauseProcessing(): Promise<{ success: boolean; paused: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/processing/pause`, {
+    const res = await fetch(`${getApiBase()}/api/settings/processing/pause`, {
       method: "POST",
     });
     const data = await res.json();
@@ -503,7 +523,7 @@ export const apiClient = {
   },
 
   async resumeProcessing(): Promise<{ success: boolean; paused: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/processing/resume`, {
+    const res = await fetch(`${getApiBase()}/api/settings/processing/resume`, {
       method: "POST",
     });
     const data = await res.json();
@@ -512,27 +532,27 @@ export const apiClient = {
   },
 
   async getProcessingStatus(): Promise<{ paused: boolean; status: string; active_cameras: number; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/processing/status`);
+    const res = await fetch(`${getApiBase()}/api/settings/processing/status`);
     if (!res.ok) throw new Error("Falha ao obter status de processamento");
     return res.json();
   },
 
   async shutdownServer(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/system/shutdown`, {
+    const res = await fetch(`${getApiBase()}/api/settings/system/shutdown`, {
       method: "POST",
     });
     return res.json();
   },
 
   async restartServer(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/system/restart`, {
+    const res = await fetch(`${getApiBase()}/api/settings/system/restart`, {
       method: "POST",
     });
     return res.json();
   },
 
   getExportConfigUrl(): string {
-    return `${API_BASE}/api/settings/export-config`;
+    return `${getApiBase()}/api/settings/export-config`;
   },
 
   async importConfig(payload: any): Promise<{
@@ -542,7 +562,7 @@ export const apiClient = {
     vehicles_restored: number;
     devices_restored: number;
   }> {
-    const res = await fetch(`${API_BASE}/api/settings/import-config`, {
+    const res = await fetch(`${getApiBase()}/api/settings/import-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -552,7 +572,7 @@ export const apiClient = {
   },
 
   async sendTelegramBackup(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/api/settings/backup/telegram`, {
+    const res = await fetch(`${getApiBase()}/api/settings/backup/telegram`, {
       method: "POST",
     });
     if (!res.ok) {

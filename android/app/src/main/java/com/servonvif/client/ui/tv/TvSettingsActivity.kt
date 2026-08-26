@@ -210,7 +210,7 @@ class TvSettingsActivity : AppCompatActivity() {
                     this.serverPort = port
                 }
                 val apiClient = ServOnvifApiClient(tempRepo)
-                val isSuccess = apiClient.testConnection()
+                val isSuccess = apiClient.testConnection(this)
 
                 runOnUiThread {
                     if (isSuccess) {

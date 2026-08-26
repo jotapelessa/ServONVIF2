@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ServOnvifApiClient(private val configRepo: ServerConfigRepository) {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(6, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
