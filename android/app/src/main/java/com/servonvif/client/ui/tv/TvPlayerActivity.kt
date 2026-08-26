@@ -1,6 +1,5 @@
 package com.servonvif.client.ui.tv
 
-import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -10,10 +9,11 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 
-class TvPlayerActivity : Activity() {
+class TvPlayerActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var tvCameraInfo: TextView

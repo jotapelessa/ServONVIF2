@@ -46,44 +46,14 @@ class PowerManager:
         except Exception as e:
             logger.warning(f"Could not spawn caffeinate process on macOS: {e}")
 
-        # 2. Native IOKit Assertion fallback
-        try:
-            import ctypes
-            iokit = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
-            core_foundation = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
-
-            core_foundation.CFStringCreateWithCString.restype = ctypes.c_void_p
-            core_foundation.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
-            kCFStringEncodingUTF8 = 0x08000100
-
-            reason = core_foundation.CFStringCreateWithCString(None, b"ServONVIF 24/7 NVR Background Ingestion", kCFStringEncodingUTF8)
-            assertion_type = core_foundation.CFStringCreateWithCString(None, b"NoIdleSleepAssertion", kCFStringEncodingUTF8)
-
-            assertion_id = ctypes.c_uint32(0)
-            res = iokit.IOPMAssertionCreateWithName(assertion_type, 255, reason, ctypes.byref(assertion_id))
-            if res == 0:
-                self._assertion_id = assertion_id.value
-                logger.info(f"🛡️ macOS Native IOKit Power Assertion registered (ID: {self._assertion_id})")
-        except Exception as e:
-            logger.debug(f"Native IOKit assertion attempt note: {e}")
-
     def _stop_macos(self) -> None:
         if self._caffeinate_proc:
             try:
                 self._caffeinate_proc.terminate()
+                self._caffeinate_proc.wait(timeout=1)
             except Exception:
                 pass
             self._caffeinate_proc = None
-
-        if self._assertion_id:
-            try:
-                import ctypes
-                iokit = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
-                iokit.IOPMAssertionRelease(ctypes.c_uint32(self._assertion_id))
-                logger.info("macOS IOKit Power Assertion released cleanly.")
-            except Exception:
-                pass
-            self._assertion_id = None
 
     def _start_windows(self) -> None:
         try:

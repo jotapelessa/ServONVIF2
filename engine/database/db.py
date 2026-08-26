@@ -32,6 +32,8 @@ async def init_db() -> None:
             "ALTER TABLE devices ADD COLUMN app_version VARCHAR",
             "ALTER TABLE cameras ADD COLUMN allowed_device_ids JSON",
             "ALTER TABLE cameras ADD COLUMN ignore_polygons JSON",
+            "ALTER TABLE events ADD COLUMN file_size_bytes INTEGER",
+            "ALTER TABLE events ADD COLUMN file_size_formatted VARCHAR",
         ]:
             try:
                 await conn.execute(text(col_def))
@@ -113,6 +115,26 @@ async def load_persisted_system_settings() -> None:
                     settings.DEFAULT_BUFFER_SECONDS = int(all_settings["default_buffer_seconds"])
                 except Exception:
                     pass
+            if "lpr_enabled" in all_settings and all_settings["lpr_enabled"] is not None:
+                settings.LPR_ENABLED = all_settings["lpr_enabled"].lower() == "true"
+            if "lpr_min_confidence" in all_settings and all_settings["lpr_min_confidence"]:
+                try:
+                    settings.LPR_MIN_CONFIDENCE = float(all_settings["lpr_min_confidence"])
+                except Exception:
+                    pass
+            if "lpr_notify_telegram" in all_settings and all_settings["lpr_notify_telegram"] is not None:
+                settings.LPR_NOTIFY_TELEGRAM = all_settings["lpr_notify_telegram"].lower() == "true"
+            if "lpr_notify_tv" in all_settings and all_settings["lpr_notify_tv"] is not None:
+                settings.LPR_NOTIFY_TV = all_settings["lpr_notify_tv"].lower() == "true"
+            if "lpr_alarm_on_blocked" in all_settings and all_settings["lpr_alarm_on_blocked"] is not None:
+                settings.LPR_ALARM_ON_BLOCKED = all_settings["lpr_alarm_on_blocked"].lower() == "true"
+            if "lpr_motorcycle_enabled" in all_settings and all_settings["lpr_motorcycle_enabled"] is not None:
+                settings.LPR_MOTORCYCLE_ENABLED = all_settings["lpr_motorcycle_enabled"].lower() == "true"
+            if "lpr_cooldown_seconds" in all_settings and all_settings["lpr_cooldown_seconds"]:
+                try:
+                    settings.LPR_COOLDOWN_SECONDS = int(all_settings["lpr_cooldown_seconds"])
+                except Exception:
+                    pass
 
             # Sync com o serviço do telegram
             from engine.services.telegram_bot import telegram_service
@@ -121,6 +143,6 @@ async def load_persisted_system_settings() -> None:
             if telegram_service.bot_token:
                 telegram_service.base_url = f"https://api.telegram.org/bot{telegram_service.bot_token}"
 
-            logger.info(f"✅ Configurações persistidas carregadas com sucesso! (Telegram Token={'Configurado' if telegram_service.bot_token else 'Vazio'}, Pausado={settings.TELEGRAM_PAUSED}, Retenção={settings.RETENTION_DAYS}d, Buffer={settings.DEFAULT_BUFFER_SECONDS}s)")
+            logger.info(f"✅ Configurações persistidas carregadas com sucesso! (Telegram Token={'Configurado' if telegram_service.bot_token else 'Vazio'}, Pausado={settings.TELEGRAM_PAUSED}, Retenção={settings.RETENTION_DAYS}d, Buffer={settings.DEFAULT_BUFFER_SECONDS}s, LPR={settings.LPR_ENABLED})")
     except Exception as e:
         logger.error(f"Erro ao carregar configurações persistidas do SQLite: {e}")

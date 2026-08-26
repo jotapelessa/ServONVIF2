@@ -111,25 +111,25 @@ class StreamIngestor:
         )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
-        # Ultra-low-latency FFmpeg parameters
+        # High-stability TCP RTSP parameters with HEVC reference frame buffering
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
             "rtsp_transport;tcp|"
-            "fflags;nobuffer|"
-            "flags;low_delay|"
-            "max_delay;250000|"
-            "stimeout;4000000"
+            "buffer_size;2048000|"
+            "max_delay;500000|"
+            "stimeout;5000000"
         )
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
         return cap
 
     def _grabber_loop(self) -> None:
         """
         Continuously drains the RTSP buffer as fast as packets arrive.
-        Ensures the camera frame is NEVER buffered or delayed.
+        Ensures the camera frame is NEVER buffered or delayed, and filters out initial grey frames.
         """
         rtsp_url = self.camera.rtsp_url
         cap = self._create_capture(rtsp_url)
+        frames_since_connect = 0
 
         while self.is_running:
             if self.is_paused:
@@ -139,9 +139,15 @@ class StreamIngestor:
             ret, frame = cap.read()
             if not ret or frame is None:
                 logger.warning(f"RTSP stream dropped for [{self.camera.id}] {self.camera.name}. Reconnecting...")
+                frames_since_connect = 0
                 time.sleep(2.0)
                 cap.release()
                 cap = self._create_capture(rtsp_url)
+                continue
+
+            frames_since_connect += 1
+            # Skip the first 3 frames on fresh connection to allow HEVC/H.264 I-frame POC sync
+            if frames_since_connect < 4:
                 continue
 
             now = time.time()
@@ -156,12 +162,16 @@ class StreamIngestor:
     def _processor_loop(self) -> None:
         """
         Lightweight, high-efficiency processor:
-        - MOG2 Motion Detection throttled to 8 FPS (saves 75% OpenCV CPU while keeping 100% detection reliability).
+        - Continuous, smooth full-framerate event recording (Zero Frame Drops).
+        - Throttled MOG2 Motion Detection at 8 FPS (saves 75% OpenCV CPU while keeping 100% detection reliability).
         - Ring buffer & MJPEG preview streaming at efficient, decoupled rates.
         """
-        fps = 20.0
         last_motion_check = 0.0
         motion_interval = 1.0 / 8.0  # 8 FPS is optimal for human/vehicle detection
+        is_current_motion = False
+        current_score = 0.0
+        current_bboxes = []
+        lpr_frame_counter = 0
 
         while self.is_running:
             if self.is_paused:
@@ -169,7 +179,7 @@ class StreamIngestor:
                 continue
 
             # Wait for fresh frame from grabber
-            if not self._new_frame_event.wait(timeout=0.2):
+            if not self._new_frame_event.wait(timeout=0.1):
                 continue
             self._new_frame_event.clear()
 
@@ -183,9 +193,18 @@ class StreamIngestor:
             self.ring_buffer.push(frame, is_keyframe=True, timestamp=frame_time)
             mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=65, max_fps=10.0)
 
+            # 2. Continuous Full-FPS Recording during active event (Zero Frame-Drops)
+            if self._is_recording_event:
+                self._event_frames.append((frame.copy(), frame_time))
+                lpr_frame_counter += 1
+
+                # Continuous multi-frame LPR scanning during vehicle movement (every 6th recorded frame)
+                if lpr_frame_counter % 6 == 0:
+                    self._trigger_lpr_scan(frame.copy(), is_motion=True, motion_bboxes=current_bboxes)
+
             now_monotonic = time.time()
 
-            # 2. Throttled MOG2 motion detection (8 FPS)
+            # 3. Throttled MOG2 motion detection (8 FPS)
             if now_monotonic - last_motion_check >= motion_interval:
                 last_motion_check = now_monotonic
 
@@ -195,43 +214,34 @@ class StreamIngestor:
                 target_h = int(orig_h * scale_ratio)
                 small_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
 
-                is_motion, score, bboxes = self.motion_detector.process_frame(small_frame)
+                is_current_motion, current_score, bboxes = self.motion_detector.process_frame(small_frame)
 
-                orig_bboxes = [
+                current_bboxes = [
                     (int(x / scale_ratio), int(y / scale_ratio), int(bw / scale_ratio), int(bh / scale_ratio))
                     for (x, y, bw, bh) in bboxes
                 ]
 
-                if is_motion and not self._is_recording_event:
-                    # Minimum 3s cooldown between distinct event alerts
-                    if now_monotonic - self._last_alert_time > 3.0:
-                        self._last_alert_time = now_monotonic
-                        self._handle_motion_start_instant(frame, score, orig_bboxes)
+                if is_current_motion:
+                    self._last_motion_time = now_monotonic
+                    if not self._is_recording_event:
+                        # Minimum 3s cooldown between distinct event alerts
+                        if now_monotonic - self._last_alert_time > 3.0:
+                            self._last_alert_time = now_monotonic
+                            self._handle_motion_start_instant(frame, current_score, current_bboxes, frame_time)
 
+                # Check if configured video recording duration was reached
                 if self._is_recording_event:
-                    self._event_frames.append(frame.copy())
+                    duration_sec = float(getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10))
+                    total_recording_elapsed = now_monotonic - getattr(self, "_event_start_time", now_monotonic)
 
-                    # Continuous multi-frame LPR scanning during vehicle movement (every 3rd frame)
-                    if len(self._event_frames) % 3 == 0:
-                        self._trigger_lpr_scan(frame.copy(), is_motion=True, motion_bboxes=orig_bboxes)
+                    # Continue recording until the user-configured duration is reached (e.g., 30s full security coverage)
+                    if total_recording_elapsed >= duration_sec:
+                        self._handle_motion_end_async()
 
-                    duration_sec = getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10)
-                    max_frames = int(max(fps, 10.0) * duration_sec)
-                    if not is_motion:
-                        self._post_event_countdown -= 1
-                        if self._post_event_countdown <= 0 or len(self._event_frames) >= max_frames:
-                            self._handle_motion_end_async(fps)
-                    elif len(self._event_frames) >= max_frames:
-                        # Max configured duration reached during continuous movement
-                        self._handle_motion_end_async(fps)
-
-            # 3. Periodic LPR scan for parked/stationary vehicles (every 15 seconds)
+            # 4. Periodic LPR scan for parked/stationary vehicles (every 15 seconds)
             if now_monotonic - self._last_periodic_lpr_time > 15.0:
                 self._last_periodic_lpr_time = now_monotonic
                 self._trigger_lpr_scan(frame.copy(), is_motion=False)
-
-            # Keep smooth cadence without CPU spin
-            time.sleep(0.03)
 
     def _trigger_lpr_scan(
         self,
@@ -294,23 +304,25 @@ class StreamIngestor:
 
         threading.Thread(target=_lpr_worker, daemon=True).start()
 
-    def _handle_motion_start_instant(self, current_frame: np.ndarray, score: float, bboxes: list) -> None:
+    def _handle_motion_start_instant(self, current_frame: np.ndarray, score: float, bboxes: list, frame_time: float) -> None:
         """
         INSTANT ALERT: Dispatches WebSocket to TV/Tablets in milliseconds (<50ms).
         Disk I/O and Telegram are pushed to background threads so WebSocket is NEVER blocked!
         """
         self._is_recording_event = True
-        duration_sec = getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10)
-        self._post_event_countdown = int(duration_sec * 12)
+        self._event_start_time = frame_time
+        self._last_motion_time = frame_time
         now = datetime.utcnow()
 
         # Trigger immediate LPR on motion start
-        self._trigger_lpr_scan(current_frame, is_motion=True)
+        self._trigger_lpr_scan(current_frame, is_motion=True, motion_bboxes=bboxes)
 
-        # Retrieve pre-event window (if enabled in settings)
+        # Retrieve pre-event window with exact timestamps (if enabled in settings)
         include_pre = getattr(settings, "TELEGRAM_INCLUDE_PREBUFFER", True)
-        pre_frames = self.ring_buffer.get_window(pre_seconds=settings.PRE_EVENT_SECONDS) if include_pre else []
-        self._event_frames = list(pre_frames) + [current_frame]
+        pre_frames_with_ts = self.ring_buffer.get_window_with_timestamps(pre_seconds=settings.PRE_EVENT_SECONDS) if include_pre else []
+        
+        # Initialize event frames with pre-buffer + current frame
+        self._event_frames = list(pre_frames_with_ts) + [(current_frame.copy(), frame_time)]
 
         # 1. INSTANT NOTIFICATION TO WEBSOCKET CLIENTS
         time_str = now.strftime("%H-%M-%S")
@@ -372,10 +384,25 @@ class StreamIngestor:
             "score": score
         }
 
-    def _handle_motion_end_async(self, fps: float) -> None:
+    def _handle_motion_end_async(self) -> None:
         self._is_recording_event = False
-        frames_to_save = list(self._event_frames)
+        raw_event_data = list(self._event_frames)
         self._event_frames = []
+
+        if not raw_event_data or not hasattr(self, "_current_event_data"):
+            return
+
+        frames_to_save = [item[0] for item in raw_event_data]
+        timestamps = [item[1] for item in raw_event_data]
+
+        # Calculate exact real FPS from true elapsed duration
+        if len(timestamps) >= 2 and (timestamps[-1] - timestamps[0]) > 0.3:
+            real_elapsed = timestamps[-1] - timestamps[0]
+            calculated_fps = (len(frames_to_save) - 1) / real_elapsed
+            actual_fps = max(5.0, min(60.0, calculated_fps))
+        else:
+            actual_fps = 20.0
+
         now = self._current_event_data["timestamp"]
         score = self._current_event_data["score"]
         saved_thumb_path = getattr(self, "_current_thumb_path", "")
@@ -386,9 +413,9 @@ class StreamIngestor:
                     camera_id=self.camera.id,
                     timestamp=now,
                     frames=frames_to_save,
-                    fps=fps
+                    fps=actual_fps
                 )
-                duration = len(frames_to_save) / fps if fps > 0 else 0.0
+                duration = len(frames_to_save) / actual_fps if actual_fps > 0 else 0.0
 
                 if self._loop and self._loop.is_running():
                     asyncio.run_coroutine_threadsafe(

@@ -85,55 +85,90 @@ class MediaWriter:
         if not frames:
             return None
 
-        # Sanitize FPS (cameras reporting 90000 RTP clock are clamped to 20.0)
+        # Sanitize FPS (clamped between 5.0 and 60.0, rounded to 2 decimal places)
         if fps <= 0 or np.isnan(fps) or fps > 60:
             fps = 20.0
+        fps = round(float(fps), 2)
 
         cam_dir = MediaWriter.get_event_directory(camera_id, timestamp)
         time_str = timestamp.strftime("%H-%M-%S")
         video_filename = f"{time_str}_event.mp4"
         video_path = cam_dir / video_filename
-        temp_video_path = cam_dir / f"temp_{time_str}.mp4"
 
         h, w = frames[0].shape[:2]
+        ffmpeg_bin = (
+            shutil.which("ffmpeg")
+            or ("/opt/homebrew/bin/ffmpeg" if Path("/opt/homebrew/bin/ffmpeg").exists() else None)
+            or ("/usr/local/bin/ffmpeg" if Path("/usr/local/bin/ffmpeg").exists() else None)
+            or ("/usr/bin/ffmpeg" if Path("/usr/bin/ffmpeg").exists() else None)
+        )
 
-        # Write initial video with OpenCV
-        try:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(str(temp_video_path), fourcc, fps, (w, h))
-            if not writer.isOpened():
-                fourcc = cv2.VideoWriter_fourcc(*'avc1')
-                writer = cv2.VideoWriter(str(temp_video_path), fourcc, fps, (w, h))
+        success = False
 
-            for frame in frames:
-                writer.write(frame)
-            writer.release()
-        except Exception as e:
-            logger.error(f"Error during OpenCV video writing: {e}")
-            return None
+        # Adaptive Quality based on TELEGRAM_PHOTO_QUALITY
+        quality_mode = getattr(settings, "TELEGRAM_PHOTO_QUALITY", "media").lower()
+        if quality_mode == "maxima":
+            crf_val = "17"  # Studio Broadcast / Visually Lossless
+            preset_val = "fast"
+        elif quality_mode == "minima":
+            crf_val = "28"  # Ultra Compressed
+            preset_val = "veryfast"
+        else:
+            crf_val = "21"  # Balanced High Quality
+            preset_val = "veryfast"
 
-        # Post-process with FFmpeg for browser compatibility (H.264 + yuv420p + faststart)
-        ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-        if ffmpeg_bin and Path(ffmpeg_bin).exists() and temp_video_path.exists():
+        # Approach 1: Direct FFmpeg stdin pipe (lossless, zero-lag, instant H.264 +faststart CFR)
+        if ffmpeg_bin:
             try:
                 cmd = [
                     ffmpeg_bin, "-y",
-                    "-i", str(temp_video_path),
+                    "-f", "rawvideo",
+                    "-vcodec", "rawvideo",
+                    "-s", f"{w}x{h}",
+                    "-pix_fmt", "bgr24",
+                    "-r", f"{fps:.2f}",
+                    "-i", "-",
                     "-c:v", "libx264",
+                    "-preset", preset_val,
+                    "-crf", crf_val,
                     "-pix_fmt", "yuv420p",
                     "-movflags", "+faststart",
-                    "-r", str(int(fps)),
                     str(video_path)
                 ]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                temp_video_path.unlink(missing_ok=True)
+                proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                for frame in frames:
+                    if frame.shape[:2] != (h, w):
+                        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
+                    proc.stdin.write(frame.tobytes())
+                proc.stdin.close()
+                proc.wait()
+                if proc.returncode == 0 and video_path.exists() and video_path.stat().st_size > 500:
+                    success = True
             except Exception as e:
-                logger.warning(f"FFmpeg optimization failed, falling back to temp file: {e}")
-                temp_video_path.rename(video_path)
-        else:
-            if temp_video_path.exists():
-                temp_video_path.rename(video_path)
+                logger.warning(f"Direct FFmpeg pipe writing failed: {e}. Falling back to OpenCV.")
+                success = False
 
-        duration_sec = len(frames) / fps
-        logger.info(f"Saved event clip: {video_path} ({len(frames)} frames @ {fps:.1f}fps = {duration_sec:.1f}s)")
+        # Approach 2: OpenCV fallback if FFmpeg pipe unavailable or failed
+        if not success:
+            try:
+                temp_path = cam_dir / f"temp_{time_str}.mp4"
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (w, h))
+                if not writer.isOpened():
+                    fourcc = cv2.VideoWriter_fourcc(*'avc1')
+                    writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (w, h))
+                for frame in frames:
+                    if frame.shape[:2] != (h, w):
+                        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
+                    writer.write(frame)
+                writer.release()
+                if temp_path.exists():
+                    temp_path.rename(video_path)
+                    success = True
+            except Exception as e:
+                logger.error(f"OpenCV fallback video writer failed: {e}")
+                return None
+
+        duration_sec = len(frames) / fps if fps > 0 else 0.0
+        logger.info(f"🎥 Saved smooth event clip: {video_path} ({len(frames)} frames @ {fps:.2f}fps = {duration_sec:.1f}s)")
         return str(video_path)

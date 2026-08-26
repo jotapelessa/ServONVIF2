@@ -38,6 +38,13 @@ class SettingsUpdate(BaseModel):
     telegram_watermark_enabled: Optional[bool] = None
     retention_days: Optional[int] = None
     default_buffer_seconds: Optional[int] = None
+    lpr_enabled: Optional[bool] = None
+    lpr_min_confidence: Optional[float] = None
+    lpr_notify_telegram: Optional[bool] = None
+    lpr_notify_tv: Optional[bool] = None
+    lpr_alarm_on_blocked: Optional[bool] = None
+    lpr_motorcycle_enabled: Optional[bool] = None
+    lpr_cooldown_seconds: Optional[int] = None
 
 class TelegramTestPayload(BaseModel):
     bot_token: Optional[str] = None
@@ -158,6 +165,13 @@ async def get_current_settings():
         "telegram_dispatch_mode": settings.TELEGRAM_DISPATCH_MODE,
         "telegram_include_prebuffer": settings.TELEGRAM_INCLUDE_PREBUFFER,
         "telegram_watermark_enabled": settings.TELEGRAM_WATERMARK_ENABLED,
+        "lpr_enabled": settings.LPR_ENABLED,
+        "lpr_min_confidence": settings.LPR_MIN_CONFIDENCE,
+        "lpr_notify_telegram": settings.LPR_NOTIFY_TELEGRAM,
+        "lpr_notify_tv": settings.LPR_NOTIFY_TV,
+        "lpr_alarm_on_blocked": settings.LPR_ALARM_ON_BLOCKED,
+        "lpr_motorcycle_enabled": settings.LPR_MOTORCYCLE_ENABLED,
+        "lpr_cooldown_seconds": settings.LPR_COOLDOWN_SECONDS,
         "processing_paused": camera_manager.is_processing_paused,
         "storage": storage_stats,
         "system_metrics": sys_metrics,
@@ -208,6 +222,34 @@ async def update_settings(payload: SettingsUpdate):
         settings.TELEGRAM_WATERMARK_ENABLED = payload.telegram_watermark_enabled
         await set_system_setting("telegram_watermark_enabled", payload.telegram_watermark_enabled)
 
+    if payload.lpr_enabled is not None:
+        settings.LPR_ENABLED = payload.lpr_enabled
+        await set_system_setting("lpr_enabled", payload.lpr_enabled)
+
+    if payload.lpr_min_confidence is not None:
+        settings.LPR_MIN_CONFIDENCE = payload.lpr_min_confidence
+        await set_system_setting("lpr_min_confidence", payload.lpr_min_confidence)
+
+    if payload.lpr_notify_telegram is not None:
+        settings.LPR_NOTIFY_TELEGRAM = payload.lpr_notify_telegram
+        await set_system_setting("lpr_notify_telegram", payload.lpr_notify_telegram)
+
+    if payload.lpr_notify_tv is not None:
+        settings.LPR_NOTIFY_TV = payload.lpr_notify_tv
+        await set_system_setting("lpr_notify_tv", payload.lpr_notify_tv)
+
+    if payload.lpr_alarm_on_blocked is not None:
+        settings.LPR_ALARM_ON_BLOCKED = payload.lpr_alarm_on_blocked
+        await set_system_setting("lpr_alarm_on_blocked", payload.lpr_alarm_on_blocked)
+
+    if payload.lpr_motorcycle_enabled is not None:
+        settings.LPR_MOTORCYCLE_ENABLED = payload.lpr_motorcycle_enabled
+        await set_system_setting("lpr_motorcycle_enabled", payload.lpr_motorcycle_enabled)
+
+    if payload.lpr_cooldown_seconds is not None:
+        settings.LPR_COOLDOWN_SECONDS = payload.lpr_cooldown_seconds
+        await set_system_setting("lpr_cooldown_seconds", payload.lpr_cooldown_seconds)
+
     if payload.retention_days is not None:
         settings.RETENTION_DAYS = payload.retention_days
         await set_system_setting("retention_days", payload.retention_days)
@@ -230,20 +272,43 @@ async def test_telegram_connection(payload: Optional[TelegramTestPayload] = None
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}
 
+@router.post("/telegram/test-photo")
+async def test_telegram_photo():
+    success, msg = await telegram_service.send_test_photo()
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
+@router.post("/telegram/test-video")
+async def test_telegram_video():
+    success, msg = await telegram_service.send_test_video()
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
+@router.post("/telegram/test-backup")
+async def test_telegram_backup():
+    success, msg = await dispatch_telegram_backup(reason="Disparo Manual de Teste via Painel")
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}
+
 @router.post("/cleanup")
 async def trigger_manual_cleanup():
     deleted_count = await retention_worker.cleanup_old_media()
     return {"message": f"Limpeza concluída com sucesso. {deleted_count} itens antigos processados."}
 
 @router.get("/qr-pairing")
-async def get_pairing_qr_code():
-    local_ip = get_local_ip()
-    img = np.full((260, 420, 3), 20, dtype=np.uint8)
+async def get_pairing_qr_code(host: Optional[str] = None):
+    target_ip = host.strip() if host and host.strip() else get_local_ip()
+    mode_label = "Tailscale Remoto" if host and (host.startswith("100.") or ".ts.net" in host) else "Rede Local (LAN)"
+    img = np.full((260, 440, 3), 18, dtype=np.uint8)
     cv2.putText(img, "ServONVIF Android TV Pairing", (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-    cv2.putText(img, f"Host: {local_ip}:{settings.PORT}", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 120), 1)
-    cv2.putText(img, f"WS: ws://{local_ip}:{settings.PORT}/ws/events", (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
-    cv2.putText(img, "Status: Monitor Ativo (PiP Habilitado)", (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
-    cv2.putText(img, "Digite o IP no aplicativo para parear", (20, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (220, 220, 220), 1)
+    cv2.putText(img, f"Modo: {mode_label}", (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 255), 1)
+    cv2.putText(img, f"Host: {target_ip}:{settings.PORT}", (20, 105), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 120), 1)
+    cv2.putText(img, f"WS: ws://{target_ip}:{settings.PORT}/ws/events", (20, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
+    cv2.putText(img, "Status: Monitor Ativo (PiP Habilitado)", (20, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
+    cv2.putText(img, "Digite o IP no aplicativo para parear", (20, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (220, 220, 220), 1)
 
     _, png = cv2.imencode('.png', img)
     return Response(content=png.tobytes(), media_type="image/png")
@@ -685,4 +750,19 @@ async def import_configuration(backup_payload: dict, db: AsyncSession = Depends(
         "vehicles_restored": vehicles_restored,
         "devices_restored": devices_restored,
     }
+
+
+# =========================================================================
+# 🌐 TAILSCALE WIREGUARD MESH INTEGRATION
+# =========================================================================
+
+@router.get("/tailscale")
+async def get_tailscale_status():
+    """
+    Returns real-time status of the Tailscale mesh network, 100.x IP address,
+    MagicDNS hostname, connected peers, and installation commands.
+    """
+    from engine.services.tailscale_service import tailscale_service
+    return tailscale_service.get_status()
+
 

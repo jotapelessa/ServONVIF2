@@ -61,6 +61,26 @@ class CircularRingBuffer:
 
         return [item.packet for item in packets[start_idx:]]
 
+    def get_window_with_timestamps(self, pre_seconds: float = 3.0) -> List[Tuple[Any, float]]:
+        """
+        Retrieves (packet, timestamp) pairs from (now - pre_seconds) to present.
+        """
+        now = time.time()
+        start_target = now - pre_seconds
+
+        with self._lock:
+            if not self._buffer:
+                return []
+            packets = list(self._buffer)
+
+        start_idx = 0
+        for i, item in enumerate(packets):
+            if item.timestamp >= start_target:
+                start_idx = i
+                break
+
+        return [(item.packet, item.timestamp) for item in packets[start_idx:]]
+
     def clear(self) -> None:
         with self._lock:
             self._buffer.clear()

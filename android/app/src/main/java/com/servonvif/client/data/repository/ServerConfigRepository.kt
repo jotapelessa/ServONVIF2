@@ -2,6 +2,7 @@ package com.servonvif.client.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.servonvif.client.data.model.ServerNode
 
 class ServerConfigRepository(context: Context) {
 
@@ -60,13 +61,48 @@ class ServerConfigRepository(context: Context) {
         get() = prefs.getBoolean(KEY_MOSAIC_NATIVE, true)
         set(value) = prefs.edit().putBoolean(KEY_MOSAIC_NATIVE, value).apply()
 
+    // --- Multi-Server (Multi-Hub / Multi-Site / Tailscale) Support ---
+    var serverNodes: List<ServerNode>
+        get() {
+            val json = prefs.getString(KEY_SERVER_NODES, null)
+            if (json.isNullOrBlank()) {
+                val primaryName = if (isTailscaleIp(serverIp)) "Tailscale Remoto" else "Servidor Principal"
+                return listOf(ServerNode(id = "primary", name = primaryName, ip = serverIp, port = serverPort, isEnabled = true))
+            }
+            return try {
+                val type = object : com.google.gson.reflect.TypeToken<List<ServerNode>>() {}.type
+                val list: List<ServerNode>? = com.google.gson.Gson().fromJson(json, type)
+                if (list.isNullOrEmpty()) {
+                    listOf(ServerNode(id = "primary", name = "Servidor Principal", ip = serverIp, port = serverPort, isEnabled = true))
+                } else {
+                    list
+                }
+            } catch (e: Exception) {
+                listOf(ServerNode(id = "primary", name = "Servidor Principal", ip = serverIp, port = serverPort, isEnabled = true))
+            }
+        }
+        set(value) {
+            val json = com.google.gson.Gson().toJson(value)
+            prefs.edit().putString(KEY_SERVER_NODES, json).apply()
+            val activeFirst = value.firstOrNull { it.isEnabled } ?: value.firstOrNull()
+            if (activeFirst != null) {
+                serverIp = activeFirst.ip
+                serverPort = activeFirst.port
+            }
+        }
+
+    fun isTailscaleIp(ip: String): Boolean {
+        val trimmed = ip.trim()
+        return trimmed.startsWith("100.") || trimmed.contains(".ts.net")
+    }
+
     val httpBaseUrl: String
         get() = "http://$serverIp:$serverPort"
 
     val wsBaseUrl: String
         get() = "ws://$serverIp:$serverPort/ws/events"
 
-    fun getWsUrlWithDeviceIdentity(context: Context): String {
+    fun getWsUrlWithDeviceIdentity(context: Context, customIp: String = serverIp, customPort: Int = serverPort): String {
         return try {
             val devId = HardwareIdHelper.getPersistentDeviceId(context)
             val devType = HardwareIdHelper.getDeviceType()
@@ -81,20 +117,22 @@ class ServerConfigRepository(context: Context) {
             val encodedMac = java.net.URLEncoder.encode(mac, "UTF-8")
             val encodedFp = java.net.URLEncoder.encode(fingerprint, "UTF-8")
 
-            "$wsBaseUrl?device_id=$encodedDevId&device_name=$encodedName&device_type=$encodedType&manufacturer_model=$encodedModel&mac_address=$encodedMac&hardware_fingerprint=$encodedFp"
+            val baseWs = "ws://$customIp:$customPort/ws/events"
+            "$baseWs?device_id=$encodedDevId&device_name=$encodedName&device_type=$encodedType&manufacturer_model=$encodedModel&mac_address=$encodedMac&hardware_fingerprint=$encodedFp"
         } catch (e: Exception) {
-            wsBaseUrl
+            "ws://$customIp:$customPort/ws/events"
         }
     }
 
-    fun getMjpegStreamUrl(cameraId: Int): String {
-        return "$httpBaseUrl/api/mjpeg/$cameraId"
+    fun getMjpegStreamUrl(cameraId: Int, customBaseUrl: String = httpBaseUrl): String {
+        return "$customBaseUrl/api/mjpeg/$cameraId"
     }
 
     companion object {
         private const val PREFS_NAME = "servonvif_tv_prefs"
         private const val KEY_SERVER_IP = "server_ip"
         private const val KEY_SERVER_PORT = "server_port"
+        private const val KEY_SERVER_NODES = "server_nodes_json"
         private const val KEY_PIP_DURATION = "pip_duration"
         private const val KEY_PIP_POSITION = "pip_position"
         private const val KEY_PIP_SIZE = "pip_size"

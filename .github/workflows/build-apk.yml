@@ -1,4 +1,4 @@
-name: Build & Release Android APK (Mobile & TV)
+name: Build & Release Android APK (Universal Mobile & TV)
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: '17'
         distribution: 'temurin'
@@ -27,11 +27,11 @@ jobs:
       uses: android-actions/setup-android@v3
 
     - name: Setup Gradle 8.6
-      uses: gradle/actions/setup-gradle@v3
+      uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: '8.6'
 
-    - name: Build Debug APK
+    - name: Build Universal APK
       run: |
         cd android
         gradle assembleDebug --no-daemon
@@ -39,27 +39,30 @@ jobs:
     - name: Upload APK to Workflow Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ServONVIF-Android-Debug-APK
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        name: ServONVIF-Universal-APK
+        path: android/app/build/outputs/apk/debug/*.apk
 
     - name: Publish to GitHub Releases
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.1.0
-        name: "ServONVIF Android TV & Mobile v1.1.0 (APK Oficial)"
+        tag_name: v1.1.1
+        name: "ServONVIF Universal v1.1.1 (Smartphone Android 14+ & Smart TV)"
         body: |
-          ### 🛡️ ServONVIF TV Command Center v1.1.0
+          ### 🛡️ ServONVIF Universal v1.1.1 (APK Oficial)
           
-          Esta versão traz a **Central de Segurança Completa** para Smart TVs:
+          Esta versão universal traz compatibilidade total com **Smartphones Android (Moto G56, Samsung, Xiaomi)**, **Tablets** e **Smart TVs / TV Boxes**:
           
-          - 🎛️ **Menu e Navegação por Controle Remoto**: Alternância suave entre Câmeras, Status, Testes e Ajustes.
-          - 📊 **Cards de Status em Tempo Real**: Monitoramento de conexão com o Mac, túnel WebSocket e contagem de câmeras.
-          - 🧪 **Laboratório de Testes**: Botões interativos para testar Janela PiP (10s), som Chime, Ping de rede e Notificações Heads-Up.
-          - 🚀 **Disparo Instantâneo**: Suporte nativo a `FullScreenIntent` e permissões de sobreposição no Android 10+.
+          - 📱 **Compatibilidade Universal com Smartphones (Android 14/15+)**: Instalação e execução 100% livres de erros no Moto G56 e aparelhos recentes.
+          - 📳 **Alertas Hápticos (Vibração) & Notificações Heads-Up**: Alertas vibratórios em tempo real no celular quando houver movimento ou leitura de placa (LPR).
+          - 📺 **Central Smart TV 4K / D-Pad**: Navegação suave por controle remoto com anéis de foco iluminados e mosaico multitelas nativo.
+          - 🔲 **Toolbar Responsiva**: Grade, Patrulha, Ajuste de Proporção (Cover/Contain), OSD e Modo Nativo/Web adaptáveis para qualquer tamanho de tela.
+          - 🚀 **Assinatura V1 + V2 + V3**: Pacote APK pré-assinado e verificado para instalação direta em qualquer dispositivo Android (API 26+).
           
-          **Download direto abaixo:** 👇
+          **Download direto do APK abaixo:** 👇
         draft: false
         prerelease: false
-        files: android/app/build/outputs/apk/debug/app-debug.apk
+        files: android/app/build/outputs/apk/debug/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+

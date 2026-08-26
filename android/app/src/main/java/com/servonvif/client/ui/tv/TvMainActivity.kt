@@ -30,11 +30,13 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.model.CameraModel
+import com.servonvif.client.data.repository.HardwareIdHelper
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
 import com.servonvif.client.service.MonitoringForegroundService
@@ -46,7 +48,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
 
-class TvMainActivity : Activity() {
+class TvMainActivity : AppCompatActivity() {
 
     private lateinit var configRepo: ServerConfigRepository
     private lateinit var apiClient: ServOnvifApiClient

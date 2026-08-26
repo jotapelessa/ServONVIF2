@@ -65,8 +65,7 @@ class MonitoringForegroundService : Service() {
     private fun startWebSocketMonitoring() {
         try {
             wsManager?.stop()
-            val serverUrl = configRepo.getWsUrlWithDeviceIdentity(this)
-            wsManager = WebSocketManager(serverUrl) { event ->
+            wsManager = WebSocketManager(this) { event ->
                 handleIncomingAlert(event)
             }
             wsManager?.start()
@@ -93,6 +92,14 @@ class MonitoringForegroundService : Service() {
             }
         }
 
+        val effectiveMjpegUrl = if (!event.mjpegUrl.isNullOrBlank() && event.mjpegUrl.startsWith("http")) {
+            event.mjpegUrl
+        } else if (!event.serverBaseUrl.isNullOrBlank()) {
+            "${event.serverBaseUrl}/api/mjpeg/${event.cameraId}"
+        } else {
+            configRepo.getMjpegStreamUrl(event.cameraId)
+        }
+
         // 2. Pure WindowManager Floating Overlay (Non-Invasive, Zero Disruption to Third-Party Apps like SBT)
         val hasOverlayPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
         if (hasOverlayPermission) {
@@ -100,9 +107,10 @@ class MonitoringForegroundService : Service() {
             floatingOverlayManager.showFloatingAlert(
                 cameraId = event.cameraId,
                 cameraName = event.cameraName,
-                mjpegUrl = event.mjpegUrl,
+                mjpegUrl = effectiveMjpegUrl,
                 score = event.score,
-                durationSeconds = configRepo.pipDurationSeconds
+                durationSeconds = configRepo.pipDurationSeconds,
+                siteName = event.siteName
             )
             return
         }
@@ -126,6 +134,21 @@ class MonitoringForegroundService : Service() {
             alertIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        // Vibrate smartphone if available
+        try {
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(350, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(350)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore vibration errors
+        }
 
         try {
             val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)

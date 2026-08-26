@@ -16,6 +16,11 @@ export function generateStaticParams() {
     { tab: "motor" },
     { tab: "tests" },
     { tab: "testes" },
+    { tab: "guia" },
+    { tab: "guide" },
+    { tab: "cameras" },
+    { tab: "tutorial" },
+    { tab: "aitek" },
   ];
 }
 

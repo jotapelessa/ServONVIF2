@@ -118,15 +118,89 @@ async def delete_vehicle(vehicle_id: int, session: AsyncSession = Depends(get_db
     asyncio.create_task(dispatch_telegram_backup(reason=f"Veículo Excluído: {plate_name}"))
     return {"success": True, "message": f"Veículo {plate_name} removido com sucesso."}
 
+@router.get("/stats")
+async def get_vehicle_stats(session: AsyncSession = Depends(get_db)):
+    """Retorna métricas em tempo real sobre veículos e detecções LPR"""
+    from sqlalchemy import func
+    from datetime import date
+
+    # Total vehicles count
+    res_veh = await session.execute(select(Vehicle))
+    all_veh = res_veh.scalars().all()
+    
+    total = len(all_veh)
+    moradores = sum(1 for v in all_veh if v.category == "MORADOR")
+    visitantes = sum(1 for v in all_veh if v.category in ("VISITANTE", "PRESTADOR"))
+    bloqueados = sum(1 for v in all_veh if v.category == "BLOQUEADO")
+
+    # Logs today
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    res_logs_today = await session.execute(
+        select(func.count(PlateDetectionLog.id)).where(PlateDetectionLog.detected_at >= today_start)
+    )
+    logs_today = res_logs_today.scalar() or 0
+
+    # Total all logs
+    res_total_logs = await session.execute(select(func.count(PlateDetectionLog.id)))
+    total_logs = res_total_logs.scalar() or 0
+
+    # Last plate detected
+    res_last = await session.execute(
+        select(PlateDetectionLog).order_by(PlateDetectionLog.detected_at.desc()).limit(1)
+    )
+    last_log = res_last.scalars().first()
+
+    return {
+        "total_vehicles": total,
+        "moradores_count": moradores,
+        "visitantes_count": visitantes,
+        "bloqueados_count": bloqueados,
+        "logs_today": logs_today,
+        "total_logs": total_logs,
+        "last_detected_plate": last_log.plate_number if last_log else None,
+        "last_detected_at": last_log.detected_at.isoformat() if last_log else None,
+        "last_owner_name": last_log.owner_name if last_log else None,
+    }
+
 @router.get("/logs", response_model=List[PlateDetectionLog])
 async def list_plate_logs(
-    limit: int = 50,
+    limit: int = 100,
     session: AsyncSession = Depends(get_db)
 ):
     """Lista os últimos registros de placas detectadas pelas câmeras"""
     statement = select(PlateDetectionLog).order_by(PlateDetectionLog.detected_at.desc()).limit(limit)
     result = await session.execute(statement)
     return result.scalars().all()
+
+@router.delete("/logs/clear/all")
+@router.delete("/logs/clear-all")
+@router.delete("/logs/clear")
+async def clear_all_plate_logs(session: AsyncSession = Depends(get_db)):
+    """Limpa todo o histórico de logs de placas detectadas"""
+    try:
+        from sqlalchemy import delete
+        await session.execute(delete(PlateDetectionLog))
+        await session.commit()
+        return {"success": True, "message": "Histórico de placas limpo com sucesso."}
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Falha ao limpar histórico de placas: {str(e)}"
+        )
+
+@router.delete("/logs/{log_id}")
+async def delete_plate_log(log_id: int, session: AsyncSession = Depends(get_db)):
+    """Exclui um registro individual do histórico de placas"""
+    statement = select(PlateDetectionLog).where(PlateDetectionLog.id == log_id)
+    result = await session.execute(statement)
+    item = result.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Registro não encontrado.")
+    
+    await session.delete(item)
+    await session.commit()
+    return {"success": True, "message": "Registro excluído com sucesso."}
 
 @router.post("/simulate-plate")
 async def simulate_plate_detection(

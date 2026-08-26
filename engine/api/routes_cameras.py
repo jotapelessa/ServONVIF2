@@ -180,3 +180,110 @@ async def capture_camera_snapshot(
         "thumbnail_path": thumb_path,
         "message": f"Snapshot em alta resolução capturado com sucesso para {camera.name}!"
     }
+
+
+# ================= ONVIF HARDWARE MANAGEMENT ENDPOINTS =================
+
+class OnvifImagingPayload(BaseModel):
+    brightness: Optional[float] = None
+    contrast: Optional[float] = None
+    color_saturation: Optional[float] = None
+    sharpness: Optional[float] = None
+    ir_cut_filter: Optional[str] = None
+    wdr: Optional[str] = None
+
+
+@router.get("/{camera_id}/onvif/imaging")
+async def get_camera_onvif_imaging(camera_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Queries current ONVIF brightness, contrast, saturation, sharpness and IR night vision settings.
+    """
+    from engine.services.onvif_service import onvif_service
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    ip = camera.ip_address or "127.0.0.1"
+    port = camera.onvif_port or 80
+    return await onvif_service.get_imaging_settings(
+        ip=ip,
+        port=port,
+        username=camera.username,
+        password=camera.password
+    )
+
+
+@router.post("/{camera_id}/onvif/imaging")
+async def set_camera_onvif_imaging(
+    camera_id: int,
+    payload: OnvifImagingPayload,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Applies image and night vision adjustments directly to camera hardware via ONVIF.
+    """
+    from engine.services.onvif_service import onvif_service
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    ip = camera.ip_address or "127.0.0.1"
+    port = camera.onvif_port or 80
+    res = await onvif_service.set_imaging_settings(
+        ip=ip,
+        port=port,
+        username=camera.username,
+        password=camera.password,
+        brightness=payload.brightness,
+        contrast=payload.contrast,
+        color_saturation=payload.color_saturation,
+        sharpness=payload.sharpness,
+        ir_cut_filter=payload.ir_cut_filter,
+        wdr=payload.wdr
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("message", "Falha ao aplicar ajustes ONVIF"))
+    return res
+
+
+@router.post("/{camera_id}/onvif/reboot")
+async def reboot_camera_hardware(camera_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Gracefully restarts the camera hardware via ONVIF SystemReboot.
+    """
+    from engine.services.onvif_service import onvif_service
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    ip = camera.ip_address or "127.0.0.1"
+    port = camera.onvif_port or 80
+    res = await onvif_service.reboot_camera(
+        ip=ip,
+        port=port,
+        username=camera.username,
+        password=camera.password
+    )
+    return res
+
+
+@router.post("/{camera_id}/onvif/sync-time")
+async def sync_camera_time(camera_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Synchronizes camera date and clock with host server time via ONVIF.
+    """
+    from engine.services.onvif_service import onvif_service
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    ip = camera.ip_address or "127.0.0.1"
+    port = camera.onvif_port or 80
+    res = await onvif_service.sync_camera_time(
+        ip=ip,
+        port=port,
+        username=camera.username,
+        password=camera.password
+    )
+    return res
+

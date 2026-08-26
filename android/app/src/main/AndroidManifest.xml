@@ -3,21 +3,34 @@
     <!-- Essential Network & Background Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <!-- Android TV Leanback & Touchscreen Hardware Configurations -->
+    <!-- Universal Hardware & Software Configurations (Smartphone, Tablet & Android TV) -->
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
     <uses-feature
         android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.wifi"
         android:required="false" />
 
     <application
@@ -37,7 +50,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- TV & Tablet Boot Completed Receiver -->
+        <!-- TV, Tablet & Phone Boot Completed Receiver -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
@@ -53,12 +66,14 @@
             android:name=".ui.tv.TvMainActivity"
             android:exported="true"
             android:label="ServONVIF Central"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ServONVIF">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
@@ -80,6 +95,7 @@
             android:name=".ui.tv.TvPlayerActivity"
             android:exported="false"
             android:label="ServONVIF Player"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.ServONVIF" />
 
         <!-- Settings Screen Activity -->
@@ -87,6 +103,7 @@
             android:name=".ui.tv.TvSettingsActivity"
             android:exported="false"
             android:label="ServONVIF Configurações"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.ServONVIF" />
 
     </application>

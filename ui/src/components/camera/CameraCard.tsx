@@ -43,10 +43,10 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
       }`}
     >
       {/* Top HUD Header */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/90 via-black/50 to-transparent gap-2">
         {/* Name & Dot */}
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="relative flex h-2 w-2 shrink-0">
             <span
               className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                 isAlarming ? "bg-rose-400" : "bg-emerald-400"
@@ -58,18 +58,18 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
               }`}
             />
           </span>
-          <div className="flex flex-col">
-            <span className="text-xs font-bold text-white truncate max-w-[150px] drop-shadow">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-bold text-white truncate drop-shadow">
               {camera.name}
             </span>
-            <span className="text-[10px] text-slate-300 font-mono drop-shadow">
+            <span className="text-[10px] text-slate-300 font-mono drop-shadow truncate">
               {camera.ip_address || "RTSP"} &bull; {((camera.sensitivity || 0.03) * 100).toFixed(0)}% MOG2
             </span>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {snapFeedback && (
             <span className="text-[9px] bg-emerald-500/90 text-white font-bold px-1.5 py-0.5 rounded shadow animate-in fade-in">
               {snapFeedback}

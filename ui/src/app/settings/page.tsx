@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { apiClient, API_BASE, SettingsResponse } from "@/lib/api-client";
+import { apiClient, API_BASE, SettingsResponse, TailscaleStatus } from "@/lib/api-client";
 import {
   ArrowLeft,
   Bell,
@@ -56,9 +56,26 @@ import {
   Film,
   Gauge,
   Eye,
+  ShieldAlert,
+  ShieldCheck,
+  FileText,
+  Filter,
+  Users,
+  Ban,
+  FileDown,
+  Edit3,
+  BookOpen,
+  Network,
+  Loader2,
+  Globe,
+  ExternalLink,
+  Calculator,
+  Server,
 } from "lucide-react";
 
-const TAB_SLUG_MAP: Record<string, "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup"> = {
+type SettingsTab = "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup" | "guide";
+
+const TAB_SLUG_MAP: Record<string, SettingsTab> = {
   vehicles: "vehicles",
   placas: "vehicles",
   lpr: "vehicles",
@@ -83,6 +100,13 @@ const TAB_SLUG_MAP: Record<string, "vehicles" | "devices" | "tests" | "logs" | "
   backup: "backup",
   sistema: "backup",
   restauracao: "backup",
+  guide: "guide",
+  guia: "guide",
+  cameras: "guide",
+  tutorial: "guide",
+  aitek: "guide",
+  onvif: "guide",
+  rtsp: "guide",
 };
 
 const TAB_REVERSE_MAP: Record<string, string> = {
@@ -95,17 +119,18 @@ const TAB_REVERSE_MAP: Record<string, string> = {
   storage: "storage",
   engine: "engine",
   backup: "backup",
+  guide: "guia",
 };
 
 export default function SettingsPage({ initialTab }: { initialTab?: string }) {
-  const [activeTab, setActiveTab] = useState<"vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup">(() => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     if (initialTab && TAB_SLUG_MAP[initialTab.toLowerCase()]) {
       return TAB_SLUG_MAP[initialTab.toLowerCase()];
     }
     return "vehicles";
   });
 
-  const handleSwitchTab = (tab: "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup") => {
+  const handleSwitchTab = (tab: SettingsTab) => {
     setActiveTab(tab);
     const slug = TAB_REVERSE_MAP[tab] || tab;
     if (typeof window !== "undefined") {
@@ -150,7 +175,10 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [plateLogs, setPlateLogs] = useState<any[]>([]);
   const [plateLogsLoading, setPlateLogsLoading] = useState(false);
+  const [vehicleStats, setVehicleStats] = useState<any>(null);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
   const [newPlateNumber, setNewPlateNumber] = useState("");
   const [newOwnerName, setNewOwnerName] = useState("");
   const [newVehicleModel, setNewVehicleModel] = useState("");
@@ -159,8 +187,19 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [simulatingPlate, setSimulatingPlate] = useState(false);
   const [simulatedPlateResult, setSimulatedPlateResult] = useState<any>(null);
   const [testPlateInput, setTestPlateInput] = useState("BRA2E19");
+  const [testPlateVehicleType, setTestPlateVehicleType] = useState<"CAR" | "MOTO">("CAR");
   const [vehicleSearchTerm, setVehicleSearchTerm] = useState("");
   const [vehicleCategoryFilter, setVehicleCategoryFilter] = useState("ALL");
+  const [vehicleViewMode, setVehicleViewMode] = useState<"grid" | "table">("grid");
+
+  // LPR Engine Configuration State
+  const [lprEnabled, setLprEnabled] = useState(true);
+  const [lprMinConfidence, setLprMinConfidence] = useState(0.70);
+  const [lprNotifyTelegram, setLprNotifyTelegram] = useState(true);
+  const [lprNotifyTv, setLprNotifyTv] = useState(true);
+  const [lprAlarmOnBlocked, setLprAlarmOnBlocked] = useState(true);
+  const [lprMotorcycleEnabled, setLprMotorcycleEnabled] = useState(true);
+  const [lprCooldownSeconds, setLprCooldownSeconds] = useState(30);
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -182,6 +221,9 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
   // Action status
   const [testingTelegram, setTestingTelegram] = useState(false);
+  const [testingPhoto, setTestingPhoto] = useState(false);
+  const [testingVideo, setTestingVideo] = useState(false);
+  const [testingBackup, setTestingBackup] = useState(false);
   const [telegramTestResult, setTelegramTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [runningCleanup, setRunningCleanup] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);
@@ -217,6 +259,179 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [togglingProcessing, setTogglingProcessing] = useState(false);
   const [processingFeedback, setProcessingFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Camera Guide Tab State
+  const [guideTestUrl, setGuideTestUrl] = useState("rtsp://admin:admin@192.168.1.50:554/stream0");
+  const [guideTesting, setGuideTesting] = useState(false);
+  const [guideTestResult, setGuideTestResult] = useState<{ success: boolean; message: string; latency_ms?: number } | null>(null);
+  const [copiedGuideKey, setCopiedGuideKey] = useState<string | null>(null);
+
+  const handleCopyGuideText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedGuideKey(key);
+    setTimeout(() => setCopiedGuideKey(null), 2500);
+  };
+
+  const handleTestGuideRtsp = async () => {
+    if (!guideTestUrl) return;
+    setGuideTesting(true);
+    setGuideTestResult(null);
+    try {
+      const res = await apiClient.testRTSP(guideTestUrl);
+      setGuideTestResult(res);
+    } catch (e: any) {
+      setGuideTestResult({
+        success: false,
+        message: e.message || "Falha ao conectar no fluxo RTSP da câmera",
+      });
+    } finally {
+      setGuideTesting(false);
+    }
+  };
+
+  // Hardware & Network Dimensioning Calculator State (1 to 50 Cameras)
+  const [calcCameras, setCalcCameras] = useState<number>(4);
+  const [calcResolution, setCalcResolution] = useState<"1080p" | "5mp" | "4k">("5mp");
+  const [calcFps, setCalcFps] = useState<number>(20);
+  const [calcRecordingMode, setCalcRecordingMode] = useState<"motion" | "continuous">("motion");
+  const [calcRetentionDays, setCalcRetentionDays] = useState<number>(7);
+  const [copiedSetupSummary, setCopiedSetupSummary] = useState(false);
+
+  // Dimensioning Calculation Logic
+  const getDimensioningResults = () => {
+    // Bitrate per camera in Mbps
+    const baseBitrateMbps = calcResolution === "1080p" 
+      ? (calcFps === 15 ? 1.5 : calcFps === 20 ? 2.0 : 3.0)
+      : calcResolution === "5mp"
+      ? (calcFps === 15 ? 3.0 : calcFps === 20 ? 4.0 : 5.5)
+      : (calcFps === 15 ? 6.0 : calcFps === 20 ? 8.0 : 12.0); // 4K
+
+    const totalBandwidthMbps = Math.round(calcCameras * baseBitrateMbps * 10) / 10;
+
+    // Daily storage per camera in GB
+    // (Bitrate_kbps * 3600 * 24) / (8 * 1024 * 1024)
+    const continuousDailyGbPerCam = (baseBitrateMbps * 1000 * 3600 * 24) / (8 * 1024 * 1024);
+    const motionDutyCycle = 0.20; // 20% motion activity average per day
+    const effectiveDailyGbPerCam = calcRecordingMode === "continuous" 
+      ? continuousDailyGbPerCam 
+      : continuousDailyGbPerCam * motionDutyCycle;
+
+    const totalStorageGb = Math.ceil(effectiveDailyGbPerCam * calcCameras * calcRetentionDays * 1.15); // +15% safety headroom
+    const totalStorageTb = (totalStorageGb / 1024).toFixed(1);
+
+    // RAM calculation (Base OS/FastAPI + PyAV/OpenCV Frame Buffers + AI/LPR + Pre-buffer + Page Cache)
+    const frameBufferMbPerCam = calcResolution === "1080p" ? 70 : calcResolution === "5mp" ? 150 : 260;
+    const motionAiMbPerCam = 80;
+    const prebufferMbPerCam = (baseBitrateMbps / 8) * 5;
+    const diskPageCacheMbPerCam = 180;
+    const totalMbPerCam = frameBufferMbPerCam + motionAiMbPerCam + prebufferMbPerCam + diskPageCacheMbPerCam;
+
+    const baseSystemRamGb = 3.0; // Base OS + Python + AI Engine
+    const totalWorkingRamGb = baseSystemRamGb + (calcCameras * totalMbPerCam) / 1024;
+
+    // Map to standard commercial RAM sticks (8, 16, 32, 64, 128 GB)
+    let minRamGb = 8;
+    let recRamGb = 16;
+
+    if (calcCameras <= 4) {
+      minRamGb = 8;
+      recRamGb = 16;
+    } else if (calcCameras <= 8) {
+      minRamGb = 16;
+      recRamGb = 32;
+    } else if (calcCameras <= 16) {
+      minRamGb = 32;
+      recRamGb = 32;
+    } else if (calcCameras <= 32) {
+      minRamGb = 32;
+      recRamGb = 64;
+    } else {
+      minRamGb = 64;
+      recRamGb = 128;
+    }
+
+    // SSD NVMe (OS + SQLite WAL DB + Thumbnails)
+    const recSsdGb = calcCameras <= 4 ? 256 : calcCameras <= 16 ? 512 : calcCameras <= 32 ? 1000 : 2000;
+
+    // HDD Recommendation
+    const recHddTb = Math.max(1, Math.ceil(Number(totalStorageTb)));
+
+    // Internet Upload Speed (Telegram burst + Remote Tailscale PiP)
+    const minUploadMbps = Math.max(15, Math.ceil(baseBitrateMbps * 2 + 5));
+    const recUploadMbps = Math.max(30, Math.ceil(baseBitrateMbps * 4 + 20));
+
+    // Network Switch
+    const switchType = calcCameras <= 4 
+      ? "Switch PoE 4/8 Portas 10/100M ou Gigabit (60W)"
+      : calcCameras <= 8
+      ? "Switch Gigabit PoE 8 Portas (120W, 802.3at)"
+      : calcCameras <= 16
+      ? "Switch Gigabit PoE+ 16 Portas Gerenciável (250W)"
+      : calcCameras <= 32
+      ? "Switch Gigabit PoE+ 24/32 Portas com Uplink SFP+ 10G (380W+)"
+      : "Switch Central 48 Portas Gigabit PoE+ (750W) + VLAN CFTV + Uplink 10G";
+
+    // CPU Profile
+    const cpuProfile = calcCameras <= 4
+      ? { title: "Intel N100 / Mac Mini M1/M2 / Core i3 8ª+ / RPi 5", note: "Consumo ultra-baixo (6W a 15W), ideal para residência." }
+      : calcCameras <= 8
+      ? { title: "Intel Core i5 (10ª-14ª ger.) QuickSync / Ryzen 5 / Apple M1/M2/M3", note: "Excelente para decodificação H.264 por hardware via QuickSync." }
+      : calcCameras <= 16
+      ? { title: "Intel Core i7 / AMD Ryzen 7 / Mac Studio / Xeon E-2200", note: "Ideal para processamento com LPR (leitura de placas) em tempo real." }
+      : calcCameras <= 32
+      ? { title: "Intel Core i9 / Ryzen 9 + GPU NVIDIA GTX 1660 / RTX 3060", note: "Aceleração NVENC por GPU dedicada para 32 câmeras sem sobrecarregar a CPU." }
+      : { title: "Dual Xeon / AMD EPYC / Core i9 + 1-2x GPUs NVIDIA RTX 4060 / A2000", note: "Servidor corporativo de alta densidade para 50 câmeras 24/7." };
+
+    return {
+      baseBitrateMbps,
+      totalBandwidthMbps,
+      totalStorageGb,
+      totalStorageTb,
+      minRamGb,
+      recRamGb,
+      recSsdGb,
+      recHddTb,
+      minUploadMbps,
+      recUploadMbps,
+      switchType,
+      cpuProfile,
+    };
+  };
+
+  const handleCopySetupSummary = () => {
+    const r = getDimensioningResults();
+    const text = `🛠️ SETUP RECOMENDADO SERVONVIF (${calcCameras} CÂMERAS ${calcResolution.toUpperCase()} @ ${calcFps}FPS)
+• Câmeras: ${calcCameras}x ${calcResolution.toUpperCase()} (${calcFps} FPS, ${calcRecordingMode === "motion" ? "Gravação por Movimento" : "Gravação Contínua"})
+• Retenção Desejada: ${calcRetentionDays} dias (${r.totalStorageTb} TB de vídeo)
+• Processador (CPU): ${r.cpuProfile.title}
+• Memória RAM: Mínimo ${r.minRamGb} GB | Recomendado ${r.recRamGb} GB DDR4/DDR5
+• Armazenamento SSD: ${r.recSsdGb} GB NVMe M.2 (Sistema, Banco SQLite e Thumbnails)
+• Armazenamento HDD: ${r.recHddTb} TB Surveillance (WD Purple ou Seagate SkyHawk)
+• Rede Local (LAN): ${r.switchType} (Banda: ${r.totalBandwidthMbps} Mbps)
+• Upload de Internet: Mínimo ${r.minUploadMbps} Mbps | Recomendado ${r.recUploadMbps} Mbps (Telegram + Tailscale)`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedSetupSummary(true);
+    setTimeout(() => setCopiedSetupSummary(false), 2500);
+  };
+
+  // Tailscale State
+  const [tailscaleData, setTailscaleData] = useState<TailscaleStatus | null>(null);
+  const [tailscaleLoading, setTailscaleLoading] = useState(false);
+  const [tvPairingMode, setTvPairingMode] = useState<"local" | "tailscale">("local");
+  const [showTailscaleGuide, setShowTailscaleGuide] = useState(false);
+
+  const fetchTailscaleStatus = async () => {
+    setTailscaleLoading(true);
+    try {
+      const data = await apiClient.getTailscaleStatus();
+      setTailscaleData(data);
+    } catch (e) {
+      console.error("Failed to load Tailscale status:", e);
+    } finally {
+      setTailscaleLoading(false);
+    }
+  };
+
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -234,9 +449,17 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         setTelegramDispatchMode((data.telegram_dispatch_mode as any) || "all");
         setTelegramIncludePrebuffer(data.telegram_include_prebuffer ?? true);
         setTelegramWatermarkEnabled(data.telegram_watermark_enabled ?? true);
+        setLprEnabled(data.lpr_enabled ?? true);
+        setLprMinConfidence(data.lpr_min_confidence ?? 0.70);
+        setLprNotifyTelegram(data.lpr_notify_telegram ?? true);
+        setLprNotifyTv(data.lpr_notify_tv ?? true);
+        setLprAlarmOnBlocked(data.lpr_alarm_on_blocked ?? true);
+        setLprMotorcycleEnabled(data.lpr_motorcycle_enabled ?? true);
+        setLprCooldownSeconds(data.lpr_cooldown_seconds ?? 30);
         setRetentionDays(data.retention_days || 7);
         setBufferSeconds(data.default_buffer_seconds || 5);
         setIsProcessingPaused(data.processing_paused ?? false);
+        fetchTailscaleStatus();
       } catch (e) {
         console.error("Failed to load settings:", e);
       } finally {
@@ -328,6 +551,15 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     }
   };
 
+  const fetchVehicleStats = async () => {
+    try {
+      const data = await apiClient.getVehicleStats();
+      setVehicleStats(data);
+    } catch (e) {
+      console.error("Failed to load vehicle stats:", e);
+    }
+  };
+
   const fetchVehicles = async () => {
     setVehiclesLoading(true);
     try {
@@ -343,7 +575,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const fetchPlateLogs = async () => {
     setPlateLogsLoading(true);
     try {
-      const data = await apiClient.getPlateLogs(50);
+      const data = await apiClient.getPlateLogs(100);
       setPlateLogs(data);
     } catch (e) {
       console.error("Failed to load plate logs:", e);
@@ -372,8 +604,30 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       setNewOwnerName("");
       setNewVehicleModel("");
       setNewNotes("");
+      fetchVehicleStats();
     } catch (e: any) {
       alert("Erro ao cadastrar veículo: " + (e.message || e));
+    }
+  };
+
+  const handleSaveEditVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicle) return;
+    try {
+      const updated = await apiClient.updateVehicle(editingVehicle.id, {
+        plate_number: editingVehicle.plate_number,
+        owner_name: editingVehicle.owner_name,
+        vehicle_model: editingVehicle.vehicle_model,
+        category: editingVehicle.category,
+        notes: editingVehicle.notes,
+        is_active: editingVehicle.is_active,
+      });
+      setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+      setIsEditModalOpen(false);
+      setEditingVehicle(null);
+      fetchVehicleStats();
+    } catch (e: any) {
+      alert("Erro ao atualizar veículo: " + (e.message || e));
     }
   };
 
@@ -382,9 +636,55 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     try {
       await apiClient.deleteVehicle(vehicleId);
       setVehicles((prev) => prev.filter((v) => v.id !== vehicleId));
+      fetchVehicleStats();
     } catch (e: any) {
       alert("Erro ao remover veículo: " + (e.message || e));
     }
+  };
+
+  const handleDeletePlateLog = async (logId: number) => {
+    if (!confirm("Excluir este registro de passagem do histórico?")) return;
+    try {
+      await apiClient.deletePlateLog(logId);
+      setPlateLogs((prev) => prev.filter((l) => l.id !== logId));
+      fetchVehicleStats();
+    } catch (e: any) {
+      alert("Erro ao excluir registro: " + (e.message || e));
+    }
+  };
+
+  const handleClearAllPlateLogs = async () => {
+    if (!confirm("⚠️ ATENÇÃO: Deseja apagar TODO o histórico de passagens de placas? Esta ação é permanente.")) return;
+    try {
+      await apiClient.clearAllPlateLogs();
+      setPlateLogs([]);
+      fetchVehicleStats();
+    } catch (e: any) {
+      alert("Erro ao limpar histórico: " + (e.message || e));
+    }
+  };
+
+  const handleQuickRegisterFromLog = (log: any, cat = "MORADOR") => {
+    setNewPlateNumber(log.plate_number);
+    setNewOwnerName(log.owner_name || "");
+    setNewVehicleModel(log.vehicle_model || "");
+    setNewCategory(cat);
+    setNewNotes(`Cadastrado a partir da detecção na câmera ${log.camera_name}`);
+    setIsVehicleModalOpen(true);
+  };
+
+  const handleExportPlateLogs = () => {
+    if (!plateLogs || plateLogs.length === 0) {
+      alert("Não há registros de placas para exportar.");
+      return;
+    }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(plateLogs, null, 2));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `relatorio_placas_servonvif_${new Date().toISOString().split("T")[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
 
   const handleSimulatePlate = async () => {
@@ -397,6 +697,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       setSimulatedPlateResult(res.detection);
       fetchPlateLogs();
       fetchVehicles();
+      fetchVehicleStats();
     } catch (e: any) {
       alert("Falha na simulação de leitura de placa: " + (e.message || e));
     } finally {
@@ -408,6 +709,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     if (activeTab === "vehicles") {
       fetchVehicles();
       fetchPlateLogs();
+      fetchVehicleStats();
     }
     if (activeTab === "logs") {
       fetchLogs();
@@ -497,6 +799,13 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         telegram_dispatch_mode: telegramDispatchMode,
         telegram_include_prebuffer: telegramIncludePrebuffer,
         telegram_watermark_enabled: telegramWatermarkEnabled,
+        lpr_enabled: lprEnabled,
+        lpr_min_confidence: Number(lprMinConfidence),
+        lpr_notify_telegram: lprNotifyTelegram,
+        lpr_notify_tv: lprNotifyTv,
+        lpr_alarm_on_blocked: lprAlarmOnBlocked,
+        lpr_motorcycle_enabled: lprMotorcycleEnabled,
+        lpr_cooldown_seconds: Number(lprCooldownSeconds),
         retention_days: Number(retentionDays),
         default_buffer_seconds: Number(bufferSeconds),
       });
@@ -528,6 +837,54 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       });
     } finally {
       setTestingTelegram(false);
+    }
+  };
+
+  const handleTestTelegramPhoto = async () => {
+    setTestingPhoto(true);
+    setTelegramTestResult(null);
+    try {
+      const res = await apiClient.testTelegramPhoto();
+      setTelegramTestResult({ success: true, message: res.message });
+    } catch (e: any) {
+      setTelegramTestResult({
+        success: false,
+        message: e.message || "Erro ao enviar foto de teste em qualidade máxima",
+      });
+    } finally {
+      setTestingPhoto(false);
+    }
+  };
+
+  const handleTestTelegramVideo = async () => {
+    setTestingVideo(true);
+    setTelegramTestResult(null);
+    try {
+      const res = await apiClient.testTelegramVideo();
+      setTelegramTestResult({ success: true, message: res.message });
+    } catch (e: any) {
+      setTelegramTestResult({
+        success: false,
+        message: e.message || "Erro ao enviar vídeo de teste em qualidade máxima",
+      });
+    } finally {
+      setTestingVideo(false);
+    }
+  };
+
+  const handleTestTelegramBackup = async () => {
+    setTestingBackup(true);
+    setTelegramTestResult(null);
+    try {
+      const res = await apiClient.testTelegramBackup();
+      setTelegramTestResult({ success: true, message: res.message });
+    } catch (e: any) {
+      setTelegramTestResult({
+        success: false,
+        message: e.message || "Erro ao enviar backup JSON para o Telegram",
+      });
+    } finally {
+      setTestingBackup(false);
     }
   };
 
@@ -866,6 +1223,23 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
               <div className="text-[10px] text-purple-300/80 font-normal">Exportar / Desligar / Reiniciar</div>
             </div>
           </button>
+
+          <div className="h-px bg-slate-800 my-2" />
+
+          <button
+            onClick={() => handleSwitchTab("guide")}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "guide"
+                ? "bg-cyan-600 text-white shadow-lg shadow-cyan-600/25 font-semibold"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-cyan-400" />
+            <div className="text-left flex-1">
+              <div>Guia de Câmeras IP</div>
+              <div className="text-[10px] text-cyan-300/80 font-normal">AITEK 5MP, PoE &amp; RTSP</div>
+            </div>
+          </button>
         </aside>
 
         {/* Content Area */}
@@ -877,24 +1251,31 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
             </div>
           ) : (
             <>
-              {/* ================= TAB: VEHICLES & LPR ================= */}
+              {/* ================= TAB: VEHICLES & LPR ENTERPRISE ================= */}
               {activeTab === "vehicles" && (
                 <div className="space-y-6">
-                  {/* Top Bar */}
+                  {/* 1. Header & Quick Actions */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                         <Car className="w-5 h-5 text-amber-400" />
-                        <span>Reconhecimento Automático de Placas (LPR / ANPR - 5MP)</span>
+                        <span>Central de Reconhecimento de Placas (LPR / ANPR - 5MP)</span>
                       </h2>
                       <p className="text-xs text-slate-400 mt-1">
-                        Controle de acesso por placas Mercosul e antigas integrado à sua câmera 5MP. Alertas instantâneos na Smart TV!
+                        Controle de acesso por visão computacional (Mercosul, Cinza e Motos). Alertas na TV, Telegram e Lista Negra.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => setIsVehicleModalOpen(true)}
+                        onClick={() => {
+                          setNewPlateNumber("");
+                          setNewOwnerName("");
+                          setNewVehicleModel("");
+                          setNewCategory("MORADOR");
+                          setNewNotes("");
+                          setIsVehicleModalOpen(true);
+                        }}
                         className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-md shadow-amber-600/20 transition-all"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -902,65 +1283,370 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                       </button>
 
                       <button
+                        onClick={handleExportPlateLogs}
+                        disabled={plateLogs.length === 0}
+                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+                        title="Exportar relatório de passagens em JSON"
+                      >
+                        <FileDown className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Exportar Relatório</span>
+                      </button>
+
+                      <button
                         onClick={() => {
                           fetchVehicles();
                           fetchPlateLogs();
+                          fetchVehicleStats();
                         }}
-                        disabled={vehiclesLoading}
+                        disabled={vehiclesLoading || plateLogsLoading}
                         className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${vehiclesLoading ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${(vehiclesLoading || plateLogsLoading) ? "animate-spin" : ""}`} />
                         <span>Atualizar</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Simulator & OCR Test Workbench */}
+                  {/* 2. Analytical KPI Metric Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {/* KPI 1: Total Veículos */}
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Cadastrado</span>
+                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <Car className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-2xl font-extrabold text-white font-mono">{vehicles.length}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">Veículos no Banco Local</div>
+                      </div>
+                    </div>
+
+                    {/* KPI 2: Moradores */}
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Moradores</span>
+                        <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-2xl font-extrabold text-emerald-400 font-mono">
+                          {vehicleStats?.moradores_count ?? vehicles.filter(v => v.category === "MORADOR").length}
+                        </div>
+                        <div className="text-[10px] text-emerald-500/80 mt-0.5">Acesso Liberado & VIP</div>
+                      </div>
+                    </div>
+
+                    {/* KPI 3: Bloqueados / Lista Negra */}
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Lista Negra</span>
+                        <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          <ShieldAlert className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-2xl font-extrabold text-rose-400 font-mono">
+                          {vehicleStats?.bloqueados_count ?? vehicles.filter(v => v.category === "BLOQUEADO").length}
+                        </div>
+                        <div className="text-[10px] text-rose-400/80 mt-0.5">Alarme e Bloqueio Ativo</div>
+                      </div>
+                    </div>
+
+                    {/* KPI 4: Passagens Hoje */}
+                    <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Passagens Hoje</span>
+                        <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="text-2xl font-extrabold text-amber-400 font-mono">
+                          {vehicleStats?.logs_today ?? plateLogs.length}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 truncate" title={vehicleStats?.last_detected_plate ? `Última: ${vehicleStats.last_detected_plate}` : "Nenhuma passagem"}>
+                          {vehicleStats?.last_detected_plate ? `Última: ${vehicleStats.last_detected_plate}` : "Monitorando câmeras..."}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. LPR Motor Parameters & Operational Controls */}
+                  <div className="bg-[#131b2e] border border-amber-500/20 rounded-2xl p-5 space-y-5 shadow-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20">
+                          <Sliders className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-slate-100">Parâmetros Operacionais do Motor LPR &amp; OCR</div>
+                          <div className="text-[11px] text-slate-400">Ajuste a sensibilidade de leitura, suporte a motos e regras de alarme.</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-semibold text-slate-300">Motor LPR:</label>
+                        <button
+                          type="button"
+                          onClick={() => setLprEnabled(!lprEnabled)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            lprEnabled ? "bg-amber-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              lprEnabled ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {/* OCR Confidence Threshold */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                          <span>Confiança Mínima do OCR (Qualidade da Leitura)</span>
+                          <span className="text-amber-400 font-mono text-xs font-bold">
+                            {(lprMinConfidence * 100).toFixed(0)}%
+                          </span>
+                        </label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[
+                            { label: "60% Rápido", val: 0.60 },
+                            { label: "70% Padrão", val: 0.70 },
+                            { label: "85% Alta", val: 0.85 },
+                            { label: "95% Rigorosa", val: 0.95 },
+                          ].map((item) => (
+                            <button
+                              key={item.val}
+                              type="button"
+                              onClick={() => setLprMinConfidence(item.val)}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition ${
+                                Math.abs(lprMinConfidence - item.val) < 0.05
+                                  ? "bg-amber-600 text-white border-amber-500 font-bold shadow-md shadow-amber-600/30"
+                                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Valores menores identificam placas com mais facilidade sob chuva ou baixa luz.
+                        </p>
+                      </div>
+
+                      {/* Re-read Cooldown */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                          <span>Intervalo Anti-Spam entre Leituras (Cooldown)</span>
+                          <span className="text-amber-400 font-mono text-xs font-bold">
+                            {lprCooldownSeconds < 60 ? `${lprCooldownSeconds}s` : `${Math.round(lprCooldownSeconds / 60)} min`}
+                          </span>
+                        </label>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {[
+                            { label: "15s", val: 15 },
+                            { label: "30s", val: 30 },
+                            { label: "1 min", val: 60 },
+                            { label: "5 min", val: 300 },
+                            { label: "10 min", val: 600 },
+                          ].map((item) => (
+                            <button
+                              key={item.val}
+                              type="button"
+                              onClick={() => setLprCooldownSeconds(item.val)}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition ${
+                                lprCooldownSeconds === item.val
+                                  ? "bg-amber-600 text-white border-amber-500 font-bold shadow-md shadow-amber-600/30"
+                                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Evita alertas repetidos para um carro estacionado na frente da câmera.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Toggles Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80">
+                      {/* Motorcycle OCR */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-slate-200">Placas de Moto</div>
+                          <div className="text-[10px] text-slate-400">Leitura em 2 linhas</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprMotorcycleEnabled(!lprMotorcycleEnabled)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprMotorcycleEnabled ? "bg-amber-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprMotorcycleEnabled ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Telegram LPR Alert */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-slate-200">Alerta no Telegram</div>
+                          <div className="text-[10px] text-slate-400">Foto da placa no chat</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprNotifyTelegram(!lprNotifyTelegram)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprNotifyTelegram ? "bg-sky-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprNotifyTelegram ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Smart TV PiP Pop-up */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-slate-200">Pop-up na Smart TV</div>
+                          <div className="text-[10px] text-slate-400">Aviso PiP na tela</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprNotifyTv(!lprNotifyTv)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprNotifyTv ? "bg-indigo-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprNotifyTv ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Blocked Vehicle Siren */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-rose-400">Sirene Lista Negra</div>
+                          <div className="text-[10px] text-slate-400">Alarme de intruso</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprAlarmOnBlocked(!lprAlarmOnBlocked)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprAlarmOnBlocked ? "bg-rose-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprAlarmOnBlocked ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Interactive Simulation & Plate Test Workbench */}
                   <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/20 border border-amber-500/30 rounded-2xl p-5 space-y-4 shadow-xl">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
                         <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
                           <Zap className="w-4 h-4" />
                         </div>
                         <div>
                           <div className="text-sm font-bold text-slate-100">Bancada de Testes de Leitura &amp; Alerta na TV</div>
-                          <div className="text-[11px] text-slate-400">Simule a detecção de uma placa para ver a identificação do morador e o aviso PiP na TV.</div>
+                          <div className="text-[11px] text-slate-400">Simule a detecção de uma placa para testar o reconhecimento e os alertas visuais.</div>
                         </div>
                       </div>
-                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full font-semibold">
-                        Motor LPR Ativo
-                      </span>
+
+                      {/* Type Toggle: Car vs Motorcycle */}
+                      <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setTestPlateVehicleType("CAR")}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
+                            testPlateVehicleType === "CAR"
+                              ? "bg-amber-600 text-white shadow-sm"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          🚗 Carro (1 Linha)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTestPlateVehicleType("MOTO")}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
+                            testPlateVehicleType === "MOTO"
+                              ? "bg-amber-600 text-white shadow-sm"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          🏍️ Moto (2 Linhas)
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                      <div className="md:col-span-4 flex items-center justify-center p-3 bg-slate-950/60 rounded-xl border border-slate-800">
-                        {/* Brazilian Stylized Plate Display */}
-                        <div className="bg-white border-2 border-slate-900 rounded-md w-48 shadow-lg overflow-hidden flex flex-col items-center">
-                          <div className="bg-blue-700 text-white w-full px-2 py-0.5 flex items-center justify-between text-[9px] font-black tracking-wider">
-                            <span>BRASIL</span>
-                            <span className="text-[8px] opacity-80">MERCOSUL</span>
+                      <div className="md:col-span-4 flex items-center justify-center p-4 bg-slate-950/60 rounded-xl border border-slate-800">
+                        {testPlateVehicleType === "CAR" ? (
+                          /* Realistic Brazilian Car Plate */
+                          <div className="bg-white border-2 border-slate-900 rounded-md w-52 shadow-xl overflow-hidden flex flex-col items-center">
+                            <div className="bg-blue-700 text-white w-full px-2.5 py-0.5 flex items-center justify-between text-[9px] font-black tracking-wider">
+                              <span>BRASIL</span>
+                              <span className="text-[8px] opacity-80 font-bold">MERCOSUL</span>
+                            </div>
+                            <div className="py-2.5 text-slate-950 font-black text-2xl tracking-widest font-mono select-all">
+                              {testPlateInput.toUpperCase() || "PLACA"}
+                            </div>
                           </div>
-                          <div className="py-2 text-slate-900 font-black text-2xl tracking-widest font-mono">
-                            {testPlateInput.toUpperCase() || "PLACA"}
+                        ) : (
+                          /* Realistic Brazilian Motorcycle Plate (2 Lines) */
+                          <div className="bg-white border-2 border-slate-900 rounded-md w-32 shadow-xl overflow-hidden flex flex-col items-center">
+                            <div className="bg-blue-700 text-white w-full px-2 py-0.5 flex items-center justify-between text-[8px] font-black tracking-wider">
+                              <span>BR</span>
+                              <span className="text-[7px] opacity-80">MOTO</span>
+                            </div>
+                            <div className="py-1 text-center font-mono font-black text-slate-950 leading-tight">
+                              <div className="text-sm tracking-widest">{testPlateInput.slice(0, 3).toUpperCase() || "ABC"}</div>
+                              <div className="text-base tracking-wider">{testPlateInput.slice(3).toUpperCase() || "1D23"}</div>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       <div className="md:col-span-8 space-y-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                           <input
                             type="text"
                             value={testPlateInput}
                             onChange={(e) => setTestPlateInput(e.target.value.toUpperCase())}
                             placeholder="Ex: BRA2E19 ou ABC1234"
                             maxLength={8}
-                            className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-amber-500 flex-1 max-w-xs"
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-amber-500 flex-1 min-w-[140px]"
                           />
 
                           <button
                             onClick={handleSimulatePlate}
                             disabled={simulatingPlate || !testPlateInput}
-                            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md shadow-amber-600/30 flex items-center gap-2"
+                            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md shadow-amber-600/30 flex items-center gap-2 shrink-0"
                           >
                             <Zap className={`w-3.5 h-3.5 ${simulatingPlate ? "animate-spin" : ""}`} />
                             <span>{simulatingPlate ? "Processando OCR..." : "Simular Reconhecimento & Alerta TV"}</span>
@@ -968,10 +1654,20 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         </div>
 
                         {simulatedPlateResult && (
-                          <div className="p-3 bg-slate-950/80 border border-emerald-500/40 rounded-xl text-xs space-y-1.5 animate-in fade-in">
+                          <div className={`p-3 bg-slate-950/80 border rounded-xl text-xs space-y-1.5 animate-in fade-in ${
+                            simulatedPlateResult.category === "BLOQUEADO"
+                              ? "border-rose-500/50 bg-rose-950/20"
+                              : "border-emerald-500/40"
+                          }`}>
                             <div className="flex items-center justify-between">
-                              <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                                <CheckCircle className="w-3.5 h-3.5" />
+                              <span className={`font-bold flex items-center gap-1.5 ${
+                                simulatedPlateResult.category === "BLOQUEADO" ? "text-rose-400" : "text-emerald-400"
+                              }`}>
+                                {simulatedPlateResult.category === "BLOQUEADO" ? (
+                                  <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                                ) : (
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                )}
                                 {simulatedPlateResult.alert_title}
                               </span>
                               <span className="text-slate-400 font-mono text-[10px]">
@@ -987,28 +1683,31 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     </div>
                   </div>
 
-                  {/* Registered Vehicles List */}
-                  <div className="space-y-4">
+                  {/* 5. Registered Vehicles List & Search */}
+                  <div className="space-y-4 pt-2">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                           <Car className="w-4 h-4 text-amber-400" />
-                          <span>Veículos &amp; Placas Cadastradas ({vehicles.length})</span>
+                          <span>Banco de Veículos Autorizados &amp; Lista Negra ({vehicles.length})</span>
                         </h3>
                         <p className="text-[11px] text-slate-400">
-                          Controle de acesso por reconhecimento óptico de caracteres (ANPR / LPR)
+                          Identificação imediata de moradores, visitantes autorizados e alerta para suspeitos.
                         </p>
                       </div>
 
                       {/* Search & Category Filter Bar */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          type="text"
-                          value={vehicleSearchTerm}
-                          onChange={(e) => setVehicleSearchTerm(e.target.value)}
-                          placeholder="Buscar por placa, morador ou carro..."
-                          className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-56"
-                        />
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                          <input
+                            type="text"
+                            value={vehicleSearchTerm}
+                            onChange={(e) => setVehicleSearchTerm(e.target.value)}
+                            placeholder="Buscar placa, morador..."
+                            className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-48 sm:w-56"
+                          />
+                        </div>
 
                         <select
                           value={vehicleCategoryFilter}
@@ -1016,10 +1715,10 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                           className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
                         >
                           <option value="ALL">Todas as Categorias</option>
-                          <option value="MORADOR">Morador</option>
-                          <option value="VISITANTE">Visitante</option>
-                          <option value="PRESTADOR">Prestador</option>
-                          <option value="VIP">VIP / Alerta</option>
+                          <option value="MORADOR">🏠 Morador</option>
+                          <option value="VISITANTE">👤 Visitante</option>
+                          <option value="PRESTADOR">🛠️ Prestador</option>
+                          <option value="BLOQUEADO">🚫 Lista Negra / Bloqueado</option>
                         </select>
                       </div>
                     </div>
@@ -1062,7 +1761,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                                 ? "bg-blue-500/10 text-blue-300 border-blue-500/30"
                                 : v.category === "PRESTADOR"
                                 ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                                : "bg-purple-500/10 text-purple-300 border-purple-500/30";
+                                : "bg-rose-500/10 text-rose-300 border-rose-500/30";
 
                             return (
                               <div
@@ -1085,7 +1784,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
                                     {/* Category Pill */}
                                     <span className={`text-[10px] border px-2.5 py-1 rounded-full font-bold uppercase tracking-wider shrink-0 ${categoryColor}`}>
-                                      {v.category === "MORADOR" ? "🏠 " : v.category === "PRESTADOR" ? "🛠️ " : v.category === "VISITANTE" ? "👤 " : "⭐ "}
+                                      {v.category === "MORADOR" ? "🏠 " : v.category === "PRESTADOR" ? "🛠️ " : v.category === "VISITANTE" ? "👤 " : "🚫 "}
                                       {v.category}
                                     </span>
                                   </div>
@@ -1129,6 +1828,18 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
                                     <button
                                       type="button"
+                                      onClick={() => {
+                                        setEditingVehicle({ ...v });
+                                        setIsEditModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition"
+                                      title="Editar veículo"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    <button
+                                      type="button"
                                       onClick={() => handleDeleteVehicle(v.id)}
                                       className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
                                       title="Remover veículo"
@@ -1156,51 +1867,122 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     )}
                   </div>
 
-                  {/* Recent Plate Logs */}
+                  {/* 6. Recent Plate Detections & Audit Logs */}
                   <div className="space-y-3 pt-4 border-t border-slate-800/80">
-                    <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-slate-400" />
-                      <span>Histórico Recente de Placas Capturadas</span>
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-400" />
+                          <span>Histórico de Passagens &amp; Auditoria LPR ({plateLogs.length})</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Registro em tempo real de todas as leituras de placas feitas pelas câmeras.
+                        </p>
+                      </div>
+
+                      {plateLogs.length > 0 && (
+                        <button
+                          onClick={handleClearAllPlateLogs}
+                          className="flex items-center gap-1 text-[11px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20 transition self-start sm:self-auto"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Limpar Histórico</span>
+                        </button>
+                      )}
+                    </div>
 
                     {plateLogs.length > 0 ? (
-                      <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-hidden">
-                        <div className="divide-y divide-slate-800/60">
-                          {plateLogs.map((log) => (
-                            <div key={log.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-900/40">
-                              <div className="flex items-center gap-3">
-                                <div className="bg-white px-2 py-0.5 rounded text-slate-950 font-mono font-black text-xs">
-                                  {log.plate_number}
-                                </div>
-                                <div>
-                                  <div className="font-semibold text-slate-200">
-                                    {log.owner_name ? `${log.owner_name} (${log.vehicle_model})` : "Veículo Não Cadastrado"}
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 font-mono">
-                                    Câmera: {log.camera_name} • Confiança: {(log.confidence * 100).toFixed(0)}%
-                                  </div>
-                                </div>
-                              </div>
+                      <div className="bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+                        <div className="divide-y divide-slate-800/60 max-h-[420px] overflow-y-auto">
+                          {plateLogs.map((log) => {
+                            const isRegistered = !!log.owner_name;
+                            const isBlocked = log.category === "BLOQUEADO";
 
-                              <div className="text-right">
-                                <span className="text-[10px] text-slate-400">
-                                  {new Date(log.detected_at).toLocaleTimeString()}
-                                </span>
+                            return (
+                              <div
+                                key={log.id}
+                                className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-900/50 transition"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {/* Plate Badge */}
+                                  <div className="bg-white px-2.5 py-1 rounded text-slate-950 font-mono font-black text-xs border border-slate-800 shadow-sm shrink-0">
+                                    {log.plate_number}
+                                  </div>
+
+                                  <div>
+                                    <div className="font-semibold text-slate-200 flex items-center gap-2">
+                                      <span>
+                                        {isRegistered ? `${log.owner_name} (${log.vehicle_model || "Carro"})` : "Veículo Não Cadastrado"}
+                                      </span>
+                                      <span className={`text-[9px] px-2 py-0.2 rounded-full font-bold uppercase ${
+                                        isBlocked
+                                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                          : isRegistered
+                                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                          : "bg-slate-800 text-slate-400 border border-slate-700"
+                                      }`}>
+                                        {log.category || "DESCONHECIDO"}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      Câmera: <span className="text-slate-300">{log.camera_name}</span> • Confiança: <span className="text-amber-400">{(log.confidence * 100).toFixed(0)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                  <span className="text-[11px] text-slate-400 font-mono">
+                                    {new Date(log.detected_at).toLocaleString("pt-BR")}
+                                  </span>
+
+                                  <div className="flex items-center gap-1.5">
+                                    {!isRegistered && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRegisterFromLog(log, "MORADOR")}
+                                        className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-lg text-[10px] font-semibold transition"
+                                        title="Cadastrar como morador"
+                                      >
+                                        + Morador
+                                      </button>
+                                    )}
+
+                                    {!isBlocked && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRegisterFromLog(log, "BLOQUEADO")}
+                                        className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 rounded-lg text-[10px] font-semibold transition"
+                                        title="Adicionar à lista negra"
+                                      >
+                                        🚫 Bloquear
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePlateLog(log.id)}
+                                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition"
+                                      title="Excluir este registro"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 text-center text-slate-500 text-xs bg-slate-900/30 rounded-xl border border-slate-800">
-                        Nenhuma leitura registrada recentemente.
+                      <div className="p-6 text-center text-slate-500 text-xs bg-slate-900/30 rounded-xl border border-slate-800">
+                        Nenhuma passagem registrada no histórico recente.
                       </div>
                     )}
                   </div>
 
-                  {/* Modal: Cadastrar Veículo */}
+                  {/* 7. Modal: Cadastrar Novo Veículo */}
                   {isVehicleModalOpen && (
-                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                       <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
                         <div className="flex items-center justify-between">
                           <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
@@ -1209,7 +1991,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                           </h3>
                           <button
                             onClick={() => setIsVehicleModalOpen(false)}
-                            className="text-slate-400 hover:text-slate-200"
+                            className="text-slate-400 hover:text-slate-200 text-sm font-bold"
                           >
                             ✕
                           </button>
@@ -1266,12 +2048,12 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                               <select
                                 value={newCategory}
                                 onChange={(e) => setNewCategory(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
                               >
-                                <option value="MORADOR">Morador</option>
-                                <option value="VISITANTE">Visitante</option>
-                                <option value="PRESTADOR">Prestador</option>
-                                <option value="BLOQUEADO">Bloqueado / Alerta</option>
+                                <option value="MORADOR">🏠 Morador</option>
+                                <option value="VISITANTE">👤 Visitante</option>
+                                <option value="PRESTADOR">🛠️ Prestador</option>
+                                <option value="BLOQUEADO">🚫 Lista Negra / Alerta</option>
                               </select>
                             </div>
                           </div>
@@ -1289,7 +2071,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                             />
                           </div>
 
-                          <div className="flex items-center justify-end gap-2 pt-2">
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                             <button
                               type="button"
                               onClick={() => setIsVehicleModalOpen(false)}
@@ -1302,6 +2084,119 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                               className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md shadow-amber-600/30"
                             >
                               Salvar Veículo
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 8. Modal: Editar Veículo Existente */}
+                  {isEditModalOpen && editingVehicle && (
+                    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <Edit3 className="w-5 h-5 text-amber-400" />
+                            <span>Editar Dados do Veículo</span>
+                          </h3>
+                          <button
+                            onClick={() => {
+                              setIsEditModalOpen(false);
+                              setEditingVehicle(null);
+                            }}
+                            className="text-slate-400 hover:text-slate-200 text-sm font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleSaveEditVehicle} className="space-y-3.5">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Placa do Veículo *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={editingVehicle.plate_number}
+                              onChange={(e) => setEditingVehicle({ ...editingVehicle, plate_number: e.target.value.toUpperCase() })}
+                              maxLength={8}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Nome do Proprietário / Morador *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={editingVehicle.owner_name}
+                              onChange={(e) => setEditingVehicle({ ...editingVehicle, owner_name: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Modelo / Cor
+                              </label>
+                              <input
+                                type="text"
+                                value={editingVehicle.vehicle_model || ""}
+                                onChange={(e) => setEditingVehicle({ ...editingVehicle, vehicle_model: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                                Categoria
+                              </label>
+                              <select
+                                value={editingVehicle.category}
+                                onChange={(e) => setEditingVehicle({ ...editingVehicle, category: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
+                              >
+                                <option value="MORADOR">🏠 Morador</option>
+                                <option value="VISITANTE">👤 Visitante</option>
+                                <option value="PRESTADOR">🛠️ Prestador</option>
+                                <option value="BLOQUEADO">🚫 Lista Negra / Alerta</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-semibold text-slate-300 block mb-1">
+                              Observações
+                            </label>
+                            <input
+                              type="text"
+                              value={editingVehicle.notes || ""}
+                              onChange={(e) => setEditingVehicle({ ...editingVehicle, notes: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditModalOpen(false);
+                                setEditingVehicle(null);
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="submit"
+                              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md shadow-blue-600/30"
+                            >
+                              Salvar Alterações
                             </button>
                           </div>
                         </form>
@@ -1850,32 +2745,197 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                 </div>
               )}
 
-              {/* ================= TAB: SMART TV ================= */}
+              {/* ================= TAB: SMART TV & TAILSCALE ================= */}
               {activeTab === "tv" && (
                 <div className="space-y-6">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                      <Tv className="w-5 h-5 text-indigo-400" />
-                      <span>Pareamento com Android TV &amp; Tablets</span>
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Conecte seu aplicativo Android TV ou Tablet ao servidor para receber alertas Picture-in-Picture (PiP) instantâneos.
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <Tv className="w-5 h-5 text-indigo-400" />
+                        <span>Pareamento com Android TV, Tablets &amp; Tailscale Remoto</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Conecte seu aplicativo Android TV ao servidor na rede local ou remotamente de qualquer lugar do mundo via Tailscale WireGuard.
+                      </p>
+                    </div>
+
+                    {/* Mode Selector */}
+                    <div className="flex items-center p-1 bg-slate-900 border border-white/10 rounded-xl self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setTvPairingMode("local")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                          tvPairingMode === "local"
+                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <Wifi className="w-3.5 h-3.5" />
+                        <span>Rede Local (LAN)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTvPairingMode("tailscale")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                          tvPairingMode === "tailscale"
+                            ? "bg-cyan-600 text-white shadow-md shadow-cyan-600/30"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>Tailscale Remoto</span>
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Tailscale Live Mesh Status Card */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl border ${
+                          tailscaleData?.is_running
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}>
+                          <Globe className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-white">Rede Segura Tailscale (WireGuard Mesh)</span>
+                            {tailscaleData?.is_running ? (
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                CONECTADO &bull; {tailscaleData.tailscale_ip}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-medium">
+                                {tailscaleData?.is_installed ? "Instalado (Desconectado)" : "Não Detectado no Host"}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Permite que a Android TV receba alertas PiP em qualquer lugar do mundo com zero configuração de portas.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={fetchTailscaleStatus}
+                          disabled={tailscaleLoading}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${tailscaleLoading ? "animate-spin" : ""}`} />
+                          <span>Atualizar Status</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowTailscaleGuide((prev) => !prev)}
+                          className="px-3 py-1.5 rounded-lg bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-300 border border-cyan-500/20 text-xs font-medium transition"
+                        >
+                          {showTailscaleGuide ? "Ocultar Guia" : "Guia de Instalação"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Active Peers (if connected) */}
+                    {tailscaleData?.is_running && tailscaleData.peers && tailscaleData.peers.length > 0 && (
+                      <div className="pt-2 border-t border-white/5 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-300 block">
+                          Dispositivos Conectados na sua Tailnet ({tailscaleData.peers.length}):
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-[11px]">
+                          {tailscaleData.peers.map((peer, idx) => (
+                            <div key={idx} className="p-2 rounded-lg bg-slate-950/60 border border-white/5 flex items-center justify-between">
+                              <div className="min-w-0">
+                                <span className="font-bold text-white block truncate">{peer.hostname || "Dispositivo"}</span>
+                                <span className="text-slate-400 text-[10px]">{peer.ip} &bull; {peer.os}</span>
+                              </div>
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${peer.online ? "bg-emerald-400" : "bg-slate-600"}`} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expandable Fast Install Guide */}
+                    {showTailscaleGuide && (
+                      <div className="pt-3 border-t border-white/5 space-y-3 animate-in fade-in">
+                        <span className="text-xs font-bold text-cyan-300 block">
+                          Comandos de Instalação Rápida (100% Gratuito):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                          {/* Mac */}
+                          <div className="p-3 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                            <span className="font-bold text-slate-200">🍎 macOS (Terminal)</span>
+                            <code className="text-[11px] text-cyan-300 font-mono block bg-slate-900 p-1.5 rounded select-all truncate">
+                              brew install tailscale &amp;&amp; sudo tailscale up
+                            </code>
+                          </div>
+
+                          {/* Linux */}
+                          <div className="p-3 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                            <span className="font-bold text-slate-200">🐧 Linux / Raspberry Pi</span>
+                            <code className="text-[11px] text-emerald-300 font-mono block bg-slate-900 p-1.5 rounded select-all truncate">
+                              curl -fsSL https://tailscale.com/install.sh | sh &amp;&amp; sudo tailscale up
+                            </code>
+                          </div>
+
+                          {/* Windows */}
+                          <div className="p-3 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                            <span className="font-bold text-slate-200">🪟 Windows (PowerShell)</span>
+                            <code className="text-[11px] text-indigo-300 font-mono block bg-slate-900 p-1.5 rounded select-all truncate">
+                              winget install Tailscale.Tailscale
+                            </code>
+                          </div>
+
+                          {/* Android TV */}
+                          <div className="p-3 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                            <span className="font-bold text-slate-200">📺 Android TV / Celular</span>
+                            <p className="text-[11px] text-slate-400">
+                              Baixe o app oficial <strong>Tailscale</strong> na Google Play Store da TV e faça login na mesma conta.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Network Endpoints & QR Code Card */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
+                      {/* Server IP */}
                       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
-                        <label className="text-xs font-semibold text-slate-300 block">IP do Servidor na Rede Local</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-300 block">
+                            {tvPairingMode === "tailscale" ? "IP Remoto do Servidor (Tailscale Mesh)" : "IP do Servidor na Rede Local"}
+                          </label>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            tvPairingMode === "tailscale" ? "bg-cyan-500/20 text-cyan-300" : "bg-indigo-500/20 text-indigo-300"
+                          }`}>
+                            {tvPairingMode === "tailscale" ? "Remoto Global" : "Local LAN"}
+                          </span>
+                        </div>
+
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
                             readOnly
-                            value={serverInfo?.local_ip || "192.168.1.96"}
+                            value={
+                              tvPairingMode === "tailscale"
+                                ? (tailscaleData?.tailscale_ip || "Tailscale não ativo no servidor")
+                                : (serverInfo?.local_ip || "192.168.1.96")
+                            }
                             className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-emerald-400 flex-1 select-all"
                           />
                           <button
-                            onClick={() => copyToClipboard(serverInfo?.local_ip || "")}
+                            type="button"
+                            onClick={() => copyToClipboard(
+                              tvPairingMode === "tailscale"
+                                ? (tailscaleData?.tailscale_ip || "")
+                                : (serverInfo?.local_ip || "")
+                            )}
                             className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
                           >
                             Copiar IP
@@ -1883,17 +2943,27 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         </div>
                       </div>
 
+                      {/* WebSocket URL */}
                       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
                         <label className="text-xs font-semibold text-slate-300 block">Endereço WebSocket do Sentinela</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
                             readOnly
-                            value={serverInfo?.server_ws_url || ""}
+                            value={
+                              tvPairingMode === "tailscale" && tailscaleData?.tailscale_ip
+                                ? `ws://${tailscaleData.tailscale_ip}:8080/ws/events`
+                                : (serverInfo?.server_ws_url || "")
+                            }
                             className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-cyan-400 flex-1 select-all"
                           />
                           <button
-                            onClick={() => copyToClipboard(serverInfo?.server_ws_url || "")}
+                            type="button"
+                            onClick={() => copyToClipboard(
+                              tvPairingMode === "tailscale" && tailscaleData?.tailscale_ip
+                                ? `ws://${tailscaleData.tailscale_ip}:8080/ws/events`
+                                : (serverInfo?.server_ws_url || "")
+                            )}
                             className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
                           >
                             {copiedWs ? "Copiado!" : "Copiar"}
@@ -1902,13 +2972,18 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                       </div>
                     </div>
 
+                    {/* QR Code Card */}
                     <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col items-center justify-center text-center">
                       <div className="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-1.5">
                         <QrCode className="w-4 h-4 text-blue-400" />
-                        <span>Cartão de Pareamento</span>
+                        <span>Cartão de Pareamento ({tvPairingMode === "tailscale" ? "Tailscale" : "Local"})</span>
                       </div>
                       <img
-                        src={`${API_BASE}/api/settings/qr-pairing`}
+                        src={`${API_BASE}/api/settings/qr-pairing${
+                          tvPairingMode === "tailscale" && tailscaleData?.tailscale_ip
+                            ? `?host=${tailscaleData.tailscale_ip}`
+                            : ""
+                        }`}
                         alt="Pairing Card"
                         className="rounded-lg border border-slate-700 max-h-48 shadow-lg"
                       />
@@ -2248,32 +3323,89 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 pt-3">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-600/25"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{saving ? "Salvando..." : "Salvar Todas as Configurações do Telegram"}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleTestTelegram}
-                        disabled={testingTelegram || !telegramToken}
-                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-4 py-2.5 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-2"
-                      >
-                        <Send className="w-3.5 h-3.5 text-sky-400" />
-                        <span>{testingTelegram ? "Enviando teste..." : "Testar Envio de Mensagem"}</span>
-                      </button>
-
-                      {serverInfo?.telegram_bot_configured && (
-                        <div className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Bot Ativo &amp; Sincronizado</span>
+                    {/* 6. Quick Action Buttons for Maximum Quality Media & Tests */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-950 border border-sky-500/20 space-y-3.5 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-sky-400" />
+                          <span className="text-xs font-bold text-white uppercase tracking-wider">
+                            Disparo Instantâneo &amp; Teste de Arquivos em Qualidade Máxima
+                          </span>
                         </div>
-                      )}
+                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-semibold">
+                          5MP Nativo • CRF 17 HD
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Clique nos botões abaixo para disparar transmissões imediatas para o seu Telegram e verificar a fidelidade do sensor e a fluidez do vídeo.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                        {/* Botão 1: Foto Máxima */}
+                        <button
+                          type="button"
+                          onClick={handleTestTelegramPhoto}
+                          disabled={testingPhoto || !telegramToken}
+                          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 rounded-xl text-xs font-semibold transition shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                          {testingPhoto ? <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> : <ImageIcon className="w-4 h-4 text-emerald-400" />}
+                          <span>{testingPhoto ? "Enviando 5MP..." : "📸 Foto 5MP Máxima"}</span>
+                        </button>
+
+                        {/* Botão 2: Vídeo Máximo */}
+                        <button
+                          type="button"
+                          onClick={handleTestTelegramVideo}
+                          disabled={testingVideo || !telegramToken}
+                          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 rounded-xl text-xs font-semibold transition shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                          {testingVideo ? <Loader2 className="w-4 h-4 animate-spin text-sky-400" /> : <Video className="w-4 h-4 text-sky-400" />}
+                          <span>{testingVideo ? "Gravando HD..." : "🎥 Vídeo HD Máximo"}</span>
+                        </button>
+
+                        {/* Botão 3: Backup JSON */}
+                        <button
+                          type="button"
+                          onClick={handleTestTelegramBackup}
+                          disabled={testingBackup || !telegramToken}
+                          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 rounded-xl text-xs font-semibold transition shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                          {testingBackup ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Save className="w-4 h-4 text-purple-400" />}
+                          <span>{testingBackup ? "Exportando..." : "📦 Backup Geral JSON"}</span>
+                        </button>
+
+                        {/* Botão 4: Teste Mensagem */}
+                        <button
+                          type="button"
+                          onClick={handleTestTelegram}
+                          disabled={testingTelegram || !telegramToken}
+                          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 rounded-xl text-xs font-semibold transition shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                          {testingTelegram ? <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> : <Send className="w-3.5 h-3.5 text-amber-400" />}
+                          <span>{testingTelegram ? "Enviando..." : "💬 Mensagem &amp; Tags"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-600/25 active:scale-95"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>{saving ? "Salvando..." : "Salvar Configurações do Telegram"}</span>
+                        </button>
+
+                        {serverInfo?.telegram_bot_configured && (
+                          <div className="text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Bot Ativo &amp; Sincronizado</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {telegramTestResult && (
@@ -2679,6 +3811,927 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         <Power className="w-4 h-4 text-rose-400" />
                         <span>Desligar Servidor</span>
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ================= TAB: GUIA DE CÂMERAS & RTSP ================= */}
+              {activeTab === "guide" && (
+                <div className="space-y-6">
+                  {/* Header Title Card */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-2 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-cyan-600/10 text-cyan-400 border border-cyan-500/20">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-white">
+                          Guia de Conexão &amp; Manual de Câmeras IP
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Instruções passo a passo para a câmera AITEK SEG6050BP 5MP PoE, URLs RTSP de outros fabricantes e boas práticas de rede.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 1: CÂMERA AITEK SEG6050BP 5MP POE (DESTAQUE) */}
+                  <div className="card-dark p-6 rounded-2xl border border-cyan-500/30 space-y-5 bg-gradient-to-br from-cyan-950/20 via-slate-900/60 to-slate-900/50 shadow-xl shadow-cyan-950/20">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-cyan-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+                          <Video className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white">AITEK SEG6050BP (5MP PoE)</h3>
+                            <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold border border-cyan-500/30">
+                              Câmera Principal
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 font-mono">
+                            Sensor 5MP (2880×1624) • PoE / DC 12V • H.264/H.265 • Dupla Iluminação Noturna • LPR
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hardware & Network Specs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Physical Connection */}
+                      <div className="p-4 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
+                          <Network className="w-4 h-4" />
+                          <span>1. Como Ligar na Rede</span>
+                        </div>
+                        <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside leading-relaxed">
+                          <li>
+                            <strong className="text-white">Opção PoE (Recomendado):</strong> Plugue o cabo de rede direto em um <span className="text-cyan-400 font-semibold">Switch PoE ou Injetor PoE</span> (energia e dados no mesmo cabo RJ45).
+                          </li>
+                          <li>
+                            <strong className="text-white">Opção Sem PoE:</strong> Plugue o cabo de rede no roteador e use uma <span className="text-amber-400 font-semibold">fonte 12V 2A P4</span> conectada no plug de força.
+                          </li>
+                        </ul>
+                      </div>
+
+                      {/* Ports & Credentials */}
+                      <div className="p-4 rounded-xl bg-slate-950/60 border border-white/5 space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>2. Credenciais &amp; Portas de Fábrica</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 rounded-lg bg-slate-900/80 border border-white/5">
+                            <span className="text-slate-400 text-[10px] block">Usuário Padrão</span>
+                            <span className="font-mono font-bold text-white">admin</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900/80 border border-white/5">
+                            <span className="text-slate-400 text-[10px] block">Senha Padrão</span>
+                            <span className="font-mono text-slate-300">em branco ou admin</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900/80 border border-white/5">
+                            <span className="text-slate-400 text-[10px] block">Porta RTSP</span>
+                            <span className="font-mono font-bold text-cyan-400">554</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-slate-900/80 border border-white/5">
+                            <span className="text-slate-400 text-[10px] block">Porta ONVIF</span>
+                            <span className="font-mono font-bold text-emerald-400">80 ou 8899</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pre-formatted AITEK RTSP URLs */}
+                    <div className="space-y-3 pt-2">
+                      <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>URLs RTSP Prontas para a Câmera AITEK (Copie com 1 Clique):</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Substitua IP e SENHA</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {/* Stream 0 (5MP Nativo) */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-cyan-500/20 gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-cyan-300">Fluxo Principal (5MP Nativo 2880×1624)</span>
+                              <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono">Gravação &amp; LPR</span>
+                            </div>
+                            <code className="text-xs text-slate-200 font-mono block truncate mt-0.5 select-all">
+                              rtsp://admin:SENHA@192.168.1.X:554/stream0
+                            </code>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/stream0", "aitek_main");
+                                setGuideTestUrl("rtsp://admin:admin@192.168.1.X:554/stream0");
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 text-xs font-medium flex items-center gap-1.5 transition"
+                            >
+                              {copiedGuideKey === "aitek_main" ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span className="text-emerald-400">Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>Copiar URL</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Stream 1 (Substream) */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-white/5 gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-200">Sub-Stream Leve (640×360)</span>
+                              <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">Monitoramento Web Leve</span>
+                            </div>
+                            <code className="text-xs text-slate-300 font-mono block truncate mt-0.5 select-all">
+                              rtsp://admin:SENHA@192.168.1.X:554/stream1
+                            </code>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/stream1", "aitek_sub");
+                                setGuideTestUrl("rtsp://admin:admin@192.168.1.X:554/stream1");
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition"
+                            >
+                              {copiedGuideKey === "aitek_sub" ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span className="text-emerald-400">Copiado!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>Copiar URL</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Variações de fábrica */}
+                        <div className="p-3 rounded-xl bg-slate-950/40 border border-white/5 text-xs text-slate-400 space-y-1">
+                          <span className="font-semibold text-slate-300">Variações alternativas de fábrica da AITEK:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
+                            <div className="flex items-center justify-between p-1.5 rounded bg-slate-900/60">
+                              <span>rtsp://admin:SENHA@IP:554/live/ch0</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/live/ch0", "aitek_alt1")}
+                                className="text-cyan-400 hover:text-cyan-300 ml-2"
+                              >
+                                {copiedGuideKey === "aitek_alt1" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between p-1.5 rounded bg-slate-900/60">
+                              <span>rtsp://admin:SENHA@IP:554/onvif1</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/onvif1", "aitek_alt2")}
+                                className="text-cyan-400 hover:text-cyan-300 ml-2"
+                              >
+                                {copiedGuideKey === "aitek_alt2" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: TESTADOR INTERATIVO DE FLUXO RTSP */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-emerald-600/10 text-emerald-400 border border-emerald-500/20">
+                        <FlaskConical className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Testador de Conexão RTSP em Tempo Real</h3>
+                        <p className="text-xs text-slate-400">
+                          Cole a URL da sua câmera para testar a comunicação antes de cadastrar no mosaico.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2.5">
+                      <input
+                        type="text"
+                        value={guideTestUrl}
+                        onChange={(e) => setGuideTestUrl(e.target.value)}
+                        placeholder="rtsp://admin:senha@192.168.1.50:554/stream0"
+                        className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestGuideRtsp}
+                        disabled={guideTesting || !guideTestUrl}
+                        className="h-10 px-5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-cyan-600/20 shrink-0"
+                      >
+                        {guideTesting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Testando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-4 h-4 fill-white" />
+                            <span>Testar Conexão RTSP</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {guideTestResult && (
+                      <div
+                        className={`p-4 rounded-xl border text-xs flex items-start gap-3 ${
+                          guideTestResult.success
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                            : "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                        }`}
+                      >
+                        {guideTestResult.success ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                        )}
+                        <div className="space-y-1">
+                          <p className="font-bold">
+                            {guideTestResult.success ? "Conexão RTSP Estabelecida com Sucesso!" : "Falha na Conexão RTSP"}
+                          </p>
+                          <p className="opacity-90">{guideTestResult.message}</p>
+                          {guideTestResult.latency_ms && (
+                            <p className="font-mono text-[11px] opacity-75">
+                              Latência de Abertura: {guideTestResult.latency_ms} ms
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 3: DICIONÁRIO MULTI-MARCAS */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-indigo-600/10 text-indigo-400 border border-indigo-500/20">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Dicionário de URLs RTSP por Fabricante</h3>
+                        <p className="text-xs text-slate-400">
+                          Formatos padrão das principais marcas de câmeras IP comercializadas no Brasil.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Intelbras / Dahua */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 flex flex-col justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-emerald-400 block">Intelbras / Dahua</span>
+                          <code className="text-[11px] text-slate-300 font-mono block truncate select-all">
+                            rtsp://admin:SENHA@IP:554/cam/realmonitor?channel=1&amp;subtype=0
+                          </code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/cam/realmonitor?channel=1&subtype=0", "intelbras")}
+                          className="self-end px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1 transition"
+                        >
+                          {copiedGuideKey === "intelbras" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedGuideKey === "intelbras" ? "Copiado" : "Copiar"}</span>
+                        </button>
+                      </div>
+
+                      {/* TP-Link Tapo */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 flex flex-col justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-cyan-400 block">TP-Link Tapo (C200, C310, C500)</span>
+                          <code className="text-[11px] text-slate-300 font-mono block truncate select-all">
+                            rtsp://USUARIO:SENHA@IP:554/stream1
+                          </code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyGuideText("rtsp://USUARIO:SENHA@192.168.1.X:554/stream1", "tapo")}
+                          className="self-end px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1 transition"
+                        >
+                          {copiedGuideKey === "tapo" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedGuideKey === "tapo" ? "Copiado" : "Copiar"}</span>
+                        </button>
+                      </div>
+
+                      {/* Hikvision / Ezviz */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 flex flex-col justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-rose-400 block">Hikvision / Ezviz</span>
+                          <code className="text-[11px] text-slate-300 font-mono block truncate select-all">
+                            rtsp://admin:SENHA@IP:554/Streaming/Channels/101
+                          </code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/Streaming/Channels/101", "hikvision")}
+                          className="self-end px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1 transition"
+                        >
+                          {copiedGuideKey === "hikvision" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedGuideKey === "hikvision" ? "Copiado" : "Copiar"}</span>
+                        </button>
+                      </div>
+
+                      {/* ICSee / Yoosee / Tuya */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 flex flex-col justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-amber-400 block">ICSee / Yoosee / Tuya / XM</span>
+                          <code className="text-[11px] text-slate-300 font-mono block truncate select-all">
+                            rtsp://admin:SENHA@IP:554/onvif1
+                          </code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyGuideText("rtsp://admin:SENHA@192.168.1.X:554/onvif1", "icsee")}
+                          className="self-end px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1 transition"
+                        >
+                          {copiedGuideKey === "icsee" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedGuideKey === "icsee" ? "Copiado" : "Copiar"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 4: BOAS PRÁTICAS & OTIMIZAÇÃO 5MP */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Recomendações de Otimização para Câmeras 5MP</h3>
+                        <p className="text-xs text-slate-400">
+                          Ajustes recomendados no menu web ou app da câmera para máxima fluidez e menor carga térmica.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1">
+                        <span className="text-cyan-300 font-bold block">1. Codec H.264</span>
+                        <p className="text-slate-400 leading-relaxed">
+                          Prefira H.264 ou H.264+ para aceleração de hardware nativa sem sobrecarregar a CPU do servidor.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1">
+                        <span className="text-emerald-300 font-bold block">2. Taxa de Quadros</span>
+                        <p className="text-slate-400 leading-relaxed">
+                          Configure a câmera entre 15 e 20 FPS. É perfeito para segurança e detecção de placas com menor uso de banda.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1">
+                        <span className="text-indigo-300 font-bold block">3. Intervalo I-Frame (GOP)</span>
+                        <p className="text-slate-400 leading-relaxed">
+                          Configure o I-Frame para 2x o valor do FPS (ex: se FPS = 20, defina I-Frame = 40) para estabilidade total.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-1">
+                        <span className="text-amber-300 font-bold block">4. Luz Noturna Inteligente</span>
+                        <p className="text-slate-400 leading-relaxed">
+                          Use o modo Dupla Iluminação: infravermelho no escuro e luz branca LED colorida ao detectar pessoas/veículos.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 5: CALCULADORA INTERATIVA DE DIMENSIONAMENTO (1 A 50 CÂMERAS) */}
+                  {(() => {
+                    const r = getDimensioningResults();
+                    return (
+                      <div className="card-dark p-6 rounded-2xl border border-indigo-500/30 space-y-6 bg-gradient-to-br from-indigo-950/30 via-slate-900/60 to-slate-900/50 shadow-2xl shadow-indigo-950/20">
+                        {/* Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-indigo-500/20">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                              <Calculator className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-white">
+                                  Calculadora de Dimensionamento de Hardware &amp; Rede (1 a 50 Câmeras)
+                                </h3>
+                                <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">
+                                  Interativa em Tempo Real
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                Simule a CPU, memória RAM, SSD/HDD, switch PoE e largura de banda de upload para o Telegram e Tailscale.
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleCopySetupSummary}
+                            className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition"
+                          >
+                            {copiedSetupSummary ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                            <span>{copiedSetupSummary ? "Resumo Copiado!" : "Copiar Resumo do Setup"}</span>
+                          </button>
+                        </div>
+
+                        {/* Interactive Controls */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 rounded-xl bg-slate-950/70 border border-white/5">
+                          {/* Number of Cameras */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                              <label className="font-bold text-slate-200">Câmeras por Servidor</label>
+                              <span className="font-mono text-cyan-400 font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
+                                {calcCameras} {calcCameras === 1 ? "câmera" : "câmeras"}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="50"
+                              value={calcCameras}
+                              onChange={(e) => setCalcCameras(parseInt(e.target.value, 10))}
+                              className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                            />
+                            <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                              <span>1 cam</span>
+                              <span>16</span>
+                              <span>32</span>
+                              <span>50 cams</span>
+                            </div>
+                          </div>
+
+                          {/* Resolution */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-200 block">Resolução das Câmeras</label>
+                            <select
+                              value={calcResolution}
+                              onChange={(e) => setCalcResolution(e.target.value as any)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                            >
+                              <option value="1080p">1080p Full HD (2MP • ~2 Mbps)</option>
+                              <option value="5mp">5MP AITEK / 3K (5MP • ~4 Mbps)</option>
+                              <option value="4k">4K Ultra HD (8MP • ~8 Mbps)</option>
+                            </select>
+                            <span className="text-[10px] text-slate-400 block">
+                              Taxa típica por câmera: <strong className="text-slate-300 font-mono">{r.baseBitrateMbps} Mbps</strong>
+                            </span>
+                          </div>
+
+                          {/* FPS */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-200 block">Taxa de Quadros (FPS)</label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[15, 20, 30].map((fpsVal) => (
+                                <button
+                                  key={fpsVal}
+                                  type="button"
+                                  onClick={() => setCalcFps(fpsVal as any)}
+                                  className={`py-1 rounded text-xs font-semibold transition ${
+                                    calcFps === fpsVal
+                                      ? "bg-indigo-600 text-white border border-indigo-400/50"
+                                      : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                                  }`}
+                                >
+                                  {fpsVal} FPS
+                                </button>
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-slate-400 block">
+                              {calcFps <= 20 ? "Ótimo balanço banda/CPU" : "Fluidez máxima de TV"}
+                            </span>
+                          </div>
+
+                          {/* Recording Mode */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-200 block">Modo de Gravação</label>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setCalcRecordingMode("motion")}
+                                className={`py-1 px-2 rounded text-[11px] font-semibold transition ${
+                                  calcRecordingMode === "motion"
+                                    ? "bg-emerald-600 text-white border border-emerald-400/50"
+                                    : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                                }`}
+                              >
+                                Por Movimento
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCalcRecordingMode("continuous")}
+                                className={`py-1 px-2 rounded text-[11px] font-semibold transition ${
+                                  calcRecordingMode === "continuous"
+                                    ? "bg-amber-600 text-white border border-amber-400/50"
+                                    : "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                                }`}
+                              >
+                                Contínuo 24/7
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block">
+                              {calcRecordingMode === "motion" ? "Economiza 80% de disco" : "Grava 100% do tempo"}
+                            </span>
+                          </div>
+
+                          {/* Retention Days */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-200 block">Retenção no Disco</label>
+                            <select
+                              value={calcRetentionDays}
+                              onChange={(e) => setCalcRetentionDays(parseInt(e.target.value, 10))}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                            >
+                              <option value="3">3 Dias de Histórico</option>
+                              <option value="7">7 Dias (Padrão 1 Semana)</option>
+                              <option value="15">15 Dias (Quinzena)</option>
+                              <option value="30">30 Dias (1 Mês)</option>
+                              <option value="60">60 Dias (2 Meses)</option>
+                            </select>
+                            <span className="text-[10px] text-slate-400 block">
+                              Autolimpeza automática por idade
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Calculated Output Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* CPU & GPU */}
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
+                                <Cpu className="w-4 h-4" />
+                                <span>Processador (CPU / GPU)</span>
+                              </div>
+                              <div className="text-sm font-bold text-white leading-snug">
+                                {r.cpuProfile.title}
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                {r.cpuProfile.note}
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Aceleração de Vídeo:</span>
+                              <span className="text-cyan-300 font-mono font-semibold">
+                                {calcCameras <= 8 ? "Intel QuickSync / Metal" : "NVIDIA NVENC / QuickSync"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* RAM Memory */}
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                                <Gauge className="w-4 h-4" />
+                                <span>Memória RAM (Vídeo, IA, Deque &amp; OS Cache)</span>
+                              </div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-black text-emerald-400 font-mono">{r.recRamGb} GB</span>
+                                <span className="text-xs text-slate-400 font-mono">(Mínimo: {r.minRamGb} GB)</span>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                Suporta frames descompactados, análise de IA/LPR, pre-buffer de 5s em RAM e Page Cache do SO para as {calcCameras} câmeras.
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Tipo Recomendado:</span>
+                              <span className="text-emerald-300 font-mono font-semibold">DDR4 / DDR5 Dual Channel</span>
+                            </div>
+                          </div>
+
+                          {/* Storage SSD & HDD */}
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                                <HardDrive className="w-4 h-4" />
+                                <span>Armazenamento (SSD + HDD)</span>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-300">SSD NVMe (SO + SQLite):</span>
+                                  <strong className="text-amber-400 font-mono">{r.recSsdGb} GB M.2</strong>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-300">HDD Gravação ({calcRetentionDays}d):</span>
+                                  <strong className="text-amber-400 font-mono">{r.totalStorageTb} TB ({r.recHddTb} TB recomendado)</strong>
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                Recomendado: WD Purple ou Seagate SkyHawk 5400/7200 RPM para operação 24/7.
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Volume Estimado:</span>
+                              <span className="text-amber-300 font-mono font-semibold">{r.totalStorageGb} GB</span>
+                            </div>
+                          </div>
+
+                          {/* Local Network & Switch PoE */}
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
+                                <Network className="w-4 h-4" />
+                                <span>Rede Local &amp; Switch PoE</span>
+                              </div>
+                              <div className="text-sm font-bold text-white leading-snug">
+                                {r.switchType}
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                Tráfego contínuo estimado na LAN: <strong className="text-indigo-300 font-mono">{r.totalBandwidthMbps} Mbps</strong>
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Cabeamento:</span>
+                              <span className="text-indigo-300 font-mono font-semibold">Cat5e (até 100m) ou Cat6 100% Cobre</span>
+                            </div>
+                          </div>
+
+                          {/* Internet Upload for Telegram & Tailscale */}
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-rose-300">
+                                <Send className="w-4 h-4" />
+                                <span>Upload para Telegram &amp; Tailscale</span>
+                              </div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-black text-rose-400 font-mono">{r.recUploadMbps} Mbps</span>
+                                <span className="text-xs text-slate-400 font-mono">(Mín: {r.minUploadMbps} Mbps)</span>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                Permite envio instantâneo de vídeos MP4 no Telegram e streaming sem buffering para a Android TV remota.
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Tipo de Link:</span>
+                              <span className="text-rose-300 font-mono font-semibold">Fibra Óptica com Upload Simétrico</span>
+                            </div>
+                          </div>
+
+                          {/* Quick Dimensioning Summary */}
+                          <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/20 space-y-2 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
+                                <Sparkles className="w-4 h-4" />
+                                <span>Classificação do Projeto</span>
+                              </div>
+                              <div className="text-sm font-bold text-white">
+                                {calcCameras <= 4
+                                  ? "🟢 Projeto Residencial / Home Lab"
+                                  : calcCameras <= 8
+                                  ? "🔵 Residência Premium / Comércio Pequeno"
+                                  : calcCameras <= 16
+                                  ? "🟣 Comércio Médio / Galpão / Condomínio"
+                                  : calcCameras <= 32
+                                  ? "🟠 Empresarial Médio / Supermercado"
+                                  : "🔴 Corporativo Alta Densidade / Data Center"}
+                              </div>
+                              <p className="text-xs text-slate-300">
+                                Capacidade para monitoramento 24/7 com inteligência artificial, detecção de movimento e alertas simultâneos.
+                              </p>
+                            </div>
+                            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
+                              <span className="text-slate-400">Status do Servidor:</span>
+                              <span className="text-emerald-400 font-mono font-bold">100% Homologado</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Section 6: MATRIZ DE SETUPS OFICIAIS (TABELA DE 1 A 50 CÂMERAS) */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-cyan-600/10 text-cyan-400 border border-cyan-500/20">
+                        <Server className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">
+                          Matriz de Setups Homologados (De 1 a 50 Câmeras)
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Consulte a tabela de referência rápida para planejar a infraestrutura ideal de acordo com a quantidade de câmeras.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse font-sans">
+                        <thead>
+                          <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 font-mono text-[11px]">
+                            <th className="py-3 px-3">Escopo / Câmeras</th>
+                            <th className="py-3 px-3">Processador (CPU/GPU)</th>
+                            <th className="py-3 px-3">Memória RAM</th>
+                            <th className="py-3 px-3">Armazenamento</th>
+                            <th className="py-3 px-3">Switch PoE (LAN)</th>
+                            <th className="py-3 px-3">Upload Recomendado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                          {/* Tier 1: 1 a 4 */}
+                          <tr className="hover:bg-slate-800/30 transition">
+                            <td className="py-3.5 px-3">
+                              <span className="font-bold text-white block">1 a 4 Câmeras</span>
+                              <span className="text-[10px] text-emerald-400">Residencial / Escritório</span>
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="text-white font-medium block">Intel N100 / Mac Mini M1/M2</span>
+                              <span className="text-[10px] text-slate-500">ou Core i3 8ª+ / RPi 5</span>
+                            </td>
+                            <td className="py-3.5 px-3 font-mono">
+                              <strong className="text-emerald-400">8 GB</strong> DDR4/DDR5
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="block text-slate-200">SSD 256GB NVMe</span>
+                              <span className="text-[10px] text-slate-500">+ HDD 1TB a 2TB Surveillance</span>
+                            </td>
+                            <td className="py-3.5 px-3 text-slate-300">
+                              Switch PoE 4/8 Portas 100M/Gigabit (60W)
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-cyan-400">
+                              <strong>20 a 30 Mbps</strong>
+                            </td>
+                          </tr>
+
+                          {/* Tier 2: 5 a 8 */}
+                          <tr className="hover:bg-slate-800/30 transition">
+                            <td className="py-3.5 px-3">
+                              <span className="font-bold text-white block">5 a 8 Câmeras</span>
+                              <span className="text-[10px] text-cyan-400">Residência Grande / Comércio</span>
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="text-white font-medium block">Intel Core i5 (10ª a 14ª)</span>
+                              <span className="text-[10px] text-slate-500">Ryzen 5 / Apple M1/M2/M3 (QuickSync)</span>
+                            </td>
+                            <td className="py-3.5 px-3 font-mono">
+                              <strong className="text-cyan-400">16 GB</strong> DDR4/DDR5
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="block text-slate-200">SSD 512GB NVMe</span>
+                              <span className="text-[10px] text-slate-500">+ HDD 4TB WD Purple</span>
+                            </td>
+                            <td className="py-3.5 px-3 text-slate-300">
+                              Switch Gigabit PoE 8 Portas (120W, 802.3at)
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-cyan-400">
+                              <strong>40 a 60 Mbps</strong>
+                            </td>
+                          </tr>
+
+                          {/* Tier 3: 9 a 16 */}
+                          <tr className="hover:bg-slate-800/30 transition">
+                            <td className="py-3.5 px-3">
+                              <span className="font-bold text-white block">9 a 16 Câmeras</span>
+                              <span className="text-[10px] text-indigo-400">Comércio Médio / Condomínio</span>
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="text-white font-medium block">Intel Core i7 / Ryzen 7</span>
+                              <span className="text-[10px] text-slate-500">ou Xeon E-2200 / Mac Studio</span>
+                            </td>
+                            <td className="py-3.5 px-3 font-mono">
+                              <strong className="text-indigo-400">32 GB</strong> DDR4/DDR5
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="block text-slate-200">SSD 1TB NVMe M.2</span>
+                              <span className="text-[10px] text-slate-500">+ HDD 8TB a 10TB Surveillance</span>
+                            </td>
+                            <td className="py-3.5 px-3 text-slate-300">
+                              Switch Gigabit PoE+ 16 Portas Gerenciável (250W)
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-cyan-400">
+                              <strong>80 a 120 Mbps</strong>
+                            </td>
+                          </tr>
+
+                          {/* Tier 4: 17 a 32 */}
+                          <tr className="hover:bg-slate-800/30 transition">
+                            <td className="py-3.5 px-3">
+                              <span className="font-bold text-white block">17 a 32 Câmeras</span>
+                              <span className="text-[10px] text-amber-400">Empresa / Supermercado</span>
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="text-white font-medium block">Intel Core i9 / Ryzen 9</span>
+                              <span className="text-[10px] text-amber-400">+ GPU NVIDIA GTX 1660 / RTX 3060</span>
+                            </td>
+                            <td className="py-3.5 px-3 font-mono">
+                              <strong className="text-amber-400">64 GB</strong> DDR4/DDR5
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="block text-slate-200">SSD 1TB NVMe Gen4</span>
+                              <span className="text-[10px] text-slate-500">+ RAID 2x 10TB/12TB Surveillance</span>
+                            </td>
+                            <td className="py-3.5 px-3 text-slate-300">
+                              Switch Gigabit PoE+ 24/32p com Uplink 10G SFP+
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-cyan-400">
+                              <strong>150 a 250 Mbps</strong>
+                            </td>
+                          </tr>
+
+                          {/* Tier 5: 33 a 50 */}
+                          <tr className="hover:bg-slate-800/30 transition">
+                            <td className="py-3.5 px-3">
+                              <span className="font-bold text-white block">33 a 50 Câmeras</span>
+                              <span className="text-[10px] text-rose-400">Data Center / Grande Condomínio</span>
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="text-white font-medium block">Dual Intel Xeon / AMD EPYC</span>
+                              <span className="text-[10px] text-rose-400">+ 1-2x GPUs NVIDIA RTX 4060 / A2000</span>
+                            </td>
+                            <td className="py-3.5 px-3 font-mono">
+                              <strong className="text-rose-400">64 GB a 128 GB</strong> ECC
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <span className="block text-slate-200">SSD 2TB NVMe Gen4 (Mirror)</span>
+                              <span className="text-[10px] text-slate-500">+ Storage RAID 4x 14TB+ Enterprise</span>
+                            </td>
+                            <td className="py-3.5 px-3 text-slate-300">
+                              Switch Central 48p Gigabit PoE+ (750W) + VLAN CFTV
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-cyan-400">
+                              <strong>300 a 500+ Mbps</strong>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Section 7: ARQUITETURA, ELIMINAÇÃO DE GARGALOS & BOAS PRÁTICAS */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">
+                          Guia de Arquitetura &amp; Eliminação de Gargalos
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Entenda como o ServONVIF gerencia memória, armazenamento e tráfego de rede para suportar até 50 câmeras sem travar.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      {/* Sub-Stream vs Main-Stream */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+                          <Eye className="w-4 h-4" />
+                          <span>1. A Regra de Ouro: Sub-Stream para IA &amp; Main-Stream para Gravação</span>
+                        </span>
+                        <p className="text-slate-300 leading-relaxed">
+                          Em servidores com mais de 8 câmeras, nunca decodifique 5MP ou 4K na CPU apenas para detectar movimento. O ServONVIF pode ler o <strong className="text-white">Sub-Stream leve (640×360 ou 1280×720 @ 15fps)</strong> para IA e detecção de movimento, e gravar em disco o <strong className="text-emerald-400">Main-Stream 5MP puro</strong>. Isso reduz o uso de CPU em até <strong className="text-cyan-300">85%</strong>!
+                        </p>
+                      </div>
+
+                      {/* RAM Deque vs SSD Wear */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                          <Gauge className="w-4 h-4" />
+                          <span>2. Por que o Pre-Buffer usa RAM e Poupa o SSD?</span>
+                        </span>
+                        <p className="text-slate-300 leading-relaxed">
+                          O ServONVIF armazena os últimos 5 a 10 segundos de vídeo em <strong className="text-white">filas circulares na memória RAM (<code className="text-emerald-400 font-mono">collections.deque</code>)</strong>. Ele nunca grava temporários no disco enquanto não houver evento, garantindo zero desgaste prematuro (TBW) do seu SSD NVMe.
+                        </p>
+                      </div>
+
+                      {/* Telegram Rate Limit & Queue */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                          <Send className="w-4 h-4" />
+                          <span>3. Fila Inteligente do Telegram &amp; Rate Limits</span>
+                        </span>
+                        <p className="text-slate-300 leading-relaxed">
+                          A API do Telegram possui limite global de 30 envios/segundo. O servidor ServONVIF possui <strong className="text-white">Cooldown inteligente configurável (padrão 30s)</strong> e fila assíncrona com compressão ultrarrápida em MP4 H.264, impedindo que múltiplos disparos simultâneos congelem a sua conexão de internet.
+                        </p>
+                      </div>
+
+                      {/* Separation SSD vs HDD */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                          <HardDrive className="w-4 h-4" />
+                          <span>4. Separação Física: SSD NVMe vs HDD Surveillance</span>
+                        </span>
+                        <p className="text-slate-300 leading-relaxed">
+                          Mantenha o Sistema Operacional e o banco de dados SQLite (em modo WAL) em um <strong className="text-amber-300">SSD NVMe M.2</strong> para busca instantânea de eventos e visualização imediata de thumbnails. Utilize <strong className="text-white">HDDs WD Purple ou Seagate SkyHawk</strong> exclusivamente para o fluxo sequencial contínuo de arquivos de vídeo MP4.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

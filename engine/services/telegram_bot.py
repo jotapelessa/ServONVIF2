@@ -313,9 +313,24 @@ class TelegramService:
             is_video=True
         )
 
+        # Extract native video dimensions for Telegram player HD rendering
+        vid_w, vid_h, vid_dur = None, None, None
+        try:
+            import cv2
+            cap_probe = cv2.VideoCapture(str(path_obj))
+            if cap_probe.isOpened():
+                vid_w = int(cap_probe.get(cv2.CAP_PROP_FRAME_WIDTH))
+                vid_h = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                frame_cnt = cap_probe.get(cv2.CAP_PROP_FRAME_COUNT)
+                probe_fps = cap_probe.get(cv2.CAP_PROP_FPS) or 20.0
+                vid_dur = int(frame_cnt / probe_fps) if probe_fps > 0 else int(duration_seconds or 0)
+            cap_probe.release()
+        except Exception:
+            pass
+
         url = f"{self.base_url}/sendVideo"
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=90.0) as client:
                 with open(path_obj, "rb") as f:
                     files = {"video": (path_obj.name, f, "video/mp4")}
                     data = {
@@ -323,6 +338,12 @@ class TelegramService:
                         "caption": caption,
                         "supports_streaming": "true"
                     }
+                    if vid_w and vid_h:
+                        data["width"] = str(vid_w)
+                        data["height"] = str(vid_h)
+                    if vid_dur:
+                        data["duration"] = str(vid_dur)
+
                     response = await client.post(url, data=data, files=files)
                     if response.status_code == 200:
                         logger.info(f"🎥 Telegram Cloud Vault: Video clip uploaded with semantic hashtags for camera [{camera_id}] ({file_size_mb:.1f} MB)")
@@ -426,5 +447,97 @@ class TelegramService:
                     return False, f"Erro na API do Telegram: {response.text}"
         except Exception as e:
             return False, f"Falha na requisição: {str(e)}"
+
+    async def send_test_photo(self, camera_id: Optional[int] = None) -> tuple[bool, str]:
+        from engine.core.camera_manager import camera_manager
+        from engine.core.media_writer import MediaWriter
+
+        if not self.is_configured:
+            return False, "Bot do Telegram não configurado. Adicione o Token e o Chat ID."
+
+        target_ingestor = None
+        if camera_id and camera_id in camera_manager.ingestors:
+            target_ingestor = camera_manager.ingestors[camera_id]
+        elif camera_manager.ingestors:
+            target_ingestor = next(iter(camera_manager.ingestors.values()))
+
+        if not target_ingestor or target_ingestor._latest_frame is None:
+            return False, "Nenhuma câmera ativa transmitindo frames no momento."
+
+        frame = target_ingestor._latest_frame.copy()
+        now = datetime.utcnow()
+        cam = target_ingestor.camera
+
+        thumb_path = MediaWriter.save_thumbnail(
+            camera_id=cam.id,
+            timestamp=now,
+            frame_bgr=frame
+        )
+
+        success = await self.send_photo_alert(
+            camera_id=cam.id,
+            camera_name=cam.name,
+            timestamp_str=now.strftime("%d/%m/%Y %H:%M:%S"),
+            photo_path=thumb_path,
+            score=0.99,
+            event_dt=now
+        )
+
+        h, w = frame.shape[:2]
+        if success:
+            return True, f"📸 Foto de teste em Qualidade Máxima ({w}x{h} - {w*h/1000000:.1f}MP) enviada com sucesso para o Telegram!"
+        return False, "Falha ao enviar foto para a API do Telegram."
+
+    async def send_test_video(self, camera_id: Optional[int] = None) -> tuple[bool, str]:
+        from engine.core.camera_manager import camera_manager
+        from engine.core.media_writer import MediaWriter
+
+        if not self.is_configured:
+            return False, "Bot do Telegram não configurado. Adicione o Token e o Chat ID."
+
+        target_ingestor = None
+        if camera_id and camera_id in camera_manager.ingestors:
+            target_ingestor = camera_manager.ingestors[camera_id]
+        elif camera_manager.ingestors:
+            target_ingestor = next(iter(camera_manager.ingestors.values()))
+
+        if not target_ingestor:
+            return False, "Nenhuma câmera ativa no momento."
+
+        # Grab up to 5s from ring buffer
+        window = target_ingestor.ring_buffer.get_window(pre_seconds=5.0)
+        if not window or len(window) < 10:
+            if target_ingestor._latest_frame is not None:
+                window = [target_ingestor._latest_frame.copy() for _ in range(60)]
+            else:
+                return False, "Buffer de vídeo insuficiente para gravação de teste."
+
+        now = datetime.utcnow()
+        cam = target_ingestor.camera
+        h, w = window[0].shape[:2]
+
+        video_path = MediaWriter.save_video_clip(
+            camera_id=cam.id,
+            timestamp=now,
+            frames=window,
+            fps=20.0
+        )
+
+        if not video_path:
+            return False, "Erro ao codificar clipe de vídeo MP4."
+
+        duration = len(window) / 20.0
+        success = await self.send_video_clip(
+            camera_id=cam.id,
+            camera_name=cam.name,
+            video_path=video_path,
+            score=0.99,
+            duration_seconds=duration,
+            event_dt=now
+        )
+
+        if success:
+            return True, f"🎥 Clipe de teste em Qualidade Máxima ({w}x{h} HD - CRF 17) enviado com sucesso para o Telegram!"
+        return False, "Falha ao enviar clipe de vídeo para a API do Telegram."
 
 telegram_service = TelegramService()

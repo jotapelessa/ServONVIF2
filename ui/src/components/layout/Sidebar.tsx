@@ -59,7 +59,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
 
   return (
     <>
-      <aside className="w-84 md:w-96 h-full panel-dark border-l border-white/10 flex flex-col shrink-0 overflow-hidden bg-[#0a0f1d]/95">
+      <aside className="w-80 md:w-96 h-full panel-dark border-l border-white/10 flex flex-col shrink-0 overflow-hidden bg-[#0a0f1d]/95">
         {/* Header with View Toggle */}
         <div className="h-14 px-4 border-b border-white/10 flex items-center justify-between bg-slate-900/60 shrink-0">
           <div className="flex items-center gap-2">

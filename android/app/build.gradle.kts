@@ -11,10 +11,11 @@ android {
         applicationId = "com.servonvif.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 53
-        versionName = "001.006.053"
+        versionCode = 54
+        versionName = "001.006.054"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
     }
 
     applicationVariants.all {
@@ -24,16 +25,24 @@ android {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            v1SigningEnabled = true
+            v2SigningEnabled = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
         debug {
-            // Generates ServONVIF-v1.9.0.apk
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -50,11 +59,13 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
     // OkHttp & WebSocket
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // Leanback for Android TV
+    // Leanback for Android TV (optional on Mobile)
     implementation("androidx.leanback:leanback:1.0.0")
 }
+

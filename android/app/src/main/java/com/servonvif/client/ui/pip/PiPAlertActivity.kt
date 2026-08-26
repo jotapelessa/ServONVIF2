@@ -1,6 +1,5 @@
 package com.servonvif.client.ui.pip
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -17,12 +16,13 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.ui.tv.TvMainActivity
 
-class PiPAlertActivity : Activity() {
+class PiPAlertActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var tvTitle: TextView

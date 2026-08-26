@@ -22,5 +22,11 @@ data class EventPayload(
     val thumbnailUrl: String?,
 
     @SerializedName("mjpeg_url")
-    val mjpegUrl: String?
+    val mjpegUrl: String?,
+
+    @SerializedName("site_name")
+    var siteName: String? = null,
+
+    @SerializedName("server_base_url")
+    var serverBaseUrl: String? = null
 )

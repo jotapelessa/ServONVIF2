@@ -141,7 +141,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#0b0f19] select-none">
+    <div className="h-screen w-full flex flex-col bg-[#0b0f19] select-none overflow-hidden">
       {/* App Header */}
       <Header
         onScanClick={handleScan}
@@ -151,9 +151,9 @@ export default function Dashboard() {
       />
 
       {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Central Camera Grid Area */}
-        <main className="flex-1 p-5 pb-20 overflow-y-auto min-w-0">
+        <main className="flex-1 p-4 md:p-5 overflow-y-auto min-w-0 min-h-0">
           {loading && cameras.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-2">
               <Loader2 className="w-6 h-6 animate-spin text-blue-500" />

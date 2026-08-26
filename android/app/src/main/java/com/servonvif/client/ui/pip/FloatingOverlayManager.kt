@@ -71,7 +71,8 @@ class FloatingOverlayManager(private val context: Context) {
         cameraName: String,
         mjpegUrl: String?,
         score: Float,
-        durationSeconds: Int
+        durationSeconds: Int,
+        siteName: String? = null
     ) {
         mainHandler.post {
             try {
@@ -83,6 +84,7 @@ class FloatingOverlayManager(private val context: Context) {
                 val configRepo = ServerConfigRepository(context)
                 val effectiveDuration = maxOf(durationSeconds, configRepo.pipDurationSeconds, 5)
                 totalDurationMillis = effectiveDuration * 1000L
+                val sitePrefix = if (!siteName.isNullOrBlank() && siteName != "Servidor Principal" && siteName != "Servidor Local") "[$siteName] " else ""
 
                 // If already showing on screen: simply EXTEND the timer and update text!
                 if (isShowing && overlayView != null) {
@@ -91,7 +93,7 @@ class FloatingOverlayManager(private val context: Context) {
                         val tvCameraTitle = v.findViewById<TextView>(R.id.tvCameraTitle)
                         val pipProgressBar = v.findViewById<ProgressBar>(R.id.pipProgressBar)
                         val scoreText = if (score > 0.0f) " (${(score * 100).toInt()}%)" else ""
-                        tvCameraTitle?.text = "🔴 $cameraName$scoreText"
+                        tvCameraTitle?.text = "🔴 $sitePrefix$cameraName$scoreText"
                         pipProgressBar?.max = totalDurationMillis.toInt()
                         pipProgressBar?.progress = totalDurationMillis.toInt()
                     }
@@ -114,7 +116,8 @@ class FloatingOverlayManager(private val context: Context) {
                     ServerConfigRepository.SIZE_MICRO -> Pair(200, 112)
                     ServerConfigRepository.SIZE_MINI -> Pair(260, 146)
                     ServerConfigRepository.SIZE_COMPACT -> Pair(320, 180)
-                    ServerConfigRepository.SIZE_LARGE -> Pair(420, 236)
+                    ServerConfigRepository.SIZE_MEDIUM -> Pair(380, 214)
+                    ServerConfigRepository.SIZE_LARGE -> Pair(480, 270)
                     else -> Pair(260, 146)
                 }
 
@@ -126,7 +129,8 @@ class FloatingOverlayManager(private val context: Context) {
                 val pipCardContainer = view.findViewById<CardView>(R.id.pipCardContainer)
                 pipCardContainer?.layoutParams = ViewGroup.LayoutParams(widthPx, heightPx)
 
-                val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // 2. Setup Safe WindowManager LayoutParams
+                val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 } else {
                     @Suppress("DEPRECATION")
@@ -136,10 +140,10 @@ class FloatingOverlayManager(private val context: Context) {
                 val params = WindowManager.LayoutParams(
                     widthPx,
                     heightPx,
-                    layoutType,
+                    layoutFlag,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                     PixelFormat.TRANSLUCENT
                 )
@@ -180,7 +184,7 @@ class FloatingOverlayManager(private val context: Context) {
                 val btnPipClose = view.findViewById<TextView>(R.id.btnPipClose)
 
                 val scoreText = if (score > 0.0f) " (${(score * 100).toInt()}%)" else ""
-                tvCameraTitle?.text = "🔴 $cameraName$scoreText"
+                tvCameraTitle?.text = "🔴 $sitePrefix$cameraName$scoreText"
                 tvCountdown?.text = "${effectiveDuration}s"
 
                 pipProgressBar?.max = totalDurationMillis.toInt()

@@ -1,18 +1,18 @@
 package com.servonvif.client.ui.tv
 
-import android.app.Activity
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
 import kotlin.concurrent.thread
 
-class TvSettingsActivity : Activity() {
+class TvSettingsActivity : AppCompatActivity() {
 
     private lateinit var etServerIp: EditText
     private lateinit var etServerPort: EditText
@@ -200,8 +200,10 @@ class TvSettingsActivity : Activity() {
         btnTestConnection.setOnClickListener {
             val ip = etServerIp.text.toString().trim()
             val port = etServerPort.text.toString().toIntOrNull() ?: 8080
+            val isTailscale = configRepo.isTailscaleIp(ip)
+            val modeLabel = if (isTailscale) "🌐 Tailscale Remoto" else "🏠 Rede Local"
 
-            tvStatusMessage.text = "Testando conexão com http://$ip:$port..."
+            tvStatusMessage.text = "Testando conexão [$modeLabel] com http://$ip:$port..."
             thread {
                 val tempRepo = ServerConfigRepository(this).apply {
                     this.serverIp = ip
@@ -212,7 +214,7 @@ class TvSettingsActivity : Activity() {
 
                 runOnUiThread {
                     if (isSuccess) {
-                        tvStatusMessage.text = "✅ Conexão estabelecida com sucesso com o servidor!"
+                        tvStatusMessage.text = "✅ Conexão estabelecida com sucesso via $modeLabel!"
                     } else {
                         tvStatusMessage.text = "❌ Não foi possível conectar ao servidor em $ip:$port"
                     }
@@ -225,8 +227,20 @@ class TvSettingsActivity : Activity() {
             val port = etServerPort.text.toString().toIntOrNull() ?: 8080
 
             if (ip.isNotEmpty()) {
+                val isTailscale = configRepo.isTailscaleIp(ip)
+                val nodeName = if (isTailscale) "Tailscale Remoto" else "Servidor Principal"
+
                 configRepo.serverIp = ip
                 configRepo.serverPort = port
+
+                val currentNodes = configRepo.serverNodes.toMutableList()
+                if (currentNodes.isNotEmpty()) {
+                    currentNodes[0] = currentNodes[0].copy(name = nodeName, ip = ip, port = port)
+                } else {
+                    currentNodes.add(com.servonvif.client.data.model.ServerNode(id = "primary", name = nodeName, ip = ip, port = port, isEnabled = true))
+                }
+                configRepo.serverNodes = currentNodes
+
                 configRepo.isSoundAlertEnabled = swSoundAlert.isChecked
                 configRepo.isAutoStartOnBoot = swAutoStart.isChecked
                 configRepo.pipPosition = selectedPosition
@@ -235,7 +249,8 @@ class TvSettingsActivity : Activity() {
                 configRepo.mosaicLayout = selectedMosaicLayout
                 configRepo.mosaicFitMode = selectedMosaicFit
 
-                Toast.makeText(this, "Configurações salvas com sucesso!", Toast.LENGTH_SHORT).show()
+                val modeDesc = if (isTailscale) " via Tailscale Remoto" else " (Rede Local)"
+                Toast.makeText(this, "Configurações salvas$modeDesc!", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }

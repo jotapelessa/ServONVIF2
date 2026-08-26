@@ -7,6 +7,8 @@ export interface Camera {
   rtsp_url: string;
   ip_address?: string;
   onvif_port?: number;
+  username?: string;
+  password?: string;
   is_active: boolean;
   sensitivity: number;
   roi_polygon?: number[][];
@@ -40,6 +42,8 @@ export interface MotionEvent {
   thumbnail_url?: string;
   telegram_sent: boolean;
   duration_seconds: number;
+  file_size_bytes?: number;
+  file_size_formatted?: string;
 }
 
 export interface SettingsResponse {
@@ -62,6 +66,13 @@ export interface SettingsResponse {
   telegram_dispatch_mode?: "all" | "photo_only" | "video_only";
   telegram_include_prebuffer?: boolean;
   telegram_watermark_enabled?: boolean;
+  lpr_enabled?: boolean;
+  lpr_min_confidence?: number;
+  lpr_notify_telegram?: boolean;
+  lpr_notify_tv?: boolean;
+  lpr_alarm_on_blocked?: boolean;
+  lpr_motorcycle_enabled?: boolean;
+  lpr_cooldown_seconds?: number;
   processing_paused?: boolean;
   storage?: {
     total_files: number;
@@ -165,6 +176,52 @@ export const apiClient = {
     return data;
   },
 
+  // --- ONVIF Camera Hardware Management ---
+  async getOnvifImaging(cameraId: number): Promise<OnvifImagingSettings> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/imaging`);
+    if (!res.ok) throw new Error("Falha ao obter ajustes ONVIF da câmera");
+    return res.json();
+  },
+
+  async setOnvifImaging(
+    cameraId: number,
+    payload: {
+      brightness?: number;
+      contrast?: number;
+      color_saturation?: number;
+      sharpness?: number;
+      ir_cut_filter?: string;
+      wdr?: string;
+    }
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/imaging`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao aplicar ajustes ONVIF");
+    return data;
+  },
+
+  async rebootCamera(cameraId: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/reboot`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao reiniciar câmera");
+    return data;
+  },
+
+  async syncCameraTime(cameraId: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/cameras/${cameraId}/onvif/sync-time`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao sincronizar relógio da câmera");
+    return data;
+  },
+
   async getEvents(limit = 60, cameraId?: number): Promise<MotionEvent[]> {
     const url = cameraId !== undefined
       ? `${API_BASE}/api/events/?limit=${limit}&camera_id=${cameraId}`
@@ -220,6 +277,33 @@ export const apiClient = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Erro ao testar Telegram");
+    return data;
+  },
+
+  async testTelegramPhoto(): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/telegram/test-photo`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao enviar foto de teste para o Telegram");
+    return data;
+  },
+
+  async testTelegramVideo(): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/telegram/test-video`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao enviar vídeo de teste para o Telegram");
+    return data;
+  },
+
+  async testTelegramBackup(): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/settings/telegram/test-backup`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Erro ao enviar backup para o Telegram");
     return data;
   },
 
@@ -341,10 +425,43 @@ export const apiClient = {
     return data;
   },
 
-  async getPlateLogs(limit = 50): Promise<any[]> {
+  async getPlateLogs(limit = 100): Promise<any[]> {
     const res = await fetch(`${API_BASE}/api/vehicles/logs?limit=${limit}`);
     if (!res.ok) throw new Error("Falha ao obter histórico de placas");
     return res.json();
+  },
+
+  async getVehicleStats(): Promise<{
+    total_vehicles: number;
+    moradores_count: number;
+    visitantes_count: number;
+    bloqueados_count: number;
+    logs_today: number;
+    total_logs: number;
+    last_detected_plate: string | null;
+    last_detected_at: string | null;
+    last_owner_name: string | null;
+  }> {
+    const res = await fetch(`${API_BASE}/api/vehicles/stats`);
+    if (!res.ok) throw new Error("Falha ao obter estatísticas de veículos");
+    return res.json();
+  },
+
+  async deletePlateLog(logId: number): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/vehicles/logs/${logId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Falha ao excluir registro do histórico");
+    return res.json();
+  },
+
+  async clearAllPlateLogs(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/vehicles/logs/clear/all`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.message || "Falha ao limpar histórico de placas");
+    return data;
   },
 
   async simulatePlateDetection(payload: {
@@ -444,4 +561,53 @@ export const apiClient = {
     }
     return res.json();
   },
+
+  async getTailscaleStatus(): Promise<TailscaleStatus> {
+    const res = await fetch(`${API_BASE}/api/settings/tailscale`);
+    if (!res.ok) throw new Error("Falha ao obter status do Tailscale");
+    return res.json();
+  },
 };
+
+export interface TailscalePeer {
+  id?: string;
+  hostname?: string;
+  dns_name?: string;
+  ip?: string;
+  os?: string;
+  online?: boolean;
+  active?: boolean;
+}
+
+export interface TailscaleStatus {
+  is_installed: boolean;
+  is_running: boolean;
+  binary_path?: string | null;
+  tailscale_ip?: string | null;
+  magicdns_hostname?: string | null;
+  self_node_name?: string | null;
+  tailnet_name?: string | null;
+  peers_count: number;
+  peers: TailscalePeer[];
+  install_guide: {
+    mac_brew: string;
+    mac_appstore: string;
+    linux_curl: string;
+    windows_winget: string;
+    android_playstore: string;
+    android_apk: string;
+  };
+}
+
+export interface OnvifImagingSettings {
+  success: boolean;
+  brightness: number;
+  contrast: number;
+  color_saturation: number;
+  sharpness: number;
+  ir_cut_filter: "AUTO" | "ON" | "OFF" | string;
+  wdr: "ON" | "OFF" | string;
+  camera_ip: string;
+  web_url: string;
+  error?: string;
+}

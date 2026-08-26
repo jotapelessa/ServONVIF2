@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     TELEGRAM_INCLUDE_PREBUFFER: bool = True
     TELEGRAM_WATERMARK_ENABLED: bool = True
 
+    # LPR & Vehicle Recognition
+    LPR_ENABLED: bool = True
+    LPR_MIN_CONFIDENCE: float = 0.70
+    LPR_NOTIFY_TELEGRAM: bool = True
+    LPR_NOTIFY_TV: bool = True
+    LPR_ALARM_ON_BLOCKED: bool = True
+    LPR_MOTORCYCLE_ENABLED: bool = True
+    LPR_COOLDOWN_SECONDS: int = 30
+
     # Security
     JWT_SECRET: str = "change_me_in_production_super_secret_key"
 

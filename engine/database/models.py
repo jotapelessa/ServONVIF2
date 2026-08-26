@@ -32,6 +32,8 @@ class MotionEvent(SQLModel, table=True):
     thumbnail_path: Optional[str] = None
     telegram_sent: bool = Field(default=False)
     duration_seconds: float = Field(default=0.0)
+    file_size_bytes: Optional[int] = Field(default=None)
+    file_size_formatted: Optional[str] = Field(default=None)
 
 class Device(SQLModel, table=True):
     __tablename__ = "devices"

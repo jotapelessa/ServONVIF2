@@ -36,17 +36,33 @@ object HardwareIdHelper {
     }
 
     /**
-     * Determines whether the device is an Android TV / Smart TV / Box, Automotive IVI, or Tablet/Mobile.
+     * Determines whether the device is an Android TV / Smart TV / Box, Automotive IVI, or Smartphone/Tablet.
      */
-    fun getDeviceType(): String {
+    fun getDeviceType(context: Context? = null): String {
+        if (context != null) {
+            val uiModeManager = context.getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager
+            if (uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
+                return "Android TV"
+            }
+            if (uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_CAR) {
+                return "Android Auto / Car"
+            }
+            val hasTouch = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+            val isTv = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+            if (isTv && !hasTouch) {
+                return "Android TV"
+            }
+        }
+
         val model = Build.MODEL.uppercase(Locale.ROOT)
         val device = Build.DEVICE.uppercase(Locale.ROOT)
         val hardware = Build.HARDWARE.uppercase(Locale.ROOT)
 
         return when {
-            model.contains("TV") || device.contains("TV") || hardware.contains("TV") || model.contains("BOX") -> "Android TV"
+            model.contains("TV") || device.contains("TV") || hardware.contains("TV") || model.contains("BOX") || model.contains("STICK") || model.contains("CHROMECAST") -> "Android TV"
             model.contains("AUTO") || device.contains("IVI") || model.contains("CAR") -> "Android Auto / Car"
-            else -> "Android TV" // Default fallback since this app is designed for TV / Security Displays
+            model.contains("TAB") || device.contains("TAB") -> "Android Tablet"
+            else -> "Smartphone / Mobile"
         }
     }
 

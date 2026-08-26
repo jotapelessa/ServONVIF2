@@ -112,93 +112,94 @@
             android:orientation="vertical"
             android:visibility="visible">
 
-            <!-- Mosaic Toolbar / Personalization Bar -->
-            <LinearLayout
-                android:id="@+id/mosaicToolbar"
+            <!-- Mosaic Toolbar / Personalization Bar (Scrollable on Smartphones & Responsive on TVs) -->
+            <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:scrollbars="none"
                 android:layout_marginBottom="10dp">
 
-                <Button
-                    android:id="@+id/btnMosaicLayout"
+                <LinearLayout
+                    android:id="@+id/mosaicToolbar"
                     android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="🔲 Grade: 2x2 Quad"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:focusable="true"
-                    android:clickable="true"
-                    android:layout_marginEnd="8dp" />
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <Button
-                    android:id="@+id/btnMosaicPatrol"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="⏱️ Patrulha: 10s"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#CBD5E1"
-                    android:textSize="11sp"
-                    android:focusable="true"
-                    android:clickable="true"
-                    android:layout_marginEnd="8dp" />
+                    <Button
+                        android:id="@+id/btnMosaicLayout"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="🔲 Grade: 2x2 Quad"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="8dp" />
 
-                <Button
-                    android:id="@+id/btnMosaicFit"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="📐 Ajuste: Preencher"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#CBD5E1"
-                    android:textSize="11sp"
-                    android:focusable="true"
-                    android:clickable="true"
-                    android:layout_marginEnd="8dp" />
+                    <Button
+                        android:id="@+id/btnMosaicPatrol"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="⏱️ Patrulha: 10s"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="8dp" />
 
-                <Button
-                    android:id="@+id/btnMosaicOsd"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="👁️ OSD: ON"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#CBD5E1"
-                    android:textSize="11sp"
-                    android:focusable="true"
-                    android:clickable="true"
-                    android:layout_marginEnd="8dp" />
+                    <Button
+                        android:id="@+id/btnMosaicFit"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="📐 Ajuste: Preencher"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="8dp" />
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
+                    <Button
+                        android:id="@+id/btnMosaicOsd"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="👁️ OSD: ON"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="8dp" />
 
-                <Button
-                    android:id="@+id/btnMosaicReload"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="🔄 Recarregar"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#60A5FA"
-                    android:textSize="11sp"
-                    android:focusable="true"
-                    android:clickable="true"
-                    android:layout_marginEnd="8dp" />
+                    <Button
+                        android:id="@+id/btnMosaicReload"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="🔄 Recarregar"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#60A5FA"
+                        android:textSize="11sp"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="8dp" />
 
-                <Button
-                    android:id="@+id/btnMosaicViewMode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:text="⚡ Nativo"
-                    android:background="@drawable/btn_mosaic_option_selector"
-                    android:textColor="#34D399"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:focusable="true"
-                    android:clickable="true" />
-            </LinearLayout>
+                    <Button
+                        android:id="@+id/btnMosaicViewMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="⚡ Nativo"
+                        android:background="@drawable/btn_mosaic_option_selector"
+                        android:textColor="#34D399"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:focusable="true"
+                        android:clickable="true" />
+                </LinearLayout>
+            </HorizontalScrollView>
 
             <!-- Dynamic Native Mosaic Viewport -->
             <FrameLayout

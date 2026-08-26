@@ -8,6 +8,9 @@ env/
 *.egg-info/
 dist/
 build/
+.env
+.env.local
+.env.*.local
 
 # SQLite & Data
 *.db

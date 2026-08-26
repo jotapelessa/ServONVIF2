@@ -32,6 +32,11 @@ import {
   User,
   Video,
   SlidersHorizontal,
+  LayoutGrid,
+  SkipBack,
+  SkipForward,
+  HardDrive,
+  Maximize2,
 } from "lucide-react";
 
 const EVENT_FILTER_MAP: Record<string, "ALL" | "PLATES" | "PERSONS" | "VIDEOS"> = {
@@ -71,6 +76,25 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
     return "ALL";
   });
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
+
+  // Configuração dinâmica de colunas do grid (2, 3, 4, 5 ou 6)
+  const [gridCols, setGridCols] = useState<2 | 3 | 4 | 5 | 6>(4);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("events_grid_cols");
+      if (saved && ["2", "3", "4", "5", "6"].includes(saved)) {
+        setGridCols(Number(saved) as 2 | 3 | 4 | 5 | 6);
+      }
+    }
+  }, []);
+
+  const handleSetGridCols = (cols: 2 | 3 | 4 | 5 | 6) => {
+    setGridCols(cols);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("events_grid_cols", String(cols));
+    }
+  };
 
   const handleSwitchCategory = (cat: "ALL" | "PLATES" | "PERSONS" | "VIDEOS") => {
     setFilterCategory(cat);
@@ -264,6 +288,23 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
       };
     });
   }, [filteredEvents]);
+
+  const gridColsClass = useMemo(() => {
+    switch (gridCols) {
+      case 2:
+        return "grid-cols-1 sm:grid-cols-2";
+      case 3:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3";
+      case 4:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+      case 5:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
+      case 6:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
+      default:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+    }
+  }, [gridCols]);
 
   const getDeleteModeLabel = () => {
     switch (confirmDeleteMode) {
@@ -543,6 +584,29 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
             </button>
           ))}
         </div>
+
+        {/* Grid Density Columns Selector (2, 3, 4, 5, 6) */}
+        <div className="flex items-center gap-1 bg-slate-950/90 border border-slate-800 rounded-lg p-0.5 shrink-0">
+          <span className="text-[10px] font-mono text-slate-400 uppercase px-1.5 flex items-center gap-1">
+            <LayoutGrid className="w-3 h-3 text-blue-400" />
+            <span className="hidden sm:inline">Colunas:</span>
+          </span>
+          {([2, 3, 4, 5, 6] as const).map((num) => (
+            <button
+              key={num}
+              type="button"
+              onClick={() => handleSetGridCols(num)}
+              className={`w-6 h-6 rounded text-[11px] font-mono font-bold transition flex items-center justify-center ${
+                gridCols === num
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800"
+              }`}
+              title={`Exibir ${num} gravações por linha`}
+            >
+              {num}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Success Notification Banner */}
@@ -553,54 +617,201 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
         </div>
       )}
 
-      {/* 24-Hour Timeline Bar Component */}
-      <div className="w-full px-6 py-3 bg-slate-950/70 border-b border-slate-800 shrink-0">
-        <div className="flex items-center justify-between mb-1.5 text-[10px] font-mono text-slate-400">
-          <span className="flex items-center gap-1.5 text-blue-400 font-semibold">
-            <Clock className="w-3 h-3" /> Linha do Tempo (00:00 - 23:59)
+      {/* 24-Hour Timeline Bar Component with Proportional Hourly Distribution */}
+      <div className="w-full px-6 py-3.5 bg-slate-950/80 border-b border-slate-800/80 shrink-0 select-none">
+        {/* Top Header of Timeline with 24 Hours Markers */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="flex items-center gap-1.5 text-xs text-blue-400 font-semibold tracking-wide">
+            <Clock className="w-3.5 h-3.5" /> Linha do Tempo (24 Horas)
           </span>
-          <div className="flex items-center gap-4">
-            <span>00:00</span>
-            <span>04:00</span>
-            <span>08:00</span>
-            <span>12:00</span>
-            <span>16:00</span>
-            <span>20:00</span>
-            <span>23:59</span>
-          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            {timelineMarkers.length} {timelineMarkers.length === 1 ? "registro localizado" : "registros localizados"}
+          </span>
         </div>
 
-        {/* Timeline Track with Event Points */}
-        <div className="relative h-6 w-full rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center">
-          {/* Subtle Grid Hour Lines */}
-          {[0, 16.6, 33.3, 50, 66.6, 83.3, 100].map((pos, i) => (
-            <div
-              key={i}
-              className="absolute top-0 bottom-0 w-[1px] bg-slate-800 pointer-events-none"
-              style={{ left: `${pos}%` }}
-            />
-          ))}
+        {/* 24-Hour Proportional Labels Ruler */}
+        <div className="relative h-4 w-full mb-1 text-[10px] font-mono text-slate-400 overflow-visible">
+          {Array.from({ length: 24 }, (_, h) => {
+            const posPercent = (h / 24) * 100;
+            const isQuarter = h % 6 === 0;
+            const isEven = h % 2 === 0;
+            return (
+              <span
+                key={h}
+                className={`absolute transform -translate-x-1/2 transition-colors ${
+                  isQuarter
+                    ? "text-blue-400 font-bold text-[11px]"
+                    : isEven
+                    ? "text-slate-300 hidden sm:inline"
+                    : "text-slate-500 hidden md:inline"
+                }`}
+                style={{ left: `${posPercent}%` }}
+              >
+                {String(h).padStart(2, "0")}h
+              </span>
+            );
+          })}
+          <span
+            className="absolute transform -translate-x-full text-blue-400 font-bold text-[11px]"
+            style={{ left: "100%" }}
+          >
+            24h
+          </span>
+        </div>
 
-          {/* Motion Event Highlights */}
-          {timelineMarkers.map((m, idx) => (
+        {/* Timeline Track with Event Points and Proportional Ticks */}
+        <div className="relative h-8 w-full rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner overflow-hidden flex items-center group/track">
+          {/* Subtle Hourly Grid Lines (24 hours) */}
+          {Array.from({ length: 24 }, (_, h) => {
+            const pos = (h / 24) * 100;
+            const isQuarter = h % 6 === 0;
+            const isEven = h % 2 === 0;
+            return (
+              <div
+                key={h}
+                className={`absolute top-0 bottom-0 w-[1px] pointer-events-none transition-colors ${
+                  isQuarter
+                    ? "bg-blue-500/30 w-[1.5px]"
+                    : isEven
+                    ? "bg-slate-700/50"
+                    : "bg-slate-800/40"
+                }`}
+                style={{ left: `${pos}%` }}
+              />
+            );
+          })}
+
+          {/* Active Selected Event Highlight Marker */}
+          {activeEvent && selectedEventIndex !== null && timelineMarkers[selectedEventIndex] && (
             <div
-              key={idx}
-              onClick={() => {
-                const targetIdx = filteredEvents.findIndex((e) => e.id === m.id);
-                if (targetIdx !== -1) setSelectedEventIndex(targetIdx);
-              }}
-              title={`${m.cameraName} às ${m.timeStr} (${(m.score * 100).toFixed(1)}% mov)`}
-              className="group absolute top-0.5 bottom-0.5 w-2 -ml-1 rounded-sm bg-blue-500 hover:bg-rose-500 cursor-pointer transition-all hover:scale-y-125 z-10"
-              style={{ left: `${m.percent}%` }}
-            >
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center pointer-events-none z-30">
-                <div className="px-2 py-1 rounded bg-black/90 text-[10px] text-white whitespace-nowrap shadow-lg border border-white/10 font-mono">
-                  {m.cameraName} &bull; {m.timeStr}
+              className="absolute top-0 bottom-0 w-3 -ml-1.5 bg-amber-400/80 ring-2 ring-amber-300/80 rounded-sm z-20 pointer-events-none animate-pulse"
+              style={{ left: `${timelineMarkers[selectedEventIndex].percent}%` }}
+            />
+          )}
+
+          {/* Motion Event Highlights on Timeline */}
+          {timelineMarkers.map((m, idx) => {
+            const isSelected = selectedEventIndex === idx;
+            return (
+              <div
+                key={idx}
+                onClick={() => setSelectedEventIndex(idx)}
+                title={`${m.cameraName} às ${m.timeStr} (${(m.score * 100).toFixed(1)}% mov)`}
+                className={`group absolute top-1 bottom-1 w-2 -ml-1 rounded-sm cursor-pointer transition-all hover:scale-y-125 z-10 ${
+                  isSelected
+                    ? "bg-amber-400 ring-2 ring-amber-300 z-20 scale-y-110"
+                    : "bg-blue-500 hover:bg-rose-500"
+                }`}
+                style={{ left: `${m.percent}%` }}
+              >
+                {/* Tooltip on hover */}
+                <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center pointer-events-none z-40">
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-950/95 text-[10px] text-white whitespace-nowrap shadow-2xl border border-blue-500/30 font-mono flex items-center gap-1.5">
+                    <span className="font-semibold text-blue-400">{m.cameraName}</span>
+                    <span className="text-slate-400">&bull;</span>
+                    <span className="text-emerald-400 font-bold">{m.timeStr}</span>
+                    <span className="text-slate-400">&bull;</span>
+                    <span className="text-slate-300">{(m.score * 100).toFixed(0)}% mov</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+
+        {/* Navigation Control Bar Below the Timeline */}
+        <div className="mt-2.5 pt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Quick Jump & Stepper Buttons */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (filteredEvents.length > 0) setSelectedEventIndex(0);
+              }}
+              disabled={filteredEvents.length === 0 || selectedEventIndex === 0}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-[11px]"
+              title="Ir para a primeira gravação da lista"
+            >
+              <SkipBack className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Primeira</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePreviousEvent}
+              disabled={filteredEvents.length === 0 || selectedEventIndex === null || selectedEventIndex <= 0}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-[11px]"
+              title="Gravação anterior (Seta esquerda)"
+            >
+              <ChevronLeft className="w-4 h-4 text-blue-400" />
+              <span>Anterior</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNextEvent}
+              disabled={filteredEvents.length === 0 || selectedEventIndex === null || selectedEventIndex >= filteredEvents.length - 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-[11px]"
+              title="Próxima gravação (Seta direita)"
+            >
+              <span>Próximo</span>
+              <ChevronRight className="w-4 h-4 text-blue-400" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (filteredEvents.length > 0) setSelectedEventIndex(filteredEvents.length - 1);
+              }}
+              disabled={filteredEvents.length === 0 || selectedEventIndex === filteredEvents.length - 1}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-[11px]"
+              title="Ir para a última gravação da lista"
+            >
+              <span className="hidden sm:inline">Última</span>
+              <SkipForward className="w-3.5 h-3.5 text-blue-400" />
+            </button>
+          </div>
+
+          {/* Active Event Details & Watch Button */}
+          <div className="flex items-center gap-3">
+            {activeEvent && selectedEventIndex !== null ? (
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">
+                  Gravação {selectedEventIndex + 1} de {filteredEvents.length}
+                </span>
+                <span className="text-white font-medium truncate max-w-[140px] sm:max-w-[200px]">
+                  {activeEvent.camera_name}
+                </span>
+                <span className="text-slate-400 hidden md:inline">
+                  {new Date(activeEvent.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+                {activeEvent.file_size_formatted && activeEvent.file_size_formatted !== "--" && (
+                  <span className="text-emerald-400 font-semibold hidden lg:inline">
+                    💾 {activeEvent.file_size_formatted}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Triggers the cinema modal
+                    setSelectedEventIndex(selectedEventIndex);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[11px] shadow-sm transition"
+                >
+                  <Play className="w-3 h-3 fill-white" />
+                  <span>Assistir</span>
+                </button>
+              </div>
+            ) : (
+              <div className="text-slate-400 text-[11px] font-mono">
+                {filteredEvents.length > 0 ? (
+                  <span>Clique em um ponto ou use os botões para navegar entre as gravações</span>
+                ) : (
+                  <span>Nenhuma gravação para navegar</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -612,7 +823,7 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
             <span className="text-xs font-medium">Carregando gravações...</span>
           </div>
         ) : filteredEvents.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className={`grid ${gridColsClass} gap-4`}>
             {filteredEvents.map((evt, idx) => {
               const date = new Date(evt.timestamp);
               const dateStr = isNaN(date.getTime())
@@ -625,7 +836,11 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
               return (
                 <div
                   key={evt.id}
-                  className="group relative flex flex-col rounded-xl card-dark overflow-hidden transition-all duration-200 hover:border-blue-500/50 shadow-sm"
+                  className={`group relative flex flex-col rounded-xl card-dark overflow-hidden transition-all duration-200 shadow-sm ${
+                    selectedEventIndex === idx
+                      ? "ring-2 ring-blue-500 border-blue-500/80 shadow-lg shadow-blue-500/10"
+                      : "hover:border-blue-500/50"
+                  }`}
                 >
                   {/* Thumbnail / Video trigger */}
                   <div
@@ -663,12 +878,22 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
                   {/* Card Details */}
                   <div className="p-3 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-white truncate max-w-[150px]">
+                      <span className="text-xs font-semibold text-white truncate max-w-[140px]">
                         {evt.camera_name}
                       </span>
-                      <span className="text-[10px] text-blue-400 font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
-                        MP4 HD
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {evt.file_size_formatted && evt.file_size_formatted !== "--" && (
+                          <span
+                            className="text-[10px] text-emerald-400 font-mono font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20"
+                            title="Tamanho do arquivo gravado"
+                          >
+                            💾 {evt.file_size_formatted}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-blue-400 font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
+                          MP4 HD
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-white/5 font-mono">
@@ -744,6 +969,12 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
                   {(activeEvent.score * 100).toFixed(1)}% INTENSIDADE
                 </span>
+                {activeEvent.file_size_formatted && activeEvent.file_size_formatted !== "--" && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold flex items-center gap-1">
+                    <HardDrive className="w-3 h-3" />
+                    <span>{activeEvent.file_size_formatted}</span>
+                  </span>
+                )}
               </div>
 
               {/* Top Controls */}

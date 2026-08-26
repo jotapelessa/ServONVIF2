@@ -18,6 +18,43 @@ class BatchDeletePayload(BaseModel):
     date_str: Optional[str] = None # Format: YYYY-MM-DD
     camera_id: Optional[int] = None
 
+def _format_size(size_bytes: int) -> str:
+    if size_bytes <= 0:
+        return "0 KB"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+def _populate_event_file_size(event: MotionEvent) -> MotionEvent:
+    size = 0
+    if event.video_path:
+        p = Path(event.video_path)
+        if not p.is_absolute():
+            p = settings.MEDIA_DIR / p
+        if p.exists():
+            try:
+                size = p.stat().st_size
+            except Exception:
+                pass
+
+    if size == 0 and event.thumbnail_path:
+        p = Path(event.thumbnail_path)
+        if not p.is_absolute():
+            p = settings.MEDIA_DIR / p
+        if p.exists():
+            try:
+                size = p.stat().st_size
+            except Exception:
+                pass
+
+    if size > 0:
+        event.file_size_bytes = size
+        event.file_size_formatted = _format_size(size)
+    else:
+        event.file_size_bytes = 0
+        event.file_size_formatted = "--"
+    return event
+
 @router.get("/", response_model=List[MotionEvent])
 async def list_events(
     camera_id: Optional[int] = None,
@@ -30,7 +67,10 @@ async def list_events(
         query = query.where(MotionEvent.camera_id == camera_id)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    events = result.scalars().all()
+    for evt in events:
+        _populate_event_file_size(evt)
+    return events
 
 @router.get("/thumbnail/{camera_id}/{date_str}/{filename}")
 async def get_event_thumbnail(camera_id: int, date_str: str, filename: str):
