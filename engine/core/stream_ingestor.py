@@ -51,6 +51,8 @@ class StreamIngestor:
 
         self._is_recording_event = False
         self._event_frames = []
+        self._last_record_append_time = 0.0
+        self._is_lpr_busy = False
         self._post_event_countdown = 0
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._last_alert_time = 0.0
@@ -111,12 +113,12 @@ class StreamIngestor:
         )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
-        # High-stability TCP RTSP parameters with HEVC reference frame buffering
+        # High-stability TCP RTSP parameters with 2.5s socket timeout
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
             "rtsp_transport;tcp|"
-            "buffer_size;2048000|"
+            "buffer_size;1024000|"
             "max_delay;500000|"
-            "stimeout;5000000"
+            "stimeout;2500000"
         )
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
@@ -125,11 +127,12 @@ class StreamIngestor:
     def _grabber_loop(self) -> None:
         """
         Continuously drains the RTSP buffer as fast as packets arrive.
-        Ensures the camera frame is NEVER buffered or delayed, and filters out initial grey frames.
+        Ensures the camera frame is NEVER buffered or delayed, and applies exponential backoff on offline cameras.
         """
         rtsp_url = self.camera.rtsp_url
         cap = self._create_capture(rtsp_url)
         frames_since_connect = 0
+        reconnect_backoff = 2.0
 
         while self.is_running:
             if self.is_paused:
@@ -138,13 +141,15 @@ class StreamIngestor:
 
             ret, frame = cap.read()
             if not ret or frame is None:
-                logger.warning(f"RTSP stream dropped for [{self.camera.id}] {self.camera.name}. Reconnecting...")
+                logger.warning(f"RTSP stream dropped for [{self.camera.id}] {self.camera.name}. Reconnecting in {int(reconnect_backoff)}s...")
                 frames_since_connect = 0
-                time.sleep(2.0)
+                time.sleep(reconnect_backoff)
+                reconnect_backoff = min(reconnect_backoff * 1.5, 20.0)
                 cap.release()
                 cap = self._create_capture(rtsp_url)
                 continue
 
+            reconnect_backoff = 2.0
             frames_since_connect += 1
             # Skip the first 3 frames on fresh connection to allow HEVC/H.264 I-frame POC sync
             if frames_since_connect < 4:
@@ -162,7 +167,7 @@ class StreamIngestor:
     def _processor_loop(self) -> None:
         """
         Lightweight, high-efficiency processor:
-        - Continuous, smooth full-framerate event recording (Zero Frame Drops).
+        - Continuous, smooth event recording with optimized RAM footprint.
         - Throttled MOG2 Motion Detection at 8 FPS (saves 75% OpenCV CPU while keeping 100% detection reliability).
         - Ring buffer & MJPEG preview streaming at efficient, decoupled rates.
         """
@@ -193,14 +198,22 @@ class StreamIngestor:
             self.ring_buffer.push(frame, is_keyframe=True, timestamp=frame_time)
             mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=65, max_fps=10.0)
 
-            # 2. Continuous Full-FPS Recording during active event (Zero Frame-Drops)
+            # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
             if self._is_recording_event:
-                self._event_frames.append((frame.copy(), frame_time))
-                lpr_frame_counter += 1
+                if frame_time - self._last_record_append_time >= 0.048:  # ~20 FPS cap for recorded video
+                    self._last_record_append_time = frame_time
+                    h, w = frame.shape[:2]
+                    if w > 1920:
+                        rec_scale = 1920.0 / w
+                        rec_frame = cv2.resize(frame, (1920, int(h * rec_scale)), interpolation=cv2.INTER_LINEAR)
+                    else:
+                        rec_frame = frame.copy()
+                    self._event_frames.append((rec_frame, frame_time))
+                    lpr_frame_counter += 1
 
-                # Continuous multi-frame LPR scanning during vehicle movement (every 6th recorded frame)
-                if lpr_frame_counter % 6 == 0:
-                    self._trigger_lpr_scan(frame.copy(), is_motion=True, motion_bboxes=current_bboxes)
+                    # Continuous multi-frame LPR scanning during vehicle movement (every 8th recorded frame)
+                    if lpr_frame_counter % 8 == 0:
+                        self._trigger_lpr_scan(frame, is_motion=True, motion_bboxes=current_bboxes)
 
             now_monotonic = time.time()
 
@@ -241,7 +254,7 @@ class StreamIngestor:
             # 4. Periodic LPR scan for parked/stationary vehicles (every 15 seconds)
             if now_monotonic - self._last_periodic_lpr_time > 15.0:
                 self._last_periodic_lpr_time = now_monotonic
-                self._trigger_lpr_scan(frame.copy(), is_motion=False)
+                self._trigger_lpr_scan(frame, is_motion=False)
 
     def _trigger_lpr_scan(
         self,
@@ -251,12 +264,18 @@ class StreamIngestor:
     ) -> None:
         """
         Runs non-blocking license plate OCR candidate search in a background thread.
-        Notifies Web Panel, Android TV PiP and Telegram Vault when a plate is found.
+        Uses single-flight worker lock to prevent CPU overload.
         """
+        if self._is_lpr_busy:
+            return  # Skip frame if background OCR worker is already actively processing
+
+        self._is_lpr_busy = True
+        frame_copy = frame.copy()
+
         def _lpr_worker():
             try:
                 candidates = lpr_engine.find_plate_candidates(
-                    frame_bgr=frame,
+                    frame_bgr=frame_copy,
                     roi_polygon=getattr(self.camera, "roi_polygon", None),
                     motion_bboxes=motion_bboxes
                 )
@@ -279,7 +298,7 @@ class StreamIngestor:
                     thumb_path = MediaWriter.save_thumbnail(
                         camera_id=self.camera.id,
                         timestamp=now_dt,
-                        frame_bgr=frame,
+                        frame_bgr=frame_copy,
                         bounding_boxes=[cand["bbox"]]
                     )
 
@@ -300,7 +319,9 @@ class StreamIngestor:
 
                         asyncio.run_coroutine_threadsafe(_run_plate_detection(), self._loop)
             except Exception as e:
-                logger.debug(f"Background LPR scan error for [{self.camera.id}] {self.camera.name}: {e}")
+                logger.error(f"LPR Worker Error: {e}")
+            finally:
+                self._is_lpr_busy = False
 
         threading.Thread(target=_lpr_worker, daemon=True).start()
 

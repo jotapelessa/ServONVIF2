@@ -9,7 +9,7 @@ def main():
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
-        access_log=True
+        access_log=False
     )
 
 if __name__ == "__main__":
