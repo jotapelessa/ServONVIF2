@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0B0F19"
+    android:background="#070A11"
     android:padding="20dp">
 
     <!-- Header & Navigation Bar (D-Pad & Touch Enabled with Glowing Focus Rings) -->
@@ -311,7 +311,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:orientation="vertical"
-                        android:background="#1E293B"
+                        android:background="@drawable/bg_card_glass"
                         android:padding="16dp"
                         android:layout_marginEnd="12dp">
 
@@ -348,7 +348,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:orientation="vertical"
-                        android:background="#1E293B"
+                        android:background="@drawable/bg_card_glass"
                         android:padding="16dp"
                         android:layout_marginEnd="12dp">
 
@@ -385,7 +385,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:orientation="vertical"
-                        android:background="#1E293B"
+                        android:background="@drawable/bg_card_glass"
                         android:padding="16dp">
 
                         <TextView
@@ -421,7 +421,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:background="#1E293B"
+                    android:background="@drawable/bg_card_glass"
                     android:padding="16dp"
                     android:layout_marginBottom="16dp">
 
