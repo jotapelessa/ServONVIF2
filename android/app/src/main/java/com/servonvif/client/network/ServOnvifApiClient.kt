@@ -7,6 +7,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.servonvif.client.data.model.CameraModel
+import com.servonvif.client.data.repository.HardwareIdHelper
 import com.servonvif.client.data.repository.ServerConfigRepository
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
