@@ -29,8 +29,10 @@ if [ -z "$ANDROID_HOME" ]; then
         if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
             echo "📥 Baixando Android Command Line Tools..."
             wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
-            unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
-            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+            unzip -q -o /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+            if [ -d "$ANDROID_HOME/cmdline-tools/cmdline-tools" ]; then
+                mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+            fi
             rm /tmp/cmdtools.zip
         fi
         export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
@@ -39,12 +41,19 @@ if [ -z "$ANDROID_HOME" ]; then
     fi
 fi
 
+# 3. Garantir gradle-wrapper.jar presente
+mkdir -p "$WORKSPACE_DIR/android/gradle/wrapper"
+if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ]; then
+    echo "📥 Baixando Gradle Wrapper JAR..."
+    wget -q https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradle/wrapper/gradle-wrapper.jar -O "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar"
+fi
+
 echo "=================================================="
 echo "📺 Compilando APK 1: ServONVIF TV (Smart TV / PiP)..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/android"
 chmod +x ./gradlew
-./gradlew assembleDebug
+./gradlew assembleDebug --no-daemon
 
 # Copiar APK de TV para a pasta de saída
 if [ -f "$WORKSPACE_DIR/android/app/build/outputs/apk/debug/ServONVIF_TV.apk" ]; then
@@ -60,6 +69,12 @@ echo "📱 Compilando APK 2: ServONVIF Mobile (Smartphone)..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/mobile"
 
+# Instalar dependências se node_modules não existir
+if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
+    echo "📦 Instalando dependências do Mobile..."
+    npm install --silent
+fi
+
 # Gerar estrutura Android do Expo se ainda não gerada
 if [ ! -d "$WORKSPACE_DIR/mobile/android" ]; then
     echo "📦 Executando expo prebuild..."
@@ -68,7 +83,7 @@ fi
 
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
-./gradlew assembleDebug
+./gradlew assembleDebug --no-daemon
 
 # Localizar e copiar APK Mobile
 MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
@@ -81,5 +96,5 @@ echo "=================================================="
 echo "🎉 Compilação Concluída com Sucesso!"
 echo "=================================================="
 echo "Os APKs gerados estão na pasta 'build-outputs/':"
-ls -la "$OUTPUT_DIR"
+ls -lh "$OUTPUT_DIR"
 echo "=================================================="
