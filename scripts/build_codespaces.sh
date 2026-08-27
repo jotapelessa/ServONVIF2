@@ -90,18 +90,17 @@ if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
     npm install --silent
 fi
 
-# Gerar estrutura Android do Expo
-if [ ! -d "$WORKSPACE_DIR/mobile/android" ] || [ ! -f "$WORKSPACE_DIR/mobile/android/gradlew" ]; then
-    echo "📦 Executando expo prebuild..."
-    npx expo prebuild --platform android --clean --no-install
-fi
+# Gerar estrutura limpa do Expo Android
+echo "📦 Executando expo prebuild..."
+rm -rf "$WORKSPACE_DIR/mobile/android"
+npx expo prebuild --platform android --clean --no-install
 
-# Aplicar patches determinísticos de compatibilidade (cameraview maven repo + buildConfig)
+# Aplicar patches de compatibilidade (cameraview maven repo + buildConfig)
 python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
 
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
-./gradlew clean assembleDebug --no-daemon
+./gradlew assembleDebug --no-daemon
 
 # Localizar e copiar APK Mobile com nome e versão
 MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
