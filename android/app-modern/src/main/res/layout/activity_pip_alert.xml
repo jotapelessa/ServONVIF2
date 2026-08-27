@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/pipCardContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="16dp"
+    app:cardBackgroundColor="#0F172A"
+    app:cardMaxElevation="20dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#0F172A">
+
+        <!-- Live MJPEG Stream Video Player -->
+        <WebView
+            android:id="@+id/pipWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000" />
+
+        <!-- Header Overlay Banner -->
+        <LinearLayout
+            android:id="@+id/pipHeaderBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#CC020617"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp">
+
+            <TextView
+                android:id="@+id/tvCameraTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔴 Portão Principal"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10s"
+                android:textColor="#38BDF8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginStart="8dp" />
+
+            <TextView
+                android:id="@+id/btnPipClose"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:text="✕"
+                android:gravity="center"
+                android:textColor="#EF4444"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginStart="10dp"
+                android:background="#33EF4444"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- Bottom Action Bar / Hint -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:id="@+id/pipProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:progressTint="#38BDF8"
+                android:progressBackgroundTint="#334155"
+                android:max="100"
+                android:progress="100" />
+        </LinearLayout>
+    </RelativeLayout>
+</androidx.cardview.widget.CardView>

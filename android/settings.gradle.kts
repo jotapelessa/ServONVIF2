@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ServONVIF-Android"
 include(":app")
+include(":app-modern")

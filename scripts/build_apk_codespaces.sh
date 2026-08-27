@@ -61,15 +61,15 @@ cd ..
 
 echo ""
 echo "============================================================"
-echo "  🎉 SUCESSO! APK Compilado com Êxito!                      "
+echo "  🎉 SUCESSO! APKs Compilados com Êxito!                    "
 echo "============================================================"
-APK_FILE=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
-if [ -n "$APK_FILE" ]; then
-    echo "📁 Arquivo gerado: $APK_FILE"
-    echo ""
-    echo "💡 COMO BAIXAR NO CODESPACES:"
-    echo "   1. No menu de arquivos à esquerda (Explorer do VS Code), vá até:"
-    echo "      $APK_FILE"
-    echo "   2. Clique com o BOTÃO DIREITO nele e escolha 'Download...'"
-fi
+echo "📁 APKs Gerados:"
+find android -name "*.apk" | while read -r apk; do
+    echo "   👉 $apk"
+done
+echo ""
+echo "💡 COMO BAIXAR NO CODESPACES:"
+echo "   1. No Explorer de Arquivos à esquerda do VS Code, navegue até os arquivos acima."
+echo "   2. Clique com o BOTÃO DIREITO no APK desejado e escolha 'Download...'"
+echo "   3. Você pode instalar os dois simultaneamente no Moto G54 / Android TV!"
 echo "============================================================"

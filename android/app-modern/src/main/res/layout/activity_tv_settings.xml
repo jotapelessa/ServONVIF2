@@ -1,0 +1,541 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#070A11"
+    android:padding="28dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙️ Configurações &amp; Personalização do ServONVIF"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Network Config Group -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:orientation="vertical"
+                android:layout_marginEnd="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="IP do Servidor Mac / PC"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="6dp" />
+
+                <EditText
+                    android:id="@+id/etTvServerIp"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/btn_tv_action_dark_selector"
+                    android:textColor="#FFFFFF"
+                    android:padding="12dp"
+                    android:focusable="true"
+                    android:hint="ex: 192.168.1.96"
+                    android:textColorHint="#64748B"
+                    android:nextFocusRight="@+id/etTvServerPort"
+                    android:nextFocusDown="@+id/btnPosTopRight" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Porta da API"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="6dp" />
+
+                <EditText
+                    android:id="@+id/etTvServerPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/btn_tv_action_dark_selector"
+                    android:textColor="#FFFFFF"
+                    android:padding="12dp"
+                    android:focusable="true"
+                    android:text="8080"
+                    android:nextFocusLeft="@+id/etTvServerIp"
+                    android:nextFocusDown="@+id/btnPosCenter" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Position Selector Group -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📍 Posição da Janela Flutuante de Alerta na Tela:"
+            android:textColor="#E2E8F0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnPosTopRight"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="↗️ Superior Direito"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusRight="@+id/btnPosTopLeft"
+                android:nextFocusDown="@+id/btnSizeMicro" />
+
+            <Button
+                android:id="@+id/btnPosTopLeft"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="↖️ Superior Esquerdo"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusLeft="@+id/btnPosTopRight"
+                android:nextFocusRight="@+id/btnPosBottomRight"
+                android:nextFocusDown="@+id/btnSizeMini" />
+
+            <Button
+                android:id="@+id/btnPosBottomRight"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="↘️ Inferior Direito"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusLeft="@+id/btnPosTopLeft"
+                android:nextFocusRight="@+id/btnPosBottomLeft"
+                android:nextFocusDown="@+id/btnSizeCompact" />
+
+            <Button
+                android:id="@+id/btnPosBottomLeft"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="↙️ Inferior Esquerdo"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusLeft="@+id/btnPosBottomRight"
+                android:nextFocusRight="@+id/btnPosCenter"
+                android:nextFocusDown="@+id/btnSizeLarge" />
+
+            <Button
+                android:id="@+id/btnPosCenter"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="🔲 Centro"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@+id/btnPosBottomLeft"
+                android:nextFocusDown="@+id/btnSizeLarge" />
+        </LinearLayout>
+
+        <!-- Size Selector Group -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📐 Proporções 16:9 Pré-Configuradas (Ultra-Compactas ao Grande):"
+            android:textColor="#E2E8F0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnSizeMicro"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="🔬 Micro (220x124)"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusUp="@+id/btnPosTopRight"
+                android:nextFocusRight="@+id/btnSizeMini"
+                android:nextFocusDown="@+id/btnDur5s" />
+
+            <Button
+                android:id="@+id/btnSizeMini"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="📱 Mini (270x152)"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusUp="@+id/btnPosTopLeft"
+                android:nextFocusLeft="@+id/btnSizeMicro"
+                android:nextFocusRight="@+id/btnSizeCompact"
+                android:nextFocusDown="@+id/btnDur10s" />
+
+            <Button
+                android:id="@+id/btnSizeCompact"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="📺 Médio (320x180)"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp"
+                android:nextFocusUp="@+id/btnPosBottomRight"
+                android:nextFocusLeft="@+id/btnSizeMini"
+                android:nextFocusRight="@+id/btnSizeLarge"
+                android:nextFocusDown="@+id/btnDur15s" />
+
+            <Button
+                android:id="@+id/btnSizeLarge"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="🖥️ Grande (460x258)"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusUp="@+id/btnPosBottomLeft"
+                android:nextFocusLeft="@+id/btnSizeCompact"
+                android:nextFocusDown="@+id/btnDur30s" />
+        </LinearLayout>
+
+        <!-- Duration Group -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏱️ Duração de Exibição do Alerta na Tela:"
+            android:textColor="#E2E8F0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnDur5s"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="5 Segundos"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="8dp"
+                android:nextFocusUp="@+id/btnSizeMicro"
+                android:nextFocusRight="@+id/btnDur10s"
+                android:nextFocusDown="@+id/swTvSoundAlert" />
+
+            <Button
+                android:id="@+id/btnDur10s"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="10 Segundos"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="8dp"
+                android:nextFocusUp="@+id/btnSizeMini"
+                android:nextFocusLeft="@+id/btnDur5s"
+                android:nextFocusRight="@+id/btnDur15s"
+                android:nextFocusDown="@+id/swTvSoundAlert" />
+
+            <Button
+                android:id="@+id/btnDur15s"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="15 Segundos"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="8dp"
+                android:nextFocusUp="@+id/btnSizeCompact"
+                android:nextFocusLeft="@+id/btnDur10s"
+                android:nextFocusRight="@+id/btnDur30s"
+                android:nextFocusDown="@+id/swTvSoundAlert" />
+
+            <Button
+                android:id="@+id/btnDur30s"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="30 Segundos"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusUp="@+id/btnSizeLarge"
+                android:nextFocusLeft="@+id/btnDur15s"
+                android:nextFocusDown="@+id/swTvSoundAlert" />
+        </LinearLayout>
+
+        <!-- MOSAIC DEFAULT PREFERENCES GROUP -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔲 Personalização do Mosaico de Câmeras:"
+            android:textColor="#E2E8F0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Layout Selector -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <Button
+                android:id="@+id/btnSetMosaic2x2"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="2x2 Quad (4x)"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaic1Plus3"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="1+3 Destaque"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaic1x1"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="1x1 Tela Cheia"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetMosaicPatrol"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="🔄 Auto-Patrulha"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+        </LinearLayout>
+
+        <!-- Fit Mode Selector -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnSetFitCover"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="📐 Preencher Sem Bordas (Cover)"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnSetFitContain"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="📐 Proporção Exata (Contain)"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+        </LinearLayout>
+
+        <!-- Switches -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swTvSoundAlert"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Emitir aviso sonoro (chime) no alarme"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:focusable="true"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:nextFocusUp="@+id/btnDur10s"
+            android:nextFocusDown="@+id/swTvAutoStart" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swTvAutoStart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Iniciar monitoramento automaticamente ao ligar o aparelho"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:focusable="true"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:layout_marginBottom="20dp"
+            android:nextFocusUp="@+id/swTvSoundAlert"
+            android:nextFocusDown="@+id/btnTvSaveSettings" />
+
+        <!-- Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnTvTestConnection"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="📡 Testar Conexão"
+                android:background="@drawable/btn_tv_action_dark_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:layout_marginEnd="12dp"
+                android:nextFocusUp="@+id/swTvAutoStart"
+                android:nextFocusRight="@+id/btnTvSaveSettings" />
+
+            <Button
+                android:id="@+id/btnTvSaveSettings"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="💾 Salvar Configurações"
+                android:background="@drawable/btn_tv_action_blue_selector"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusUp="@+id/swTvAutoStart"
+                android:nextFocusLeft="@+id/btnTvTestConnection" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvTvStatusMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#38BDF8"
+            android:textSize="13sp" />
+    </LinearLayout>
+</ScrollView>
