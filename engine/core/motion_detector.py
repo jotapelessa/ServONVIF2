@@ -17,8 +17,8 @@ class MotionDetector:
         roi_polygon: Optional[List[List[float]]] = None,
         ignore_polygons: Optional[List[List[List[float]]]] = None,
         sensitivity: float = 20.0,
-        history: int = 500,
-        var_threshold: float = 36.0,  # Strict threshold to eliminate camera sensor noise and pixel jitter
+        history: int = 400,
+        var_threshold: float = 40.0,  # High stability against camera sensor jitter
         detect_shadows: bool = False
     ):
         # Normalize sensitivity on 0-50 scale
@@ -40,9 +40,13 @@ class MotionDetector:
         )
 
         # Morphological Kernels for strict noise suppression
-        self.open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        self.open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         self.close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-        self.dilate_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+
+        # Anti-Lighting Jump & Temporal Consistency State
+        self._prev_luma: Optional[float] = None
+        self._consecutive_motion_count: int = 0
+        self._light_shock_cooldown_frames: int = 0
 
     def update_roi_polygon(self, roi_polygon: Optional[List[List[float]]]) -> None:
         self.roi_polygon = roi_polygon
@@ -114,37 +118,77 @@ class MotionDetector:
 
     def process_frame(self, frame_bgr: np.ndarray) -> Tuple[bool, float, List[Tuple[int, int, int, int]]]:
         """
-        Processes a downscaled BGR frame with strict spatial filtering.
-        Guarantees 0% false positives from areas outside the ROI or inside Purple Ignore Zones.
+        Processes a downscaled BGR frame with:
+        1. Strict Dual-Zone Isolation (Zero false positives from Ignore Zones).
+        2. Global Illumination Shock Compensation (Lamps turning on/off, headlights, reflections).
+        3. 2-Frame Temporal Consistency Check.
         """
-        # If sensitivity is 0, detection is completely disabled
         if self.sensitivity <= 0.0:
             return False, 0.0, []
 
         h, w = frame_bgr.shape[:2]
         effective_mask = self._get_effective_mask(w, h)
 
-        # 1. PRE-MASKING: Isolate active pixels before MOG2
+        # Calculate active area
+        active_pixels = cv2.countNonZero(effective_mask) if effective_mask is not None else (w * h)
+        total_active_pixels = max(active_pixels, 1)
+
+        # 1. Global Illumination / Light Switch Detection
+        # Compute mean luminance in the active ROI to detect instantaneous scene brightness shifts
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        current_luma = float(cv2.mean(gray, mask=effective_mask)[0])
+
+        is_light_shock = False
+        if self._prev_luma is not None:
+            luma_delta = abs(current_luma - self._prev_luma)
+            # Sudden scene-wide illumination jump (> 14.0 luma units in a single frame)
+            if luma_delta > 14.0:
+                is_light_shock = True
+                self._light_shock_cooldown_frames = 3
+                logger.debug(f"💡 Global light switch detected (ΔLuma={luma_delta:.1f}). Suppressing false alarm.")
+
+        self._prev_luma = current_luma
+
+        # 2. Pre-masking input image before MOG2
         if effective_mask is not None:
             processed_input = cv2.bitwise_and(frame_bgr, frame_bgr, mask=effective_mask)
-            active_pixels = cv2.countNonZero(effective_mask)
-            total_active_pixels = active_pixels if active_pixels > 0 else (w * h)
         else:
             processed_input = frame_bgr
-            total_active_pixels = w * h
 
-        # 2. Apply MOG2 background subtraction on isolated pixels
-        fg_mask = self.bg_subtractor.apply(processed_input)
+        # Fast background adaptation during light shock (adapts model in 2 frames without alarm)
+        learning_rate = 0.35 if (is_light_shock or self._light_shock_cooldown_frames > 0) else -1
+        if self._light_shock_cooldown_frames > 0:
+            self._light_shock_cooldown_frames -= 1
 
-        # 3. POST-MASKING: Hard bitwise-AND to guarantee zero leaking outside boundaries
+        fg_mask = self.bg_subtractor.apply(processed_input, learningRate=learning_rate)
+
+        # If a light shock just occurred, discard motion entirely
+        if is_light_shock:
+            self._consecutive_motion_count = 0
+            return False, 0.0, []
+
+        # 3. Double-Layer Masking (Pre-Morphology AND Post-Morphology)
+        # Guarantees that morphological dilation NEVER bleeds across the Purple Ignore boundary
         if effective_mask is not None:
             fg_mask = cv2.bitwise_and(fg_mask, effective_mask)
 
-        # 4. Strict Morphological Noise Filtering
-        # Morphological OPENING: removes single isolated noise pixels and line artifacts
+        # 4. Strict Morphological Filtering
+        # Open to eliminate camera noise specks
         fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, self.open_kernel)
-        # Morphological CLOSING: solidifies genuine moving bodies
+        # Close to join connected body parts
         fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, self.close_kernel)
+
+        # Re-apply effective mask after morphology to cut any dilated boundary pixels
+        if effective_mask is not None:
+            fg_mask = cv2.bitwise_and(fg_mask, effective_mask)
+
+        # Check for massive screen-wide foreground flood (typical of global exposure changes)
+        total_fg_pixels = cv2.countNonZero(fg_mask)
+        raw_fg_ratio = float(total_fg_pixels) / float(total_active_pixels)
+        if raw_fg_ratio > 0.40:
+            # More than 40% of the entire monitored area changed at once -> global light change
+            self._consecutive_motion_count = 0
+            return False, 0.0, []
 
         # 5. Extract significant motion contours
         contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -152,27 +196,42 @@ class MotionDetector:
         valid_motion_pixels = 0
 
         # Sensitivity formula:
-        # Scale 0 - 50:
-        # sens=1  -> area_factor ~ 0.0070 (requires ~0.7% screen blob, ultra strict)
-        # sens=20 -> area_factor ~ 0.0040 (requires ~0.4% screen blob, balanced)
-        # sens=50 -> area_factor ~ 0.0008 (requires ~0.08% screen blob, sensitive)
         sens_clamped = max(1.0, min(50.0, self.sensitivity))
         area_factor = max(0.0006, (51.0 - sens_clamped) * 0.00014)
-        min_contour_area = max(140.0, total_active_pixels * area_factor)
-        score_threshold = max(0.0025, (51.0 - sens_clamped) * 0.00045)
+        min_contour_area = max(120.0, total_active_pixels * area_factor)
+        score_threshold = max(0.0020, (51.0 - sens_clamped) * 0.00040)
 
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area >= min_contour_area:
                 x, y, bw, bh = cv2.boundingRect(cnt)
-                # Verify centroid is inside effective mask
-                cx, cy = x + bw // 2, y + bh // 2
-                if 0 <= cx < w and 0 <= cy < h:
-                    if effective_mask is None or effective_mask[cy, cx] > 0:
-                        bounding_boxes.append((x, y, bw, bh))
-                        valid_motion_pixels += int(area)
 
-        motion_score = float(valid_motion_pixels) / float(total_active_pixels) if total_active_pixels > 0 else 0.0
-        is_motion = len(bounding_boxes) > 0 and (motion_score >= score_threshold)
+                # Strict Overlap Verification: Ensure contour is predominantly inside the active zone
+                if effective_mask is not None:
+                    roi_slice = effective_mask[y:y+bh, x:x+bw]
+                    if roi_slice.size > 0:
+                        active_overlap = cv2.countNonZero(roi_slice) / float(roi_slice.size)
+                        if active_overlap < 0.50:
+                            # Discard contour if more than 50% is in the ignore zone
+                            continue
+                else:
+                    cx, cy = x + bw // 2, y + bh // 2
+                    if not (0 <= cx < w and 0 <= cy < h):
+                        continue
+
+                bounding_boxes.append((x, y, bw, bh))
+                valid_motion_pixels += int(area)
+
+        motion_score = float(valid_motion_pixels) / float(total_active_pixels)
+        raw_detection = len(bounding_boxes) > 0 and (motion_score >= score_threshold)
+
+        # 6. Temporal Consistency (2-Frame Filter)
+        # Prevents 1-frame transient flashes from triggering false alarms
+        if raw_detection:
+            self._consecutive_motion_count += 1
+        else:
+            self._consecutive_motion_count = 0
+
+        is_motion = (self._consecutive_motion_count >= 2)
 
         return is_motion, motion_score, bounding_boxes
