@@ -43,7 +43,9 @@ class Settings(BaseSettings):
 
     # LPR & Vehicle Recognition
     LPR_ENABLED: bool = True
-    LPR_MIN_CONFIDENCE: float = 0.70
+    LPR_MIN_CONFIDENCE: float = 0.75
+    LPR_REQUIRE_MOTION: bool = True
+    LPR_SCAN_STATIC_VEHICLES: bool = False
     LPR_NOTIFY_TELEGRAM: bool = True
     LPR_NOTIFY_TV: bool = True
     LPR_ALARM_ON_BLOCKED: bool = True

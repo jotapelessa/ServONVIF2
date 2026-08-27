@@ -147,6 +147,10 @@ async def load_persisted_system_settings() -> None:
                     settings.LPR_COOLDOWN_SECONDS = int(all_settings["lpr_cooldown_seconds"])
                 except Exception:
                     pass
+            if "lpr_require_motion" in all_settings and all_settings["lpr_require_motion"] is not None:
+                settings.LPR_REQUIRE_MOTION = all_settings["lpr_require_motion"].lower() == "true"
+            if "lpr_scan_static_vehicles" in all_settings and all_settings["lpr_scan_static_vehicles"] is not None:
+                settings.LPR_SCAN_STATIC_VEHICLES = all_settings["lpr_scan_static_vehicles"].lower() == "true"
 
             # Sync com o serviço do telegram
             from engine.services.telegram_bot import telegram_service

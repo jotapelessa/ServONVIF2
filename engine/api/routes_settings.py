@@ -49,6 +49,8 @@ class SettingsUpdate(BaseModel):
     lpr_alarm_on_blocked: Optional[bool] = None
     lpr_motorcycle_enabled: Optional[bool] = None
     lpr_cooldown_seconds: Optional[int] = None
+    lpr_require_motion: Optional[bool] = None
+    lpr_scan_static_vehicles: Optional[bool] = None
 
 class StorageConfigUpdate(BaseModel):
     retention_days: Optional[int] = None
@@ -188,6 +190,8 @@ async def get_current_settings():
         "lpr_alarm_on_blocked": settings.LPR_ALARM_ON_BLOCKED,
         "lpr_motorcycle_enabled": settings.LPR_MOTORCYCLE_ENABLED,
         "lpr_cooldown_seconds": settings.LPR_COOLDOWN_SECONDS,
+        "lpr_require_motion": settings.LPR_REQUIRE_MOTION,
+        "lpr_scan_static_vehicles": settings.LPR_SCAN_STATIC_VEHICLES,
         "processing_paused": camera_manager.is_processing_paused,
         "storage": storage_stats,
         "system_metrics": sys_metrics,
@@ -265,6 +269,14 @@ async def update_settings(payload: SettingsUpdate):
     if payload.lpr_cooldown_seconds is not None:
         settings.LPR_COOLDOWN_SECONDS = payload.lpr_cooldown_seconds
         await set_system_setting("lpr_cooldown_seconds", payload.lpr_cooldown_seconds)
+
+    if payload.lpr_require_motion is not None:
+        settings.LPR_REQUIRE_MOTION = payload.lpr_require_motion
+        await set_system_setting("lpr_require_motion", payload.lpr_require_motion)
+
+    if payload.lpr_scan_static_vehicles is not None:
+        settings.LPR_SCAN_STATIC_VEHICLES = payload.lpr_scan_static_vehicles
+        await set_system_setting("lpr_scan_static_vehicles", payload.lpr_scan_static_vehicles)
 
     if payload.retention_days is not None:
         settings.RETENTION_DAYS = payload.retention_days

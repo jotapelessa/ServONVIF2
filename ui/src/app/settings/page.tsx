@@ -213,6 +213,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [lprAlarmOnBlocked, setLprAlarmOnBlocked] = useState(true);
   const [lprMotorcycleEnabled, setLprMotorcycleEnabled] = useState(true);
   const [lprCooldownSeconds, setLprCooldownSeconds] = useState(30);
+  const [lprRequireMotion, setLprRequireMotion] = useState(true);
+  const [lprScanStaticVehicles, setLprScanStaticVehicles] = useState(false);
 
   // Form State
   const [telegramToken, setTelegramToken] = useState("");
@@ -498,6 +500,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         setLprAlarmOnBlocked(data.lpr_alarm_on_blocked ?? true);
         setLprMotorcycleEnabled(data.lpr_motorcycle_enabled ?? true);
         setLprCooldownSeconds(data.lpr_cooldown_seconds ?? 30);
+        setLprRequireMotion(data.lpr_require_motion ?? true);
+        setLprScanStaticVehicles(data.lpr_scan_static_vehicles ?? false);
         setRetentionDays(data.retention_days || 7);
         setMaxStorageQuotaGb(data.max_storage_quota_gb || 0);
         setMinFreeDiskGb(data.min_free_disk_gb || 5.0);
@@ -857,6 +861,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         lpr_alarm_on_blocked: lprAlarmOnBlocked,
         lpr_motorcycle_enabled: lprMotorcycleEnabled,
         lpr_cooldown_seconds: Number(lprCooldownSeconds),
+        lpr_require_motion: lprRequireMotion,
+        lpr_scan_static_vehicles: lprScanStaticVehicles,
         retention_days: Number(retentionDays),
         default_buffer_seconds: Number(bufferSeconds),
       });
@@ -1772,6 +1778,48 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                           <span
                             className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
                               lprAlarmOnBlocked ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Require Motion Gating (Anti-Garage False Positives) */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-emerald-400">Exigir Movimento na Zona</div>
+                          <div className="text-[10px] text-slate-400">Anti-falso positivo em portão/garagem</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprRequireMotion(!lprRequireMotion)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprRequireMotion ? "bg-emerald-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprRequireMotion ? "translate-x-4" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Static Scan Toggle */}
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-slate-200">Varredura Estática 30s</div>
+                          <div className="text-[10px] text-slate-400">Veículo parado (desativado em garagem)</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLprScanStaticVehicles(!lprScanStaticVehicles)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                            lprScanStaticVehicles ? "bg-amber-600" : "bg-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              lprScanStaticVehicles ? "translate-x-4" : "translate-x-1"
                             }`}
                           />
                         </button>

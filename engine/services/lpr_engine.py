@@ -50,6 +50,15 @@ class LPREngine:
     MERCOSUL_REGEX = re.compile(r"^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")
     OLD_PLATE_REGEX = re.compile(r"^[A-Z]{3}[0-9]{4}$")
 
+    # Blacklist of common indoor/garage words and brand textures that OCR extracts
+    BLACKLIST_WORDS = {
+        "SAMSUNG", "PORTAO1", "ENTRADA", "GARAGEM", "ESTACIO", "POSITIV",
+        "CONTROL", "GRAVADO", "CAMERAS", "INTELBR", "HIKVISI", "SECURITY",
+        "FABRICA", "PROIBID", "ATENCAO", "CUIDADO", "ENERGIA", "ELETRIC",
+        "PERIGOS", "PLASTIC", "SERVICE", "WINDOWS", "ANDROID", "DEFAULT",
+        "ALARMES", "SISTEMA", "OFICINA", "DESKJET", "PREMIUM", "MOTORLA"
+    }
+
     @classmethod
     def clean_plate_text(cls, raw_text: str) -> str:
         """
@@ -62,14 +71,13 @@ class LPREngine:
         return cleaned
 
     @classmethod
-    def repair_mercosul_ocr(cls, text: str) -> str:
+    def repair_mercosul_ocr(cls, text: str) -> Optional[str]:
         """
-        Applies positional heuristics to correct common OCR character confusion in Mercosul plates (LLLNLNN).
+        Applies positional heuristics to correct AT MOST ONE ambiguous OCR character.
+        If 2 or more characters deviate from Mercosul (LLLNLNN), it is discarded as non-plate noise.
         """
-        if len(text) != 7:
-            return text
-
-        chars = list(text)
+        if len(text) != 7 or not text.isalnum():
+            return None
 
         digit_to_letter = {
             '0': 'O', '1': 'I', '2': 'Z', '3': 'E', '4': 'A',
@@ -81,41 +89,75 @@ class LPREngine:
             'B': '8', 'T': '7'
         }
 
+        chars = list(text)
+        violations = 0
+
         # Positions 0, 1, 2 must be LETTERS
         for i in range(3):
-            if chars[i] in digit_to_letter:
-                chars[i] = digit_to_letter[chars[i]]
+            if not chars[i].isalpha():
+                if chars[i] in digit_to_letter:
+                    chars[i] = digit_to_letter[chars[i]]
+                    violations += 1
+                else:
+                    return None  # Non-repairable character
 
         # Position 3 must be a DIGIT
-        if chars[3] in letter_to_digit:
-            chars[3] = letter_to_digit[chars[3]]
+        if not chars[3].isdigit():
+            if chars[3] in letter_to_digit:
+                chars[3] = letter_to_digit[chars[3]]
+                violations += 1
+            else:
+                return None
+
+        # Position 4 in Mercosul is alphanumeric [A-Z0-9], so both letter and digit are valid
 
         # Positions 5, 6 must be DIGITS
         for i in (5, 6):
-            if chars[i] in letter_to_digit:
-                chars[i] = letter_to_digit[chars[i]]
+            if not chars[i].isdigit():
+                if chars[i] in letter_to_digit:
+                    chars[i] = letter_to_digit[chars[i]]
+                    violations += 1
+                else:
+                    return None
 
-        return "".join(chars)
+        # STRICT: Only allow repair if there was exactly 1 minor OCR ambiguity
+        if violations == 1:
+            repaired = "".join(chars)
+            if cls.MERCOSUL_REGEX.match(repaired):
+                return repaired
+
+        return None
 
     @classmethod
-    def validate_plate(cls, plate: str) -> Tuple[bool, str]:
+    def validate_plate(cls, plate: str) -> Tuple[bool, str, str]:
         """
         Validates if the plate is valid Mercosul or Standard Gray format.
-        Returns: (is_valid, plate_type)
+        Returns: (is_valid, plate_type, plate_str)
         """
         cleaned = cls.clean_plate_text(plate)
         if len(cleaned) == 7:
-            if cls.MERCOSUL_REGEX.match(cleaned):
-                return True, "MERCOSUL"
-            if cls.OLD_PLATE_REGEX.match(cleaned):
-                return True, "ANTIGA"
-            
-            # Try auto-repair heuristic
-            repaired = cls.repair_mercosul_ocr(cleaned)
-            if cls.MERCOSUL_REGEX.match(repaired):
-                return True, "MERCOSUL"
+            # Reject blacklisted static words
+            if cleaned in cls.BLACKLIST_WORDS:
+                return False, "INVALID", cleaned
 
-        return False, "INVALID"
+            # Reject uniform repetitive noise (e.g., AAAAAAA, 1111111)
+            if len(set(cleaned)) < 3:
+                return False, "INVALID", cleaned
+
+            # Direct Mercosul match (LLLNLNN)
+            if cls.MERCOSUL_REGEX.match(cleaned):
+                return True, "MERCOSUL", cleaned
+
+            # Direct Old Gray Plate match (LLLNNNN)
+            if cls.OLD_PLATE_REGEX.match(cleaned):
+                return True, "ANTIGA", cleaned
+            
+            # Strict Single-character heuristic repair
+            repaired = cls.repair_mercosul_ocr(cleaned)
+            if repaired and repaired not in cls.BLACKLIST_WORDS and len(set(repaired)) >= 3:
+                return True, "MERCOSUL", repaired
+
+        return False, "INVALID", cleaned
 
     @classmethod
     def find_plate_candidates(
@@ -273,19 +315,20 @@ class LPREngine:
                         cand_plain = cls.clean_plate_text(ocr_plain)
                         if len(cand_plain) == 7:
                             cleaned = cand_plain
-                            break
                     except Exception:
                         pass
 
-                is_valid, plate_type = cls.validate_plate(cleaned)
-                if not is_valid and len(cleaned) == 7:
-                    cleaned = cls.repair_mercosul_ocr(cleaned)
-                    is_valid, plate_type = cls.validate_plate(cleaned)
+                # Validate patch brightness & contrast (plates are never pitch black or blown out)
+                mean_val = np.mean(plate_patch)
+                if mean_val < 35 or mean_val > 245:
+                    continue
 
-                if is_valid and cleaned not in found_plates:
-                    found_plates.add(cleaned)
+                is_valid, plate_type, final_plate = cls.validate_plate(cleaned)
+
+                if is_valid and final_plate not in found_plates:
+                    found_plates.add(final_plate)
                     candidates.append({
-                        "plate_number": cleaned,
+                        "plate_number": final_plate,
                         "plate_type": f"{plate_type} ({'Moto' if vtype == 'MOTO' else 'Carro'})",
                         "confidence": 0.95,
                         "bbox": (off_x + px, off_y + py, pw, ph),
@@ -306,17 +349,14 @@ class LPREngine:
     ) -> Dict[str, Any]:
         """
         Processes a detected plate:
-        1. Cleans and normalizes plate string.
+        1. Cleans and normalizes plate string with strict validation.
         2. Queries database for registered vehicle info.
         3. Records detection in plate_detection_logs.
         4. Broadcasts real-time WebSocket alert for Android TV PiP & Web Panel.
         """
-        cleaned_plate = cls.clean_plate_text(raw_plate)
-        is_valid, plate_type = cls.validate_plate(cleaned_plate)
-
-        if not is_valid and len(cleaned_plate) == 7:
-            cleaned_plate = cls.repair_mercosul_ocr(cleaned_plate)
-            is_valid, plate_type = cls.validate_plate(cleaned_plate)
+        is_valid, plate_type, cleaned_plate = cls.validate_plate(raw_plate)
+        if not is_valid:
+            return {}
 
         # Lookup Vehicle in DB
         statement = select(Vehicle).where(Vehicle.plate_number == cleaned_plate)

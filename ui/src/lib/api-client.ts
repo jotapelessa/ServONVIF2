@@ -96,6 +96,8 @@ export interface SettingsResponse {
   lpr_alarm_on_blocked?: boolean;
   lpr_motorcycle_enabled?: boolean;
   lpr_cooldown_seconds?: number;
+  lpr_require_motion?: boolean;
+  lpr_scan_static_vehicles?: boolean;
   processing_paused?: boolean;
   storage?: {
     total_files: number;

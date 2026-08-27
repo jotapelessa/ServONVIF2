@@ -254,10 +254,11 @@ class StreamIngestor:
                     if total_recording_elapsed >= duration_sec:
                         self._handle_motion_end_async()
 
-            # 4. Periodic LPR scan for parked/stationary vehicles (every 15 seconds)
-            if now_monotonic - self._last_periodic_lpr_time > 15.0:
-                self._last_periodic_lpr_time = now_monotonic
-                self._trigger_lpr_scan(frame, is_motion=False)
+            # 4. Periodic LPR scan for parked/stationary vehicles (only if explicitly enabled in settings)
+            if getattr(settings, "LPR_SCAN_STATIC_VEHICLES", False):
+                if now_monotonic - self._last_periodic_lpr_time > 30.0:
+                    self._last_periodic_lpr_time = now_monotonic
+                    self._trigger_lpr_scan(frame, is_motion=False)
 
     def _trigger_lpr_scan(
         self,
@@ -267,8 +268,15 @@ class StreamIngestor:
     ) -> None:
         """
         Runs non-blocking license plate OCR candidate search in a background thread.
-        Uses single-flight worker lock to prevent CPU overload.
+        Uses single-flight worker lock and strict motion gating to eliminate garage/indoor false positives.
         """
+        if not getattr(settings, "LPR_ENABLED", True):
+            return
+
+        # If motion is required, ignore frames without active motion (e.g. closed garage)
+        if getattr(settings, "LPR_REQUIRE_MOTION", True) and not is_motion:
+            return
+
         if self._is_lpr_busy:
             return  # Skip frame if background OCR worker is already actively processing
 
