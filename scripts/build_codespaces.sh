@@ -96,6 +96,14 @@ if [ ! -d "$WORKSPACE_DIR/mobile/android" ] || [ ! -f "$WORKSPACE_DIR/mobile/and
     npx expo prebuild --platform android --clean --no-install
 fi
 
+# Configurar repositório local do expo-camera no build.gradle se necessário
+if [ -f "$WORKSPACE_DIR/mobile/android/build.gradle" ]; then
+    if ! grep -q "expo-camera/android/maven" "$WORKSPACE_DIR/mobile/android/build.gradle"; then
+        echo "🔧 Adicionando repositório Maven do expo-camera..."
+        sed -i 's|allprojects {|allprojects {\n    repositories {\n        maven { url "$rootDir/../node_modules/expo-camera/android/maven" }\n    }|' "$WORKSPACE_DIR/mobile/android/build.gradle" || true
+    fi
+fi
+
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
 ./gradlew assembleDebug --no-daemon

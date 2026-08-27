@@ -49,6 +49,9 @@ jobs:
           cd mobile
           npm install
           npx expo prebuild --platform android --clean --no-install
+          if [ -f android/build.gradle ]; then
+            sed -i 's|allprojects {|allprojects {\n    repositories {\n        maven { url "$rootDir/../node_modules/expo-camera/android/maven" }\n    }|' android/build.gradle || true
+          fi
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
