@@ -32,7 +32,7 @@ class MJPEGStreamer:
                     del self._queues[camera_id]
         logger.debug(f"MJPEG client disconnected from camera {camera_id}")
 
-    def broadcast_frame(self, camera_id: int, frame_bgr: np.ndarray, quality: int = 65, max_fps: float = 12.0) -> None:
+    def broadcast_frame(self, camera_id: int, frame_bgr: np.ndarray, quality: int = 80, max_fps: float = 15.0) -> None:
         if camera_id not in self._queues or not self._queues[camera_id]:
             return
 
@@ -44,15 +44,15 @@ class MJPEGStreamer:
 
         self._last_broadcast_times[camera_id] = now
 
-        # Downscale for web preview grid (e.g. 640px width is crystal clear in tiles and uses 85% less CPU than 5MP)
+        # Maintain high visual clarity for web tiles and spotlight (1280px HD crisp scaling)
         h, w = frame_bgr.shape[:2]
-        if w > 800:
-            scale = 640.0 / w
-            preview_frame = cv2.resize(frame_bgr, (640, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+        if w > 1280:
+            scale = 1280.0 / w
+            preview_frame = cv2.resize(frame_bgr, (1280, int(h * scale)), interpolation=cv2.INTER_AREA)
         else:
             preview_frame = frame_bgr
 
-        # Encode JPEG
+        # Encode high-fidelity JPEG
         _, jpeg = cv2.imencode('.jpg', preview_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         frame_bytes = jpeg.tobytes()
 

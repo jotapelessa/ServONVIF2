@@ -602,7 +602,62 @@ export const apiClient = {
     if (!res.ok) throw new Error("Falha ao obter status do Tailscale");
     return res.json();
   },
+
+  async getSensorDiagnostics(cameraId: number): Promise<SensorDiagnosticsResponse> {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/sensor-diagnostics`);
+    if (!res.ok) throw new Error("Falha ao executar auditoria do sensor");
+    return res.json();
+  },
+
+  async switchCameraProfile(cameraId: number, profileUri: string): Promise<{ success: boolean; message: string; camera: Camera }> {
+    const res = await fetch(`${getApiBase()}/api/cameras/${cameraId}/switch-profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_uri: profileUri }),
+    });
+    if (!res.ok) throw new Error("Falha ao alternar perfil de stream da câmera");
+    return res.json();
+  },
 };
+
+export interface OnvifProfileInfo {
+  token: string;
+  name: string;
+  width: number;
+  height: number;
+  megapixels: number;
+  encoding: string;
+  fps_limit: number;
+  bitrate_kbps: number;
+  quality: number;
+  rtsp_uri: string;
+  is_main: boolean;
+}
+
+export interface ActiveStreamSensorInfo {
+  url?: string;
+  width: number;
+  height: number;
+  megapixels: number;
+  aspect_ratio: string;
+  classification: string;
+  quality_badge: "EXCELLENT" | "GOOD" | "STANDARD" | "FAIR" | "LOW";
+  sharpness_score: number;
+  focus_status: string;
+  contrast_score: number;
+  luma_mean: number;
+  is_substream: boolean;
+}
+
+export interface SensorDiagnosticsResponse {
+  success: boolean;
+  active_stream: ActiveStreamSensorInfo;
+  profiles: OnvifProfileInfo[];
+  best_profile?: OnvifProfileInfo | null;
+  upgrade_available: boolean;
+  recommended_url?: string | null;
+  tested_at: string;
+}
 
 export interface SystemVersionInfo {
   local_commit: string;

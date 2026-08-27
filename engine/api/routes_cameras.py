@@ -287,3 +287,68 @@ async def sync_camera_time(camera_id: int, db: AsyncSession = Depends(get_db)):
     )
     return res
 
+
+@router.get("/{camera_id}/sensor-diagnostics")
+async def get_camera_sensor_diagnostics(camera_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Performs full optical & sensor audit: tests native resolution (5MP/3MP/1080p),
+    sharpness score (Laplacian variance), discovers ONVIF Main/Sub profiles,
+    and detects if the camera is bottlenecked by sub-stream.
+    """
+    from engine.services.onvif_service import onvif_service
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    latest_frame = None
+    ingestor = camera_manager.ingestors.get(camera_id)
+    if ingestor and ingestor._latest_frame is not None:
+        with ingestor._frame_lock:
+            if ingestor._latest_frame is not None:
+                latest_frame = ingestor._latest_frame.copy()
+
+    ip = camera.ip_address or "127.0.0.1"
+    port = camera.onvif_port or 80
+
+    return await onvif_service.audit_sensor_quality(
+        ip=ip,
+        port=port,
+        username=camera.username,
+        password=camera.password,
+        current_rtsp_url=camera.rtsp_url,
+        latest_frame=latest_frame
+    )
+
+
+class SwitchProfilePayload(BaseModel):
+    profile_uri: str
+
+@router.post("/{camera_id}/switch-profile")
+async def switch_camera_stream_profile(
+    camera_id: int,
+    payload: SwitchProfilePayload,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Instantly switches the camera's RTSP stream to a higher-resolution Main profile (e.g. 5MP/3MP),
+    reinitializes the real-time ingestor, and saves config.
+    """
+    camera = await db.get(Camera, camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    camera.rtsp_url = payload.profile_uri
+    await db.commit()
+    await db.refresh(camera)
+
+    # Reinitialize stream ingestor with new resolution
+    camera_manager.update_camera_config(camera)
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Perfil de Resolução Alterado: {camera.name} -> {payload.profile_uri}"))
+
+    return {
+        "success": True,
+        "message": f"Stream atualizado com sucesso para {payload.profile_uri}! Ingestão reiniciada em alta resolução.",
+        "camera": camera
+    }
+
+

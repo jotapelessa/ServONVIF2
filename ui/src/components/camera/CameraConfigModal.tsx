@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Camera, Device, apiClient, OnvifImagingSettings } from "@/lib/api-client";
+import { Camera, Device, apiClient, OnvifImagingSettings, SensorDiagnosticsResponse } from "@/lib/api-client";
 import {
   X,
   Sliders,
@@ -26,7 +26,11 @@ import {
   Video,
   Globe,
   RefreshCw,
-  Layers
+  Layers,
+  Zap,
+  Cpu,
+  Activity,
+  Award
 } from "lucide-react";
 
 interface CameraConfigModalProps {
@@ -36,7 +40,7 @@ interface CameraConfigModalProps {
 }
 
 export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModalProps) {
-  const [activeTab, setActiveTab] = useState<"ai_routing" | "onvif_imaging" | "quick_actions" | "network_rtsp">("ai_routing");
+  const [activeTab, setActiveTab] = useState<"ai_routing" | "onvif_imaging" | "sensor_diagnostics" | "quick_actions" | "network_rtsp">("ai_routing");
 
   // Tab 1: AI & Routing States
   const [name, setName] = useState(camera.name);
@@ -56,7 +60,14 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
   const [savingImaging, setSavingImaging] = useState<boolean>(false);
   const [imagingFeedback, setImagingFeedback] = useState<string | null>(null);
 
-  // Tab 3: Quick Actions & Maintenance States
+  // Tab 3: Sensor 5MP & Optical Quality Diagnostics
+  const [diagnostics, setDiagnostics] = useState<SensorDiagnosticsResponse | null>(null);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [switchingProfile, setSwitchingProfile] = useState(false);
+  const [switchFeedback, setSwitchFeedback] = useState<string | null>(null);
+
+  // Tab 4: Quick Actions & Maintenance States
   const [rebooting, setRebooting] = useState(false);
   const [rebootMessage, setRebootMessage] = useState<string | null>(null);
   const [snapping, setSnapping] = useState(false);
@@ -64,7 +75,7 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
   const [syncingTime, setSyncingTime] = useState(false);
   const [timeSyncMessage, setTimeSyncMessage] = useState<string | null>(null);
 
-  // Tab 4: Network & RTSP States
+  // Tab 5: Network & RTSP States
   const [ipAddress, setIpAddress] = useState(camera.ip_address || "");
   const [onvifPort, setOnvifPort] = useState(camera.onvif_port || 80);
   const [rtspUrl, setRtspUrl] = useState(camera.rtsp_url || "");
@@ -75,7 +86,7 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  // Load Devices & Initial ONVIF Imaging
+  // Load Devices, ONVIF Imaging, and Initial Sensor Diagnostics
   useEffect(() => {
     async function loadData() {
       try {
@@ -89,7 +100,37 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
     }
     loadData();
     fetchOnvifImaging();
+    fetchSensorDiagnostics();
   }, []);
+
+  const fetchSensorDiagnostics = async () => {
+    setLoadingDiagnostics(true);
+    setDiagnosticsError(null);
+    try {
+      const data = await apiClient.getSensorDiagnostics(camera.id);
+      setDiagnostics(data);
+    } catch (err: any) {
+      setDiagnosticsError(err.message || "Erro ao consultar telemetria do sensor");
+    } finally {
+      setLoadingDiagnostics(false);
+    }
+  };
+
+  const handleSwitchProfile = async (profileUri: string) => {
+    setSwitchingProfile(true);
+    setSwitchFeedback(null);
+    try {
+      const res = await apiClient.switchCameraProfile(camera.id, profileUri);
+      setRtspUrl(profileUri);
+      setSwitchFeedback("Stream atualizado para Alta Resolução!");
+      await fetchSensorDiagnostics();
+      setTimeout(() => setSwitchFeedback(null), 4000);
+    } catch (err: any) {
+      setSwitchFeedback(`Erro: ${err.message || "Falha ao alternar perfil"}`);
+    } finally {
+      setSwitchingProfile(false);
+    }
+  };
 
   const fetchOnvifImaging = async () => {
     setLoadingImaging(true);
@@ -295,6 +336,27 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
 
           <button
             type="button"
+            onClick={() => {
+              setActiveTab("sensor_diagnostics");
+              if (!diagnostics) fetchSensorDiagnostics();
+            }}
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition select-none ${
+              activeTab === "sensor_diagnostics"
+                ? "border-amber-500 text-amber-400 bg-amber-500/5"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>3. Sensor 5MP &amp; Qualidade</span>
+            {diagnostics?.upgrade_available && (
+              <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                Sub-Stream
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab("quick_actions")}
             className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition select-none ${
               activeTab === "quick_actions"
@@ -303,7 +365,7 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>3. Ações &amp; Manutenção</span>
+            <span>4. Ações &amp; Manutenção</span>
           </button>
 
           <button
@@ -316,7 +378,7 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
             }`}
           >
             <Globe className="w-4 h-4" />
-            <span>4. Rede &amp; RTSP</span>
+            <span>5. Rede &amp; RTSP</span>
           </button>
         </div>
 
@@ -696,7 +758,238 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
             </div>
           )}
 
-          {/* TAB 3: QUICK ACTIONS & MAINTENANCE */}
+          {/* TAB 3: SENSOR 5MP & OPTICAL QUALITY AUDIT */}
+          {activeTab === "sensor_diagnostics" && (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* Top Refresh and Test Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Auditoria Óptica &amp; Resolução Real do Sensor</span>
+                      {loadingDiagnostics && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Mede a contagem real de pixels do stream, foco da lente e perfis ONVIF suportados pelo chip físico
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchSensorDiagnostics}
+                  disabled={loadingDiagnostics}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-xl border border-white/10 shadow transition active:scale-95 disabled:opacity-50 shrink-0"
+                >
+                  {loadingDiagnostics ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  <span>Testar Sensor Agora</span>
+                </button>
+              </div>
+
+              {/* Upgrade Alert Banner (If Sub-stream detected or upgrade available) */}
+              {diagnostics?.upgrade_available && diagnostics.recommended_url && (
+                <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 animate-in slide-in-from-top-2">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+                        Sub-Stream Detectado &bull; Resolução Travada em Baixa Qualidade
+                      </h5>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        O seu servidor está recebendo o stream secundário (<strong>{diagnostics.active_stream.width}x{diagnostics.active_stream.height} &bull; {diagnostics.active_stream.megapixels} MP</strong>). 
+                        O sensor da sua câmera possui perfil <strong>MAIN de Alta Resolução ({diagnostics.best_profile?.width}x{diagnostics.best_profile?.height} &bull; {diagnostics.best_profile?.megapixels} MP)</strong> disponível!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                    <span className="text-[11px] font-mono text-amber-300/80 truncate max-w-md">
+                      Stream sugerido: {diagnostics.recommended_url}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchProfile(diagnostics.recommended_url!)}
+                      disabled={switchingProfile}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition active:scale-95 disabled:opacity-50 shrink-0"
+                    >
+                      {switchingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 fill-current" />}
+                      <span>Ativar Perfil 5MP / Super HD (1-Clique)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Success Banner on switch */}
+              {switchFeedback && (
+                <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>{switchFeedback}</span>
+                </div>
+              )}
+
+              {/* Error Banner */}
+              {diagnosticsError && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                  <span>{diagnosticsError}</span>
+                </div>
+              )}
+
+              {/* Telemetry Metrics Grid */}
+              {diagnostics && diagnostics.active_stream && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Card 1: Real Resolution */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+                      <span>Resolução Real</span>
+                      <Monitor className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="text-xl font-bold text-white font-mono">
+                      {diagnostics.active_stream.width} &times; {diagnostics.active_stream.height}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                        {diagnostics.active_stream.megapixels} Megapixels
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Optical Sharpness */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+                      <span>Foco Óptico / Nitidez</span>
+                      <Activity className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-xl font-bold text-white font-mono">
+                      Score {diagnostics.active_stream.sharpness_score}
+                    </div>
+                    <div className="text-[11px] text-emerald-400 truncate" title={diagnostics.active_stream.focus_status}>
+                      {diagnostics.active_stream.focus_status}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Video Codec & FPS */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+                      <span>Codec &amp; Frame Rate</span>
+                      <Video className="w-4 h-4 text-purple-400" />
+                    </div>
+                    <div className="text-xl font-bold text-white font-mono">
+                      {diagnostics.best_profile?.encoding || "H.264"}
+                    </div>
+                    <div className="text-[11px] text-purple-300">
+                      {diagnostics.best_profile?.fps_limit || 25} FPS &bull; {diagnostics.best_profile?.bitrate_kbps || 2048} kbps
+                    </div>
+                  </div>
+
+                  {/* Card 4: Dynamic Range & Contrast */}
+                  <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+                      <span>Faixa Dinâmica (Luma)</span>
+                      <Sun className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="text-xl font-bold text-white font-mono">
+                      {diagnostics.active_stream.luma_mean} / 255
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Contraste: &plusmn;{diagnostics.active_stream.contrast_score}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Discovered Hardware Profiles Table */}
+              <div className="p-5 rounded-2xl bg-slate-900/40 border border-white/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-cyan-400" />
+                      <span>Perfis de Hardware ONVIF Detectados no Chip da Câmera</span>
+                    </h5>
+                    <p className="text-[11px] text-slate-400">
+                      Streams pré-configurados no encoder interno da câmera com resoluções nativas
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg border border-white/5">
+                    {diagnostics?.profiles?.length || 0} perfis encontrados
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {diagnostics?.profiles && diagnostics.profiles.length > 0 ? (
+                    diagnostics.profiles.map((p, idx) => {
+                      const isCurrent = rtspUrl.includes(p.rtsp_uri) || (p.rtsp_uri && rtspUrl.includes(p.rtsp_uri.split("@").pop() || ""));
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3.5 rounded-xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                            isCurrent
+                              ? "bg-blue-500/10 border-blue-500/40 text-white"
+                              : "bg-slate-950/40 border-white/5 hover:border-white/10 text-slate-300"
+                          }`}
+                        >
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold font-mono">
+                                {p.name || p.token}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                                p.megapixels >= 4.0
+                                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                  : p.megapixels >= 2.0
+                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                  : "bg-slate-700/50 text-slate-300 border border-slate-600"
+                              }`}>
+                                {p.width} &times; {p.height} ({p.megapixels} MP)
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {p.encoding} &bull; {p.fps_limit} FPS &bull; {p.bitrate_kbps} kbps
+                              </span>
+                              {isCurrent && (
+                                <span className="text-[10px] bg-blue-500 text-white font-bold px-2 py-0.5 rounded-full shadow">
+                                  ATIVO ATUALMENTE
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-400 truncate max-w-xl">
+                              {p.rtsp_uri || "URI ONVIF Padrão"}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0">
+                            {!isCurrent && p.rtsp_uri ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSwitchProfile(p.rtsp_uri)}
+                                disabled={switchingProfile}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-blue-600 text-slate-200 hover:text-white text-xs font-semibold rounded-lg border border-white/10 transition active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {switchingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                                <span>Ativar Perfil</span>
+                              </button>
+                            ) : isCurrent ? (
+                              <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-4 h-4" /> Em uso
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-6 text-slate-500 text-xs">
+                      {loadingDiagnostics ? "Consultando chip ONVIF da câmera..." : "Nenhum perfil ONVIF encontrado ou câmera em modo RTSP genérico."}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: QUICK ACTIONS & MAINTENANCE */}
           {activeTab === "quick_actions" && (
             <div className="space-y-6 animate-in fade-in duration-150">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

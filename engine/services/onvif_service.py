@@ -6,8 +6,10 @@ import re
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from loguru import logger
+import numpy as np
+import cv2
 
 
 class OnvifService:
@@ -275,6 +277,193 @@ class OnvifService:
         except Exception as e:
             logger.error(f"Failed to sync time on camera {ip}:{port}: {e}")
             return {"success": False, "message": f"Falha ao sincronizar relógio: {str(e)}"}
+
+    @classmethod
+    async def get_camera_profiles(
+        cls,
+        ip: str,
+        port: int = 80,
+        username: Optional[str] = None,
+        password: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Queries ONVIF Media Service to list all stream profiles (MAIN, SUB),
+        their resolutions, encoding codecs, frame rates, bitrates, and RTSP stream URIs.
+        """
+        def _blocking_get_profiles():
+            from onvif import ONVIFCamera
+            results = []
+            try:
+                cam = ONVIFCamera(ip, port, username or "", password or "")
+                media = cam.create_media_service()
+                profiles = media.GetProfiles()
+                for p in profiles:
+                    token = getattr(p, 'token', '')
+                    name = getattr(p, 'Name', '')
+                    width = 0
+                    height = 0
+                    encoding = "H264"
+                    fps_limit = 25
+                    bitrate = 0
+                    quality = 3.0
+                    if hasattr(p, 'VideoEncoderConfiguration') and p.VideoEncoderConfiguration:
+                        v = p.VideoEncoderConfiguration
+                        encoding = getattr(v, 'Encoding', 'H264')
+                        if hasattr(v, 'Resolution') and v.Resolution:
+                            width = getattr(v.Resolution, 'Width', 0)
+                            height = getattr(v.Resolution, 'Height', 0)
+                        if hasattr(v, 'RateControl') and v.RateControl:
+                            fps_limit = getattr(v.RateControl, 'FrameRateLimit', 25)
+                            bitrate = getattr(v.RateControl, 'BitrateLimit', 0)
+                        quality = getattr(v, 'Quality', 3.0)
+                    
+                    rtsp_uri = ""
+                    try:
+                        stream_setup = {'StreamSetup': {'Stream': 'RTP-Unicast', 'Transport': {'Protocol': 'RTSP'}}, 'ProfileToken': token}
+                        uri_res = media.GetStreamUri(stream_setup)
+                        raw_uri = getattr(uri_res, 'Uri', '')
+                        if username and password and "@" not in raw_uri:
+                            rtsp_uri = raw_uri.replace("rtsp://", f"rtsp://{username}:{password}@")
+                        else:
+                            rtsp_uri = raw_uri
+                    except Exception as e:
+                        logger.warning(f"Could not get stream URI for profile {token}: {e}")
+
+                    mp = round((width * height) / 1000000.0, 2) if (width and height) else 0.0
+                    results.append({
+                        "token": token,
+                        "name": name,
+                        "width": width,
+                        "height": height,
+                        "megapixels": mp,
+                        "encoding": encoding,
+                        "fps_limit": fps_limit,
+                        "bitrate_kbps": bitrate,
+                        "quality": quality,
+                        "rtsp_uri": rtsp_uri,
+                        "is_main": "main" in name.lower() or "000" in token.lower() or mp >= 2.0 or width >= 1920
+                    })
+            except Exception as err:
+                logger.error(f"ONVIF GetProfiles failed on {ip}:{port}: {err}")
+            return results
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _blocking_get_profiles)
+
+    @classmethod
+    async def audit_sensor_quality(
+        cls,
+        ip: str,
+        port: int = 80,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        current_rtsp_url: Optional[str] = None,
+        latest_frame: Optional[np.ndarray] = None
+    ) -> Dict[str, Any]:
+        """
+        Executes a comprehensive hardware and optical sensor diagnostic test.
+        """
+        profiles = await cls.get_camera_profiles(ip, port, username, password)
+
+        # Probe current frame metrics
+        frame = latest_frame
+        if frame is None and current_rtsp_url:
+            def _grab_sample():
+                try:
+                    cap = cv2.VideoCapture(current_rtsp_url)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    ret, f = cap.read()
+                    cap.release()
+                    return f if ret else None
+                except Exception:
+                    return None
+            loop = asyncio.get_running_loop()
+            frame = await loop.run_in_executor(None, _grab_sample)
+
+        active_w, active_h = (0, 0)
+        active_mp = 0.0
+        sharpness_score = 0.0
+        contrast_score = 0.0
+        luma_mean = 0.0
+
+        if frame is not None:
+            active_h, active_w = frame.shape[:2]
+            active_mp = round((active_w * active_h) / 1000000.0, 2)
+            
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            sharpness_score = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 1)
+            contrast_score = round(float(gray.std()), 1)
+            luma_mean = round(float(gray.mean()), 1)
+
+        # Determine classification
+        if active_mp >= 4.0:
+            classification = "Ultra HD 5MP (3K Sensor Nativo)"
+            quality_badge = "EXCELLENT"
+        elif active_mp >= 2.5:
+            classification = "Super HD 3MP / 2K QHD (Alta Definição)"
+            quality_badge = "GOOD"
+        elif active_mp >= 1.8:
+            classification = "Full HD 1080p (Padrão 2MP)"
+            quality_badge = "STANDARD"
+        elif active_mp >= 0.8:
+            classification = "HD 720p (Resolução Média)"
+            quality_badge = "FAIR"
+        else:
+            classification = "Sub-Stream CIF / D1 (Baixa Resolução - 0.36 MP)"
+            quality_badge = "LOW"
+
+        # Find best available ONVIF profile
+        best_profile = None
+        if profiles:
+            best_profile = max(profiles, key=lambda p: (p.get("width", 0) * p.get("height", 0)))
+
+        is_substream = False
+        upgrade_available = False
+        recommended_url = None
+
+        if best_profile and best_profile.get("rtsp_uri"):
+            best_uri = best_profile.get("rtsp_uri", "")
+            curr_uri = current_rtsp_url or ""
+            is_already_main = (
+                (best_uri and best_uri in curr_uri) or
+                ("/main" in curr_uri.lower()) or
+                (active_w >= 1920)
+            )
+            if not is_already_main and (active_w < 1280 or active_mp < 1.0) and best_profile.get("width", 0) >= 1920:
+                is_substream = True
+                upgrade_available = True
+                recommended_url = best_uri
+
+        # Focus analysis
+        if sharpness_score >= 120:
+            focus_status = "Excelente (Lente Nítida e Foco Calibrado)"
+        elif sharpness_score >= 50:
+            focus_status = "Bom (Foco Aceitável)"
+        else:
+            focus_status = "Atenção (Lente embaçada, fora de foco ou sensor interpolado)"
+
+        return {
+            "success": True,
+            "active_stream": {
+                "url": current_rtsp_url,
+                "width": active_w,
+                "height": active_h,
+                "megapixels": active_mp,
+                "aspect_ratio": f"{active_w}:{active_h}" if active_w else "Desconhecido",
+                "classification": classification,
+                "quality_badge": quality_badge,
+                "sharpness_score": sharpness_score,
+                "focus_status": focus_status,
+                "contrast_score": contrast_score,
+                "luma_mean": luma_mean,
+                "is_substream": is_substream
+            },
+            "profiles": profiles,
+            "best_profile": best_profile,
+            "upgrade_available": upgrade_available,
+            "recommended_url": recommended_url,
+            "tested_at": datetime.now(timezone.utc).isoformat()
+        }
 
 
 onvif_service = OnvifService()
