@@ -237,7 +237,7 @@ class TvSettingsActivity : AppCompatActivity() {
                 if (currentNodes.isNotEmpty()) {
                     currentNodes[0] = currentNodes[0].copy(name = nodeName, ip = ip, port = port)
                 } else {
-                    currentNodes.add(com.servonvif.client.data.model.ServerNode(id = "primary", name = nodeName, ip = ip, port = port, isEnabled = true))
+                    currentNodes.add(com.servonvif.client.modern.data.model.ServerNode(id = "primary", name = nodeName, ip = ip, port = port, isEnabled = true))
                 }
                 configRepo.serverNodes = currentNodes
 
