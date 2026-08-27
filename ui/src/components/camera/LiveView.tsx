@@ -9,9 +9,16 @@ interface LiveViewProps {
   cameraName: string;
   roiPolygon?: number[][] | null;
   ignorePolygons?: number[][][] | null;
+  showZones?: boolean;
 }
 
-export function LiveView({ cameraId, cameraName, roiPolygon, ignorePolygons }: LiveViewProps) {
+export function LiveView({
+  cameraId,
+  cameraName,
+  roiPolygon,
+  ignorePolygons,
+  showZones = true,
+}: LiveViewProps) {
   const [hasError, setHasError] = useState(false);
   const [key, setKey] = useState(0);
 
@@ -56,33 +63,35 @@ export function LiveView({ cameraId, cameraName, roiPolygon, ignorePolygons }: L
             onError={() => setHasError(true)}
           />
 
-          {/* Active ROI (Cyan) & Ignore Zones (Purple) Visual Overlay */}
-          {(roiSvgPoints || ignoreSvgPolygons.length > 0) && (
+          {/* Active ROI (Cyan) & Ignore Zones (Purple) Visual Overlay - Linear Solid Lines */}
+          {showZones && (roiSvgPoints || ignoreSvgPolygons.length > 0) && (
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none z-10"
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
             >
-              {/* Cyan Detection Polygon */}
+              {/* Cyan Detection Polygon - Solid Linear Boundary */}
               {roiSvgPoints && (
                 <polygon
                   points={roiSvgPoints}
-                  fill="rgba(56, 189, 248, 0.15)"
+                  fill="rgba(56, 189, 248, 0.18)"
                   stroke="#38bdf8"
-                  strokeWidth="0.8"
-                  strokeDasharray="2,2"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
                 />
               )}
 
-              {/* Purple Ignore Polygons */}
+              {/* Purple Ignore Polygons - Solid Linear Boundary */}
               {ignoreSvgPolygons.map((pointsStr, idx) => (
                 <polygon
                   key={idx}
                   points={pointsStr}
-                  fill="rgba(168, 85, 247, 0.25)"
+                  fill="rgba(168, 85, 247, 0.28)"
                   stroke="#a855f7"
-                  strokeWidth="0.8"
-                  strokeDasharray="3,2"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
                 />
               ))}
             </svg>

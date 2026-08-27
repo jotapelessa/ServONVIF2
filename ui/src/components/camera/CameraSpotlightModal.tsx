@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   Shield,
   Activity,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface CameraSpotlightModalProps {
@@ -35,6 +37,7 @@ export function CameraSpotlightModal({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+  const [showZones, setShowZones] = useState(true);
   const [sensitivity, setSensitivity] = useState(camera.sensitivity || 0.03);
   const [savingSensitivity, setSavingSensitivity] = useState(false);
   const [snapshotSuccess, setSnapshotSuccess] = useState(false);
@@ -128,6 +131,17 @@ export function CameraSpotlightModal({
     }
   };
 
+  // Convert normalized points [0..1] to SVG polygon points string
+  const roiSvgPoints = camera.roi_polygon && camera.roi_polygon.length >= 3
+    ? camera.roi_polygon.map(([x, y]) => `${(x * 100).toFixed(2)},${(y * 100).toFixed(2)}`).join(" ")
+    : null;
+
+  const ignoreSvgPolygons = camera.ignore_polygons && camera.ignore_polygons.length > 0
+    ? camera.ignore_polygons
+        .filter((poly) => poly && poly.length >= 3)
+        .map((poly) => poly.map(([x, y]) => `${(x * 100).toFixed(2)},${(y * 100).toFixed(2)}`).join(" "))
+    : [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 select-none">
       <div className="card-dark rounded-2xl w-full max-w-6xl h-[90vh] overflow-hidden shadow-2xl border border-white/10 flex flex-col">
@@ -150,11 +164,24 @@ export function CameraSpotlightModal({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowZones((prev) => !prev)}
+              title={showZones ? "Ocultar Zonas de Marcação" : "Mostrar Zonas de Marcação"}
+              className={`flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-lg border transition ${
+                showZones
+                  ? "text-cyan-300 bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30"
+                  : "text-slate-400 bg-slate-800 border-slate-700 hover:text-white"
+              }`}
+            >
+              {showZones ? <Eye className="w-3.5 h-3.5 text-cyan-400" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>{showZones ? "Zonas Visíveis" : "Zonas Ocultas"}</span>
+            </button>
+
+            <button
               onClick={() => onOpenROI(camera)}
               className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition"
             >
               <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Zonas de Movimento</span>
+              <span>Configurar Zonas</span>
             </button>
 
             <button
@@ -175,17 +202,55 @@ export function CameraSpotlightModal({
             zoomLevel > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
           }`}
         >
-          <img
-            ref={imgRef}
-            src={`${API_BASE}/api/mjpeg/${camera.id}`}
-            alt={camera.name}
-            crossOrigin="anonymous"
+          <div
             style={{
               transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
               transition: isDragging ? "none" : "transform 0.15s ease-out",
             }}
-            className="w-full h-full object-contain pointer-events-none"
-          />
+            className="relative w-full h-full flex items-center justify-center pointer-events-none"
+          >
+            <img
+              ref={imgRef}
+              src={`${API_BASE}/api/mjpeg/${camera.id}`}
+              alt={camera.name}
+              crossOrigin="anonymous"
+              className="w-full h-full object-contain pointer-events-none"
+            />
+
+            {/* Visual SVG Overlay - Solid Linear Zones */}
+            {showZones && (roiSvgPoints || ignoreSvgPolygons.length > 0) && (
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                {/* Cyan Detection Polygon - Solid Linear Boundary */}
+                {roiSvgPoints && (
+                  <polygon
+                    points={roiSvgPoints}
+                    fill="rgba(56, 189, 248, 0.18)"
+                    stroke="#38bdf8"
+                    strokeWidth="1.0"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {/* Purple Ignore Polygons - Solid Linear Boundary */}
+                {ignoreSvgPolygons.map((pointsStr, idx) => (
+                  <polygon
+                    key={idx}
+                    points={pointsStr}
+                    fill="rgba(168, 85, 247, 0.28)"
+                    stroke="#a855f7"
+                    strokeWidth="1.0"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ))}
+              </svg>
+            )}
+          </div>
 
           {/* Zoom Level Indicator */}
           {zoomLevel > 1 && (

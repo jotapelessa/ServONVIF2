@@ -92,9 +92,8 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
 
       ctx.strokeStyle = "#a855f7";
       ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.stroke();
       ctx.setLineDash([]);
+      ctx.stroke();
 
       // Vertices
       poly.forEach((pt) => {
@@ -124,10 +123,9 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
       }
 
       ctx.strokeStyle = "#c084fc";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([5, 3]);
-      ctx.stroke();
+      ctx.lineWidth = 2.5;
       ctx.setLineDash([]);
+      ctx.stroke();
 
       currentIgnorePoints.forEach((pt, index) => {
         ctx.beginPath();

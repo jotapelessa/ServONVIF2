@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Camera, apiClient } from "@/lib/api-client";
 import { LiveView } from "./LiveView";
 import { useAlertStore } from "@/store/useCameraStore";
-import { Sliders, ShieldAlert, Maximize2, Settings, Camera as CameraIcon, Check, Loader2 } from "lucide-react";
+import { Sliders, ShieldAlert, Maximize2, Settings, Camera as CameraIcon, Check, Loader2, Eye, EyeOff } from "lucide-react";
 
 interface CameraCardProps {
   camera: Camera;
@@ -19,6 +19,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
   const isAlarming = Boolean(activeAlarms[camera.id] && Date.now() - activeAlarms[camera.id] < 8000);
   const [snapping, setSnapping] = useState(false);
   const [snapFeedback, setSnapFeedback] = useState<string | null>(null);
+  const [showZones, setShowZones] = useState(true);
 
   const handleCaptureSnapshot = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -84,6 +85,20 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
             {snapping ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <CameraIcon className="w-3.5 h-3.5" />}
           </button>
           <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowZones((prev) => !prev);
+            }}
+            title={showZones ? "Ocultar Zonas de Marcação (ROI & Zonas Roxas)" : "Mostrar Zonas de Marcação (ROI & Zonas Roxas)"}
+            className={`flex items-center justify-center w-7 h-7 rounded-lg border shadow transition ${
+              showZones
+                ? "bg-cyan-600/30 hover:bg-cyan-600 text-cyan-300 hover:text-white border-cyan-500/40"
+                : "bg-black/70 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-white/20"
+            }`}
+          >
+            {showZones ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          </button>
+          <button
             onClick={() => onSpotlight(camera)}
             title="Expandir / Modo Destaque"
             className="flex items-center justify-center w-7 h-7 rounded-lg bg-black/70 hover:bg-slate-800 text-slate-200 hover:text-white border border-white/20 shadow transition"
@@ -125,6 +140,7 @@ export function CameraCard({ camera, onOpenROI, onSpotlight, onOpenConfig, onDel
           cameraName={camera.name}
           roiPolygon={camera.roi_polygon}
           ignorePolygons={camera.ignore_polygons}
+          showZones={showZones}
         />
       </div>
 
