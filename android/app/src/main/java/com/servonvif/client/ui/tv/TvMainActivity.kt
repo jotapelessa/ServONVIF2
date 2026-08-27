@@ -2,12 +2,8 @@ package com.servonvif.client.ui.tv
 
 import android.Manifest
 import android.app.AlertDialog
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,24 +18,22 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.servonvif.client.R
 import com.servonvif.client.data.model.CameraModel
+import com.servonvif.client.data.model.EventPayload
 import com.servonvif.client.data.repository.HardwareIdHelper
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
 import com.servonvif.client.service.MonitoringForegroundService
 import com.servonvif.client.service.WebSocketManager
 import com.servonvif.client.ui.pip.FloatingOverlayManager
-import com.servonvif.client.ui.pip.PiPAlertActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,8 +43,9 @@ class TvMainActivity : AppCompatActivity() {
 
     private lateinit var configRepo: ServerConfigRepository
     private lateinit var apiClient: ServOnvifApiClient
+    private var floatingOverlayManager: FloatingOverlayManager? = null
 
-    // Sidebar Navigation
+    // Sidebar
     private lateinit var btnNavHome: Button
     private lateinit var btnNavMosaic: Button
     private lateinit var btnNavEvents: Button
@@ -59,7 +54,7 @@ class TvMainActivity : AppCompatActivity() {
     private lateinit var tvTvClock: TextView
     private lateinit var tvTvServerStatusPill: TextView
 
-    // Hero Spotlight Views
+    // Hero
     private lateinit var webHeroStream: WebView
     private lateinit var tvHeroTitle: TextView
     private lateinit var tvHeroSubtitle: TextView
@@ -68,13 +63,13 @@ class TvMainActivity : AppCompatActivity() {
     private lateinit var btnHeroPip: Button
     private lateinit var btnHeroPatrol: Button
 
-    // Horizontal Discovery Rows
+    // Rows
     private lateinit var recyclerCamerasRow: RecyclerView
     private lateinit var recyclerEventsRow: RecyclerView
     private lateinit var cameraRowAdapter: CameraRowAdapter
     private lateinit var eventRowAdapter: EventRowAdapter
 
-    // State & Timers
+    // State
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clockHandler = Handler(Looper.getMainLooper())
     private val patrolHandler = Handler(Looper.getMainLooper())
@@ -90,6 +85,7 @@ class TvMainActivity : AppCompatActivity() {
 
         configRepo = ServerConfigRepository(this)
         apiClient = ServOnvifApiClient(configRepo)
+        floatingOverlayManager = FloatingOverlayManager(this)
 
         initViews()
         setupSidebar()
@@ -100,7 +96,6 @@ class TvMainActivity : AppCompatActivity() {
         ensureForegroundServiceRunning()
         startLiveWebSocketListener()
         startClockTicker()
-
         refreshServerData()
     }
 
@@ -113,45 +108,40 @@ class TvMainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        btnNavHome = findViewById(R.id.btnNavHome)
-        btnNavMosaic = findViewById(R.id.btnNavMosaic)
-        btnNavEvents = findViewById(R.id.btnNavEvents)
-        btnNavTests = findViewById(R.id.btnNavTests)
+        btnNavHome     = findViewById(R.id.btnNavHome)
+        btnNavMosaic   = findViewById(R.id.btnNavMosaic)
+        btnNavEvents   = findViewById(R.id.btnNavEvents)
+        btnNavTests    = findViewById(R.id.btnNavTests)
         btnNavSettings = findViewById(R.id.btnNavSettings)
-        tvTvClock = findViewById(R.id.tvTvClock)
-        tvTvServerStatusPill = findViewById(R.id.tvTvServerStatusPill)
+        tvTvClock             = findViewById(R.id.tvTvClock)
+        tvTvServerStatusPill  = findViewById(R.id.tvTvServerStatusPill)
 
-        webHeroStream = findViewById(R.id.webHeroStream)
-        tvHeroTitle = findViewById(R.id.tvHeroTitle)
-        tvHeroSubtitle = findViewById(R.id.tvHeroSubtitle)
-        tvHeroMeta = findViewById(R.id.tvHeroMeta)
+        webHeroStream   = findViewById(R.id.webHeroStream)
+        tvHeroTitle     = findViewById(R.id.tvHeroTitle)
+        tvHeroSubtitle  = findViewById(R.id.tvHeroSubtitle)
+        tvHeroMeta      = findViewById(R.id.tvHeroMeta)
         btnHeroFullscreen = findViewById(R.id.btnHeroFullscreen)
-        btnHeroPip = findViewById(R.id.btnHeroPip)
-        btnHeroPatrol = findViewById(R.id.btnHeroPatrol)
+        btnHeroPip        = findViewById(R.id.btnHeroPip)
+        btnHeroPatrol     = findViewById(R.id.btnHeroPatrol)
 
         recyclerCamerasRow = findViewById(R.id.recyclerCamerasRow)
-        recyclerEventsRow = findViewById(R.id.recyclerEventsRow)
+        recyclerEventsRow  = findViewById(R.id.recyclerEventsRow)
     }
 
     private fun setupSidebar() {
         btnNavHome.setOnClickListener {
-            // Scroll to top / home
             findViewById<View>(R.id.mainScrollView)?.scrollTo(0, 0)
             btnHeroFullscreen.requestFocus()
         }
-
         btnNavMosaic.setOnClickListener {
             Toast.makeText(this, "Modo Mosaico Ativado", Toast.LENGTH_SHORT).show()
         }
-
         btnNavEvents.setOnClickListener {
             recyclerEventsRow.requestFocus()
         }
-
         btnNavTests.setOnClickListener {
             showDiagnosticDialog()
         }
-
         btnNavSettings.setOnClickListener {
             startActivity(Intent(this, TvSettingsActivity::class.java))
         }
@@ -168,7 +158,7 @@ class TvMainActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             } else {
-                Toast.makeText(this, "Nenhuma câmera selecionada", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Nenhuma câmera disponível", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -176,34 +166,30 @@ class TvMainActivity : AppCompatActivity() {
             val cam = selectedHeroCamera ?: activeCameras.firstOrNull()
             if (cam != null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                    startActivity(intent)
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                     Toast.makeText(this, "Conceda permissão de Sobreposição de Tela", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
-                FloatingOverlayManager.showOverlay(
-                    this,
-                    "Alerta de Segurança (Spotlight)",
-                    "Monitorando ${cam.name} em modo PiP",
-                    cam.rtspUrl
+                val mjpegUrl = "${configRepo.httpBaseUrl}/api/mjpeg/${cam.id}"
+                floatingOverlayManager?.showFloatingAlert(
+                    cameraId = cam.id,
+                    cameraName = cam.name,
+                    mjpegUrl = mjpegUrl,
+                    score = 0f,
+                    durationSeconds = 15
                 )
-                Toast.makeText(this, "Modo PiP Ativado para ${cam.name}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Modo PiP para ${cam.name}", Toast.LENGTH_SHORT).show()
             }
         }
 
-        btnHeroPatrol.setOnClickListener {
-            togglePatrol()
-        }
+        btnHeroPatrol.setOnClickListener { togglePatrol() }
     }
 
     private fun setupRecyclerViews() {
-        // Horizontal Cameras Row
         recyclerCamerasRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         cameraRowAdapter = CameraRowAdapter(
-            cameras = activeCameras,
-            onCameraFocused = { camera ->
-                updateHeroSpotlight(camera)
-            },
+            cameras = emptyList(),
+            onCameraFocused = { camera -> updateHeroSpotlight(camera) },
             onCameraClicked = { camera ->
                 val intent = Intent(this, TvPlayerActivity::class.java).apply {
                     putExtra("CAMERA_ID", camera.id)
@@ -215,12 +201,11 @@ class TvMainActivity : AppCompatActivity() {
         )
         recyclerCamerasRow.adapter = cameraRowAdapter
 
-        // Horizontal Events Row
         recyclerEventsRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         val initialEvents = listOf(
             TvEventItem("1", "Veículo Detectado • Placa BRA2E19", "Há 2 min", "LPR / PLACA"),
-            TvEventItem("2", "Movimento • Portão Principal", "Há 12 min", "MOVIMENTO"),
-            TvEventItem("3", "Sensor 5MP Ativado • Entrada", "Há 25 min", "SENSOR 5MP"),
+            TvEventItem("2", "Movimento Detectado • Portão Principal", "Há 12 min", "MOVIMENTO"),
+            TvEventItem("3", "Câmera 5MP ONVIF Ativada", "Há 25 min", "SENSOR 5MP"),
             TvEventItem("4", "Pessoa Detectada • Calçada", "Há 40 min", "IA DETECÇÃO")
         )
         eventRowAdapter = EventRowAdapter(initialEvents) { event ->
@@ -244,40 +229,25 @@ class TvMainActivity : AppCompatActivity() {
     private fun updateHeroSpotlight(camera: CameraModel) {
         selectedHeroCamera = camera
         tvHeroTitle.text = camera.name
-        val resText = if (camera.width > 0) "${camera.width}x${camera.height}" else "2880x1620 (5MP)"
-        val fpsText = "${camera.fps.takeIf { it > 0 } ?: 25} FPS"
-        tvHeroMeta.text = "Sensor 5MP Ultra-HD • $resText • $fpsText • ONVIF RTSP"
-        tvHeroSubtitle.text = "IP: ${configRepo.serverIp} • ONVIF Profile 000 • Transmissão Contínua Estável"
+        tvHeroMeta.text = "Sensor 5MP Ultra-HD • 2880x1620 • 25 FPS • ONVIF RTSP"
+        tvHeroSubtitle.text = "IP: ${camera.ipAddress ?: configRepo.serverIp} • ONVIF Profile 000 • Transmissão Ativa"
 
-        // Carregar visualização WebRTC / MJPEG / HLS no Hero
-        val streamUrl = "http://${configRepo.serverIp}:${configRepo.serverPort}/stream/cam_${camera.id}.mjpg"
-        val htmlContent = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body { margin: 0; padding: 0; background: #080C14; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
-                    img { width: 100%; height: 100%; object-fit: cover; }
-                </style>
-            </head>
-            <body>
-                <img src="$streamUrl" onerror="this.src='about:blank';" />
-            </body>
-            </html>
-        """.trimIndent()
-        webHeroStream.loadDataWithBaseURL("http://${configRepo.serverIp}:${configRepo.serverPort}", htmlContent, "text/html", "UTF-8", null)
+        val streamUrl = "${configRepo.httpBaseUrl}/api/mjpeg/${camera.id}"
+        val html = """<!DOCTYPE html><html>
+            <head><style>body{margin:0;background:#080C14;overflow:hidden;display:flex;align-items:center;justify-content:center;height:100vh;}
+            img{width:100%;height:100%;object-fit:cover;}</style></head>
+            <body><img src="$streamUrl" onerror="this.src='about:blank';"/></body></html>""".trimIndent()
+        webHeroStream.loadDataWithBaseURL(configRepo.httpBaseUrl, html, "text/html", "UTF-8", null)
     }
 
     private fun togglePatrol() {
         isPatrolRunning = !isPatrolRunning
         if (isPatrolRunning) {
             btnHeroPatrol.text = "⏹ Parar Patrulha"
-            btnHeroPatrol.setBackgroundResource(R.drawable.btn_tv_action_blue_selector)
             Toast.makeText(this, "Patrulha Automática Iniciada (10s por câmera)", Toast.LENGTH_SHORT).show()
             runPatrolLoop()
         } else {
             btnHeroPatrol.text = "🔄 Patrulha Auto"
-            btnHeroPatrol.setBackgroundResource(R.drawable.bg_tv_hero_btn_secondary_selector)
             patrolHandler.removeCallbacksAndMessages(null)
             Toast.makeText(this, "Patrulha Pausada", Toast.LENGTH_SHORT).show()
         }
@@ -286,13 +256,9 @@ class TvMainActivity : AppCompatActivity() {
     private fun runPatrolLoop() {
         if (!isPatrolRunning || activeCameras.isEmpty()) return
         currentPatrolIndex = (currentPatrolIndex + 1) % activeCameras.size
-        val nextCam = activeCameras[currentPatrolIndex]
-        updateHeroSpotlight(nextCam)
+        updateHeroSpotlight(activeCameras[currentPatrolIndex])
         recyclerCamerasRow.smoothScrollToPosition(currentPatrolIndex)
-
-        patrolHandler.postDelayed({
-            runPatrolLoop()
-        }, 10000) // 10 segundos por câmera
+        patrolHandler.postDelayed({ runPatrolLoop() }, 10000)
     }
 
     private fun refreshServerData() {
@@ -308,74 +274,59 @@ class TvMainActivity : AppCompatActivity() {
                         tvTvServerStatusPill.text = "● Servidor Offline"
                         tvTvServerStatusPill.setTextColor(0xFFEF4444.toInt())
                     }
-
                     if (cameras.isNotEmpty()) {
                         activeCameras = cameras
                         cameraRowAdapter.updateCameras(cameras)
-                        if (selectedHeroCamera == null) {
-                            updateHeroSpotlight(cameras.first())
-                        }
+                        if (selectedHeroCamera == null) updateHeroSpotlight(cameras.first())
                     }
                 }
             } catch (e: Exception) {
-                Log.e("TvMainActivity", "Erro ao carregar dados do servidor: ${e.message}")
+                Log.e("TvMainActivity", "Erro ao carregar dados: ${e.message}")
             }
         }
     }
 
     private fun showDiagnosticDialog() {
-        val msg = """
-            📡 Servidor: ${configRepo.serverIp}:${configRepo.serverPort}
-            🎥 Câmeras Ativas: ${activeCameras.size}
-            🛡️ Hardware ID: ${HardwareIdHelper.getHardwareId(this)}
-            🌐 WebSocket: Conectado
-            📺 Resolução TV: 1920x1080 (Safe Area Ativa)
-        """.trimIndent()
+        val deviceId = HardwareIdHelper.getPersistentDeviceId(this)
+        val msg = "📡 Servidor: ${configRepo.serverIp}:${configRepo.serverPort}\n" +
+                  "🎥 Câmeras Ativas: ${activeCameras.size}\n" +
+                  "🛡️ Hardware ID: $deviceId\n" +
+                  "📺 Resolução TV: 1920x1080 (Safe Area Ativa)"
 
         AlertDialog.Builder(this)
             .setTitle("🧪 Diagnóstico do Sistema")
             .setMessage(msg)
             .setPositiveButton("OK", null)
-            .setNeutralButton("Testar Alerta PiP") { _, _ ->
-                FloatingOverlayManager.showOverlay(this, "Teste de Segurança", "Detecção de Movimento Teste", "")
+            .setNeutralButton("Testar PiP") { _, _ ->
+                floatingOverlayManager?.showFloatingAlert(0, "Câmera Teste", null, 0f, 10)
             }
             .show()
     }
 
     private fun ensureForegroundServiceRunning() {
         try {
-            val serviceIntent = Intent(this, MonitoringForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
+            val intent = Intent(this, MonitoringForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
         } catch (e: Exception) {
             Log.e("TvMainActivity", "Erro ao iniciar foreground service: ${e.message}")
         }
     }
 
     private fun startLiveWebSocketListener() {
-        liveWsManager = WebSocketManager(configRepo).apply {
-            setOnEventReceivedListener { event ->
-                mainHandler.post {
-                    event.cameraId?.let { camId ->
-                        cameraRowAdapter.setMotion(camId, true)
-                        mainHandler.postDelayed({
-                            cameraRowAdapter.setMotion(camId, false)
-                        }, 5000)
-                    }
+        liveWsManager = WebSocketManager(this) { event: EventPayload ->
+            mainHandler.post {
+                event.cameraId?.let { camId ->
+                    cameraRowAdapter.setMotion(camId, true)
+                    mainHandler.postDelayed({ cameraRowAdapter.setMotion(camId, false) }, 5000)
                 }
             }
-            connect()
-        }
+        }.also { it.start() }
     }
 
     private fun startClockTicker() {
         val ticker = object : Runnable {
             override fun run() {
-                val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-                tvTvClock.text = sdf.format(Date())
+                tvTvClock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
                 clockHandler.postDelayed(this, 1000)
             }
         }
@@ -399,6 +350,6 @@ class TvMainActivity : AppCompatActivity() {
         super.onDestroy()
         patrolHandler.removeCallbacksAndMessages(null)
         clockHandler.removeCallbacksAndMessages(null)
-        liveWsManager?.disconnect()
+        liveWsManager?.stop()
     }
 }

@@ -1,9 +1,5 @@
 package com.servonvif.client.ui.tv
 
-import android.animation.ObjectAnimator
-import android.animation.PropertyValuesHolder
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -34,7 +30,6 @@ class CameraRowAdapter(
             itemView.setOnFocusChangeListener { v, hasFocus ->
                 val scale = if (hasFocus) 1.05f else 1.0f
                 val elevation = if (hasFocus) 12f else 2f
-                
                 v.animate()
                     .scaleX(scale)
                     .scaleY(scale)
@@ -42,12 +37,10 @@ class CameraRowAdapter(
                     .setDuration(150)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
-
                 if (hasFocus && adapterPosition != RecyclerView.NO_POSITION) {
                     onCameraFocused(cameras[adapterPosition])
                 }
             }
-
             itemView.setOnClickListener {
                 if (adapterPosition != RecyclerView.NO_POSITION) {
                     onCameraClicked(cameras[adapterPosition])
@@ -64,11 +57,9 @@ class CameraRowAdapter(
     override fun onBindViewHolder(holder: CameraViewHolder, position: Int) {
         val camera = cameras[position]
         holder.tvName.text = camera.name
-        holder.tvRes.text = if (camera.width > 0) "${camera.width}x${camera.height}" else "5MP • 2880x1620"
-        holder.tvFps.text = "${camera.fps.takeIf { it > 0 } ?: 25} FPS"
+        holder.tvRes.text = "5MP • ONVIF RTSP"
+        holder.tvFps.text = "25 FPS"
         holder.tvMotionBadge.visibility = if (motionCameraIds.contains(camera.id)) View.VISIBLE else View.GONE
-        
-        // Placeholder or base64 thumbnail if available
         holder.imgThumbnail.setImageResource(R.drawable.app_banner)
     }
 
@@ -80,14 +71,8 @@ class CameraRowAdapter(
     }
 
     fun setMotion(cameraId: Int, hasMotion: Boolean) {
-        if (hasMotion) {
-            motionCameraIds.add(cameraId)
-        } else {
-            motionCameraIds.remove(cameraId)
-        }
+        if (hasMotion) motionCameraIds.add(cameraId) else motionCameraIds.remove(cameraId)
         val index = cameras.indexOfFirst { it.id == cameraId }
-        if (index != -1) {
-            notifyItemChanged(index)
-        }
+        if (index != -1) notifyItemChanged(index)
     }
 }

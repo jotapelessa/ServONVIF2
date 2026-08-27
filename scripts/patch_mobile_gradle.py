@@ -17,7 +17,10 @@ def patch():
             "android.defaults.buildfeatures.buildconfig=true",
             "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m",
             "org.gradle.parallel=false",
-            "org.gradle.workers.max=2"
+            "org.gradle.workers.max=2",
+            # Restrict to arm64-v8a only: avoids CXX1210 "No compatible library" for armeabi-v7a
+            # and halves CMake compilation memory, preventing OOM Daemon kill in Codespaces
+            "reactNativeArchitectures=arm64-v8a"
         ]
         for setting in settings:
             key = setting.split("=")[0]
