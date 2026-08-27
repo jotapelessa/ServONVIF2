@@ -101,7 +101,7 @@ python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
 
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
-./gradlew assembleDebug --no-daemon
+./gradlew clean assembleDebug --no-daemon
 
 # Localizar e copiar APK Mobile com nome e versão
 MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"

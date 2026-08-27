@@ -41,5 +41,28 @@ def patch():
         with open(app_gradle, "w", encoding="utf-8") as f:
             f.write(content)
 
+    # 3. Patch Kotlin source files for explicit imports if needed
+    src_dir = os.path.join(mobile_android, "app", "src", "main", "java", "com", "servonvif", "mobile")
+    if os.path.exists(src_dir):
+        for fname in ["MainActivity.kt", "MainApplication.kt"]:
+            fpath = os.path.join(src_dir, fname)
+            if os.path.exists(fpath):
+                with open(fpath, "r", encoding="utf-8") as f:
+                    kt_content = f.read()
+                
+                imports_to_add = []
+                if "import com.servonvif.mobile.BuildConfig" not in kt_content:
+                    imports_to_add.append("import com.servonvif.mobile.BuildConfig")
+                if "import com.servonvif.mobile.R" not in kt_content:
+                    imports_to_add.append("import com.servonvif.mobile.R")
+                
+                if imports_to_add:
+                    package_line = "package com.servonvif.mobile"
+                    replacement = package_line + "\n\n" + "\n".join(imports_to_add)
+                    kt_content = kt_content.replace(package_line, replacement, 1)
+                    with open(fpath, "w", encoding="utf-8") as f:
+                        f.write(kt_content)
+                    print(f"✅ Added explicit imports to {fname}")
+
 if __name__ == "__main__":
     patch()
