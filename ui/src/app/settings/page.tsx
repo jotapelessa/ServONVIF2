@@ -3880,6 +3880,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         <span>Desligar Servidor</span>
                       </button>
                     </div>
+                  </div>
+
                   {/* Section 4: GitHub Self-Update & Remote Version Control */}
                   <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
