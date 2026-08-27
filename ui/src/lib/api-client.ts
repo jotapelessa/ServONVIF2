@@ -41,14 +41,35 @@ export interface Camera {
 export interface Device {
   id: number;
   device_id: string;
-  name: string;
+  device_name?: string;
+  name?: string;
   ip_address: string;
   device_type: string;
-  status: "ALLOWED" | "BLOCKED" | "PAUSED";
-  notes?: string;
   manufacturer_model?: string;
+  mac_address?: string;
+  hardware_fingerprint?: string;
+  app_version?: string;
+  status: "ALLOWED" | "BLOCKED" | "PAUSED" | "UNKNOWN";
+  notes?: string;
+  is_online?: boolean;
   ping_count?: number;
+  last_ping_at?: string;
   last_seen: string;
+  created_at?: string;
+}
+
+export interface DeviceSummary {
+  total: number;
+  online: number;
+  allowed: number;
+  blocked: number;
+  paused: number;
+  unknown: number;
+}
+
+export interface DeviceFleetResponse {
+  devices: Device[];
+  summary: DeviceSummary;
 }
 
 export interface MotionEvent {
@@ -455,15 +476,55 @@ export const apiClient = {
     return data;
   },
 
-  async getDevices(): Promise<any[]> {
+  async getDevices(): Promise<DeviceFleetResponse> {
     const res = await fetch(`${getApiBase()}/api/devices/`);
     if (!res.ok) throw new Error("Falha ao carregar lista de dispositivos");
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return {
+        devices: data,
+        summary: {
+          total: data.length,
+          online: data.filter((d: any) => d.is_online).length,
+          allowed: data.filter((d: any) => d.status === "ALLOWED").length,
+          blocked: data.filter((d: any) => d.status === "BLOCKED").length,
+          paused: data.filter((d: any) => d.status === "PAUSED").length,
+          unknown: data.filter((d: any) => d.status === "UNKNOWN").length,
+        }
+      };
+    }
+    return data;
+  },
+
+  async createDevice(payload: {
+    device_name: string;
+    ip_address?: string;
+    device_type?: string;
+    manufacturer_model?: string;
+    mac_address?: string;
+    status?: string;
+    notes?: string;
+  }): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/devices/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao cadastrar dispositivo");
+    return data;
   },
 
   async updateDevice(
     deviceIdOrPk: string | number,
-    payload: { device_name?: string; status?: string; notes?: string }
+    payload: {
+      device_name?: string;
+      device_type?: string;
+      manufacturer_model?: string;
+      mac_address?: string;
+      status?: string;
+      notes?: string;
+    }
   ): Promise<any> {
     const res = await fetch(`${getApiBase()}/api/devices/${deviceIdOrPk}`, {
       method: "PATCH",
@@ -472,6 +533,35 @@ export const apiClient = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Falha ao atualizar dispositivo");
+    return data;
+  },
+
+  async testDeviceNotify(deviceIdOrPk: string | number): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/devices/test-notify/${deviceIdOrPk}`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao disparar notificação de teste");
+    return data;
+  },
+
+  async bulkDeviceAction(action: "ALLOW_ALL" | "PAUSE_ALL" | "BLOCK_UNKNOWN" | "UNBLOCK_ALL"): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/devices/bulk-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao executar ação em massa");
+    return data;
+  },
+
+  async cleanupStaleDevices(days: number = 30): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/devices/cleanup-stale?days=${days}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao limpar dispositivos inativos");
     return data;
   },
 

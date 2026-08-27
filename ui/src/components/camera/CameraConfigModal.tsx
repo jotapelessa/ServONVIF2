@@ -90,8 +90,12 @@ export function CameraConfigModal({ camera, onClose, onSaved }: CameraConfigModa
   useEffect(() => {
     async function loadData() {
       try {
-        const devs = await apiClient.getDevices();
-        setDevices(devs);
+        const res = await apiClient.getDevices();
+        if (res && res.devices) {
+          setDevices(res.devices);
+        } else if (Array.isArray(res)) {
+          setDevices(res);
+        }
       } catch (e) {
         console.error("Erro ao carregar dispositivos:", e);
       } finally {

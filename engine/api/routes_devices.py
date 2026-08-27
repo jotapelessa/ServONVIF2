@@ -1,18 +1,27 @@
 import asyncio
-from datetime import datetime
-from typing import Optional, List
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from loguru import logger
 
-from engine.database.db import get_db
+from engine.database.db import get_db, get_system_setting, set_system_setting
 from engine.database.models import Device
 from engine.api.websocket_hub import ws_hub
 from engine.services.backup_service import dispatch_telegram_backup
 
 router = APIRouter(prefix="/api/devices", tags=["Devices"])
+
+class DeviceCreatePayload(BaseModel):
+    device_name: str
+    ip_address: Optional[str] = "192.168.1.100"
+    device_type: Optional[str] = "Android TV"
+    manufacturer_model: Optional[str] = None
+    mac_address: Optional[str] = None
+    status: Optional[str] = "ALLOWED"
+    notes: Optional[str] = None
 
 class DevicePingPayload(BaseModel):
     device_id: Optional[str] = None
@@ -25,8 +34,17 @@ class DevicePingPayload(BaseModel):
 
 class DeviceUpdatePayload(BaseModel):
     device_name: Optional[str] = None
+    device_type: Optional[str] = None
+    manufacturer_model: Optional[str] = None
+    mac_address: Optional[str] = None
     status: Optional[str] = None  # "ALLOWED", "BLOCKED", "PAUSED", "UNKNOWN"
     notes: Optional[str] = None
+
+class BulkDeviceActionPayload(BaseModel):
+    action: str  # "ALLOW_ALL", "PAUSE_ALL", "BLOCK_UNKNOWN", "UNBLOCK_ALL"
+
+class DevicePolicyPayload(BaseModel):
+    default_policy: str  # "AUTO_ALLOW", "REQUIRE_APPROVAL", "BLOCK_NEW"
 
 @router.get("/")
 async def list_devices(db: AsyncSession = Depends(get_db)):
@@ -38,13 +56,31 @@ async def list_devices(db: AsyncSession = Depends(get_db)):
     result = await db.execute(query)
     db_devices = result.scalars().all()
     
-    # Active IPs from WebSocket hub
+    # Active IPs and IDs from WebSocket hub
     active_ips = {info.ip for info in ws_hub.active_clients.values()}
     active_dev_ids = {info.device_id for info in ws_hub.active_clients.values()}
 
     devices_list = []
-    for idx, dev in enumerate(db_devices):
+    online_count = 0
+    allowed_count = 0
+    blocked_count = 0
+    paused_count = 0
+    unknown_count = 0
+
+    for dev in db_devices:
         is_online = (dev.ip_address in active_ips) or (dev.device_id in active_dev_ids)
+        if is_online:
+            online_count += 1
+
+        if dev.status == "ALLOWED":
+            allowed_count += 1
+        elif dev.status == "BLOCKED":
+            blocked_count += 1
+        elif dev.status == "PAUSED":
+            paused_count += 1
+        else:
+            unknown_count += 1
+
         devices_list.append({
             "id": dev.id,
             "device_id": dev.device_id,
@@ -54,6 +90,7 @@ async def list_devices(db: AsyncSession = Depends(get_db)):
             "manufacturer_model": dev.manufacturer_model,
             "mac_address": dev.mac_address,
             "hardware_fingerprint": dev.hardware_fingerprint,
+            "app_version": dev.app_version,
             "status": dev.status,
             "notes": dev.notes,
             "is_online": is_online,
@@ -62,7 +99,60 @@ async def list_devices(db: AsyncSession = Depends(get_db)):
             "last_seen": dev.last_seen.isoformat() if dev.last_seen else None,
             "created_at": dev.created_at.isoformat() if dev.created_at else None,
         })
-    return devices_list
+
+    return {
+        "devices": devices_list,
+        "summary": {
+            "total": len(devices_list),
+            "online": online_count,
+            "allowed": allowed_count,
+            "blocked": blocked_count,
+            "paused": paused_count,
+            "unknown": unknown_count,
+        }
+    }
+
+@router.post("/")
+async def create_device(payload: DeviceCreatePayload, db: AsyncSession = Depends(get_db)):
+    """
+    Manually creates/registers a new authorized device in the fleet.
+    """
+    clean_ip = payload.ip_address.strip() if payload.ip_address else "192.168.1.100"
+    device_id = f"manual_{clean_ip.replace('.', '_')}_{int(datetime.utcnow().timestamp())}"
+    
+    # Check if MAC or IP already exists
+    if payload.mac_address:
+        res = await db.execute(select(Device).where(Device.mac_address == payload.mac_address.strip()))
+        if res.scalars().first():
+            raise HTTPException(status_code=400, detail=f"Já existe um dispositivo cadastrado com o endereço MAC {payload.mac_address}.")
+
+    status_val = payload.status.upper().strip() if payload.status else "ALLOWED"
+    if status_val not in ["ALLOWED", "BLOCKED", "PAUSED", "UNKNOWN"]:
+        status_val = "ALLOWED"
+
+    now = datetime.utcnow()
+    new_dev = Device(
+        device_id=device_id,
+        device_name=payload.device_name.strip(),
+        ip_address=clean_ip,
+        device_type=payload.device_type or "Android TV",
+        manufacturer_model=payload.manufacturer_model or "Dispositivo Manual",
+        mac_address=payload.mac_address.strip().upper() if payload.mac_address else None,
+        status=status_val,
+        notes=payload.notes.strip() if payload.notes else None,
+        ping_count=0,
+        last_seen=now,
+        created_at=now
+    )
+    db.add(new_dev)
+    await db.commit()
+    await db.refresh(new_dev)
+
+    ws_hub.set_device_status(new_dev.device_id, status_val)
+    ws_hub.set_device_status(new_dev.ip_address, status_val)
+
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Novo Dispositivo Cadastrado: {new_dev.device_name}"))
+    return {"success": True, "message": f"Dispositivo '{new_dev.device_name}' cadastrado com sucesso!", "device": new_dev}
 
 @router.post("/ping")
 async def register_device_ping(payload: DevicePingPayload, request: Request, db: AsyncSession = Depends(get_db)):
@@ -160,10 +250,107 @@ async def register_device_ping(payload: DevicePingPayload, request: Request, db:
         }
     }
 
+@router.post("/test-notify/{device_id_or_pk}")
+async def send_device_test_notification(device_id_or_pk: str, db: AsyncSession = Depends(get_db)):
+    """
+    Sends an instant interactive visual & audio test notification (PiP / Pop-up)
+    directly to the specified device via WebSocket.
+    """
+    dev = None
+    if device_id_or_pk.isdigit():
+        dev = await db.get(Device, int(device_id_or_pk))
+    if not dev:
+        res = await db.execute(select(Device).where(Device.device_id == device_id_or_pk))
+        dev = res.scalars().first()
+
+    if not dev:
+        raise HTTPException(status_code=404, detail="Dispositivo não encontrado")
+
+    test_payload = {
+        "type": "DEVICE_TEST_NOTIFICATION",
+        "title": "🔔 Teste de Notificação ServONVIF",
+        "message": f"Conexão com {dev.device_name} validada com sucesso!",
+        "device_id": dev.device_id,
+        "device_name": dev.device_name,
+        "timestamp": datetime.utcnow().isoformat(),
+        "sound": True
+    }
+
+    sent = await ws_hub.send_to_device(dev.device_id, test_payload)
+    if not sent:
+        sent = await ws_hub.send_to_device(dev.ip_address, test_payload)
+
+    # Also broadcast generic ping so any listeners know
+    await ws_hub.broadcast_event(test_payload)
+
+    return {
+        "success": True,
+        "message": f"Notificação de teste disparada para '{dev.device_name}'!",
+        "delivered_to_active_socket": sent
+    }
+
+@router.post("/bulk-status")
+async def bulk_device_action(payload: BulkDeviceActionPayload, db: AsyncSession = Depends(get_db)):
+    """
+    Applies a batch access control action across all registered fleet devices.
+    """
+    action = payload.action.upper().strip()
+    query = select(Device)
+    res = await db.execute(query)
+    all_devs = res.scalars().all()
+
+    modified_count = 0
+    new_status = "ALLOWED"
+
+    if action == "ALLOW_ALL":
+        new_status = "ALLOWED"
+    elif action == "PAUSE_ALL":
+        new_status = "PAUSED"
+    elif action == "BLOCK_UNKNOWN":
+        new_status = "BLOCKED"
+    elif action == "UNBLOCK_ALL":
+        new_status = "ALLOWED"
+    else:
+        raise HTTPException(status_code=400, detail="Ação inválida. Escolha: ALLOW_ALL, PAUSE_ALL, BLOCK_UNKNOWN ou UNBLOCK_ALL.")
+
+    for dev in all_devs:
+        if action == "BLOCK_UNKNOWN" and dev.status != "UNKNOWN":
+            continue
+        dev.status = new_status
+        ws_hub.set_device_status(dev.device_id, new_status)
+        ws_hub.set_device_status(dev.ip_address, new_status)
+        modified_count += 1
+
+    await db.commit()
+    asyncio.create_task(dispatch_telegram_backup(reason=f"Ação em Massa Dispositivos: {action} ({modified_count} afetados)"))
+
+    return {
+        "success": True,
+        "message": f"Ação '{action}' aplicada com sucesso a {modified_count} dispositivos!",
+        "modified_count": modified_count
+    }
+
+@router.delete("/cleanup-stale")
+async def cleanup_stale_devices(days: int = 30, db: AsyncSession = Depends(get_db)):
+    """
+    Removes inactive devices that have been offline for more than X days.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    query = select(Device).where(Device.last_seen < cutoff)
+    res = await db.execute(query)
+    stale_devs = res.scalars().all()
+
+    count = len(stale_devs)
+    for dev in stale_devs:
+        await db.delete(dev)
+
+    await db.commit()
+    return {"success": True, "message": f"{count} dispositivos inativos (> {days} dias) foram removidos.", "deleted_count": count}
+
 @router.patch("/{device_id_or_pk}")
 async def update_device(device_id_or_pk: str, payload: DeviceUpdatePayload, db: AsyncSession = Depends(get_db)):
     """
-    Updates device status (ALLOWED, BLOCKED, PAUSED, UNKNOWN) or friendly name.
+    Updates device status (ALLOWED, BLOCKED, PAUSED, UNKNOWN), type, MAC, or friendly name.
     Takes effect immediately on active WebSocket streams.
     """
     dev = None
@@ -181,6 +368,15 @@ async def update_device(device_id_or_pk: str, payload: DeviceUpdatePayload, db: 
 
     if payload.device_name is not None:
         dev.device_name = payload.device_name.strip()
+
+    if payload.device_type is not None:
+        dev.device_type = payload.device_type.strip()
+
+    if payload.manufacturer_model is not None:
+        dev.manufacturer_model = payload.manufacturer_model.strip()
+
+    if payload.mac_address is not None:
+        dev.mac_address = payload.mac_address.strip().upper()
 
     if payload.notes is not None:
         dev.notes = payload.notes.strip()
@@ -201,7 +397,7 @@ async def update_device(device_id_or_pk: str, payload: DeviceUpdatePayload, db: 
 
     return {
         "success": True,
-        "message": f"Dispositivo '{dev.device_name}' atualizado para status '{dev.status}'.",
+        "message": f"Dispositivo '{dev.device_name}' atualizado com sucesso.",
         "device": dev
     }
 
@@ -225,3 +421,4 @@ async def delete_device(device_id_or_pk: str, db: AsyncSession = Depends(get_db)
     await db.commit()
     asyncio.create_task(dispatch_telegram_backup(reason=f"Dispositivo Excluído: {dev_name}"))
     return {"success": True, "message": f"Dispositivo removido com sucesso."}
+

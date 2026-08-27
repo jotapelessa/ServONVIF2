@@ -180,8 +180,21 @@ class WebSocketHub:
                 logger.warning(f"Error sending to WebSocket client {info.ip}: {e}")
                 stale_connections.add(ws)
 
-        for stale in stale_connections:
-            self.disconnect(stale)
+    async def send_to_device(self, device_id_or_ip: str, event_data: Dict[str, Any]) -> bool:
+        """Sends a targeted real-time WebSocket event directly to a specific connected device."""
+        if not self.active_clients:
+            return False
+        message = json.dumps(event_data)
+        sent = False
+        for ws, info in list(self.active_clients.items()):
+            if info.device_id == device_id_or_ip or info.ip == device_id_or_ip:
+                try:
+                    await ws.send_text(message)
+                    sent = True
+                except Exception as e:
+                    logger.warning(f"Error sending targeted push to {info.ip}: {e}")
+                    self.disconnect(ws)
+        return sent
 
     @property
     def unique_devices_count(self) -> int:
