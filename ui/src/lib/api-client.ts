@@ -551,6 +551,21 @@ export const apiClient = {
     return res.json();
   },
 
+  async getSystemVersion(): Promise<SystemVersionInfo> {
+    const res = await fetch(`${getApiBase()}/api/settings/system/version`);
+    if (!res.ok) throw new Error("Falha ao consultar versão do sistema");
+    return res.json();
+  },
+
+  async applySystemUpdate(): Promise<{ success: boolean; message: string; git_output?: string }> {
+    const res = await fetch(`${getApiBase()}/api/settings/system/update`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao aplicar atualização");
+    return data;
+  },
+
   getExportConfigUrl(): string {
     return `${getApiBase()}/api/settings/export-config`;
   },
@@ -583,11 +598,23 @@ export const apiClient = {
   },
 
   async getTailscaleStatus(): Promise<TailscaleStatus> {
-    const res = await fetch(`${API_BASE}/api/settings/tailscale`);
+    const res = await fetch(`${getApiBase()}/api/settings/tailscale`);
     if (!res.ok) throw new Error("Falha ao obter status do Tailscale");
     return res.json();
   },
 };
+
+export interface SystemVersionInfo {
+  local_commit: string;
+  local_commit_message: string;
+  local_commit_date: string;
+  remote_commit: string;
+  remote_commit_message: string;
+  remote_commit_date: string;
+  update_available: boolean;
+  github_reachable: boolean;
+  repo_url: string;
+}
 
 export interface TailscalePeer {
   id?: string;

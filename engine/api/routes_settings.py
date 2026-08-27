@@ -553,6 +553,119 @@ async def restart_server():
         "message": "Reiniciando motor ServONVIF... A conexão será restabelecida em alguns segundos."
     }
 
+@router.get("/system/version")
+async def get_system_version():
+    """
+    Checks the local Git commit version and queries GitHub to check if updates are available.
+    """
+    import subprocess
+    import json
+    import urllib.request
+    from pathlib import Path
+
+    root_dir = Path(__file__).resolve().parent.parent.parent
+
+    # 1. Local Git metadata
+    local_commit = "unknown"
+    local_msg = ""
+    local_date = ""
+    try:
+        res_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root_dir, capture_output=True, text=True, timeout=3)
+        if res_sha.returncode == 0:
+            local_commit = res_sha.stdout.strip()
+        res_msg = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=root_dir, capture_output=True, text=True, timeout=3)
+        if res_msg.returncode == 0:
+            local_msg = res_msg.stdout.strip()
+        res_date = subprocess.run(["git", "log", "-1", "--format=%cd", "--date=relative"], cwd=root_dir, capture_output=True, text=True, timeout=3)
+        if res_date.returncode == 0:
+            local_date = res_date.stdout.strip()
+    except Exception as e:
+        logger.debug(f"Git local version read error: {e}")
+
+    # 2. Remote GitHub metadata
+    remote_commit = local_commit
+    remote_msg = local_msg
+    remote_date = local_date
+    update_available = False
+    github_reachable = False
+
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/jotapelessa/ServONVIF2/commits/main",
+            headers={"User-Agent": "ServONVIF-Engine-AutoUpdater"}
+        )
+        with urllib.request.urlopen(req, timeout=4) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                remote_commit = data["sha"][:7]
+                remote_msg = data.get("commit", {}).get("message", "").split("\n")[0]
+                remote_date = data.get("commit", {}).get("author", {}).get("date", "")
+                github_reachable = True
+                if local_commit != "unknown" and remote_commit != local_commit:
+                    update_available = True
+    except Exception as e:
+        logger.debug(f"GitHub remote check error: {e}")
+
+    return {
+        "local_commit": local_commit,
+        "local_commit_message": local_msg,
+        "local_commit_date": local_date,
+        "remote_commit": remote_commit,
+        "remote_commit_message": remote_msg,
+        "remote_commit_date": remote_date,
+        "update_available": update_available,
+        "github_reachable": github_reachable,
+        "repo_url": "https://github.com/jotapelessa/ServONVIF2"
+    }
+
+@router.post("/system/update")
+async def apply_system_update():
+    """
+    Executes 'git pull origin main' from GitHub and restarts the engine automatically.
+    """
+    import subprocess
+    import threading
+    import os, sys, time
+    from pathlib import Path
+
+    root_dir = Path(__file__).resolve().parent.parent.parent
+
+    # 1. Run git pull
+    try:
+        res = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=root_dir,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        git_output = res.stdout + ("\n" + res.stderr if res.stderr else "")
+        if res.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"Falha no git pull: {git_output}")
+    except Exception as e:
+        logger.error(f"Auto-update pull error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao baixar atualização do GitHub: {str(e)}")
+
+    # 2. Schedule delayed restart
+    def _delayed_restart_after_update():
+        time.sleep(1.2)
+        logger.info("🚀 ServONVIF Engine restarting after successful GitHub update...")
+        try:
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(root_dir)
+            subprocess.Popen([sys.executable, "-m", "engine.main"], cwd=str(root_dir), env=env)
+        except Exception as e:
+            logger.error(f"Restart relaunch error: {e}")
+        os._exit(0)
+
+    threading.Thread(target=_delayed_restart_after_update, daemon=True).start()
+
+    return {
+        "success": True,
+        "message": "Atualização baixada com sucesso do GitHub! O servidor está reiniciando e voltará online em segundos.",
+        "git_output": git_output.strip()
+    }
+
 
 # =========================================================================
 # 💾 CONFIGURATION BACKUP & RESTORE (.JSON / UNIVERSAL COMPATIBILITY)

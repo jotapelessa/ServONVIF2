@@ -2,13 +2,16 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { apiClient, API_BASE, SettingsResponse, TailscaleStatus } from "@/lib/api-client";
+import { apiClient, API_BASE, getApiBase, SettingsResponse, TailscaleStatus, SystemVersionInfo } from "@/lib/api-client";
 import {
   ArrowLeft,
   Bell,
   Tv,
   HardDrive,
   Cpu,
+  GitBranch,
+  GitPullRequest,
+  ArrowUpCircle,
   Save,
   Send,
   Trash2,
@@ -253,6 +256,14 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [serverShutdownDone, setServerShutdownDone] = useState(false);
   const [restartCountdown, setRestartCountdown] = useState(8);
+
+  // GitHub Auto-Update State
+  const [systemVersion, setSystemVersion] = useState<SystemVersionInfo | null>(null);
+  const [checkingVersion, setCheckingVersion] = useState(false);
+  const [isUpdatingSystem, setIsUpdatingSystem] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState<{ success: boolean; message: string; git_output?: string } | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updateCountdown, setUpdateCountdown] = useState(12);
 
   // Dynamic Processing & Standby State (0% CPU)
   const [isProcessingPaused, setIsProcessingPaused] = useState(false);
@@ -717,6 +728,9 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     if (activeTab === "devices") {
       fetchDevices();
     }
+    if (activeTab === "backup") {
+      fetchSystemVersion();
+    }
   }, [activeTab, logLevelFilter]);
 
   const handleCopyLogsForAntigravity = () => {
@@ -976,7 +990,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       setRestartCountdown(count);
       if (count <= 3) {
         try {
-          const res = await fetch(`${API_BASE}/api/settings/`);
+          const res = await fetch(`${getApiBase()}/api/settings/`);
           if (res.ok) {
             clearInterval(interval);
             setIsRestarting(false);
@@ -993,6 +1007,60 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         clearInterval(interval);
         setIsRestarting(false);
         setIsRestartModalOpen(false);
+        window.location.reload();
+      }
+    }, 1000);
+  };
+
+  const fetchSystemVersion = async () => {
+    setCheckingVersion(true);
+    try {
+      const data = await apiClient.getSystemVersion();
+      setSystemVersion(data);
+    } catch (e) {
+      console.error("Erro ao consultar versão do sistema:", e);
+    } finally {
+      setCheckingVersion(false);
+    }
+  };
+
+  const handleTriggerSystemUpdate = async () => {
+    setIsUpdatingSystem(true);
+    setIsUpdateModalOpen(true);
+    setUpdateFeedback(null);
+    try {
+      const res = await apiClient.applySystemUpdate();
+      setUpdateFeedback({ success: true, message: res.message, git_output: res.git_output });
+    } catch (err: any) {
+      setUpdateFeedback({ success: false, message: err.message || "Erro ao aplicar atualização" });
+      setIsUpdatingSystem(false);
+      return;
+    }
+
+    let count = 12;
+    setUpdateCountdown(count);
+    const interval = setInterval(async () => {
+      count -= 1;
+      setUpdateCountdown(count);
+      if (count <= 6) {
+        try {
+          const res = await fetch(`${getApiBase()}/api/settings/system/version`);
+          if (res.ok) {
+            clearInterval(interval);
+            setIsUpdatingSystem(false);
+            setTimeout(() => {
+              setIsUpdateModalOpen(false);
+              window.location.reload();
+            }, 1000);
+          }
+        } catch (e) {
+          // Still restarting
+        }
+      }
+      if (count <= 0) {
+        clearInterval(interval);
+        setIsUpdatingSystem(false);
+        setIsUpdateModalOpen(false);
         window.location.reload();
       }
     }, 1000);
@@ -3812,6 +3880,115 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         <span>Desligar Servidor</span>
                       </button>
                     </div>
+                  {/* Section 4: GitHub Self-Update & Remote Version Control */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-blue-600/10 text-blue-400 border border-blue-500/20">
+                          <GitBranch className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white">Atualizações do Sistema (GitHub)</h3>
+                            {systemVersion?.update_available ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 animate-pulse">
+                                🟡 Atualização Disponível
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                                🟢 Versão Mais Recente
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Atualize o motor e interface diretamente do repositório remoto sem precisar de SSH ou terminal.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Check Button */}
+                      <button
+                        type="button"
+                        onClick={fetchSystemVersion}
+                        disabled={checkingVersion}
+                        className="h-9 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 border border-white/10 transition active:scale-98 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${checkingVersion ? "animate-spin text-blue-400" : "text-slate-400"}`} />
+                        <span>{checkingVersion ? "Verificando..." : "Verificar no GitHub"}</span>
+                      </button>
+                    </div>
+
+                    {/* Version Details Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      {/* Local Commit Card */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Versão Instalada Localmente</span>
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                            {systemVersion?.local_commit || "---"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 truncate" title={systemVersion?.local_commit_message}>
+                          {systemVersion?.local_commit_message || "Carregando informações locais..."}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {systemVersion?.local_commit_date ? `Última alteração: ${systemVersion.local_commit_date}` : ""}
+                        </p>
+                      </div>
+
+                      {/* Remote GitHub Commit Card */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Repositório Remoto (GitHub main)</span>
+                          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            {systemVersion?.remote_commit || "---"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 truncate" title={systemVersion?.remote_commit_message}>
+                          {systemVersion?.remote_commit_message || "Verifique a conexão com o GitHub..."}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {systemVersion?.remote_commit_date ? `Lançado no GitHub: ${new Date(systemVersion.remote_commit_date).toLocaleString("pt-BR")}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Update Available Banner & Action */}
+                    {systemVersion?.update_available ? (
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-amber-400" />
+                            <span>Nova versão detectada no GitHub!</span>
+                          </h4>
+                          <p className="text-xs text-slate-300">
+                            Clique no botão ao lado para baixar as melhorias e reiniciar o servidor automaticamente.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsUpdateModalOpen(true)}
+                          className="h-11 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-amber-600/25 transition active:scale-98 shrink-0"
+                        >
+                          <ArrowUpCircle className="w-4 h-4" />
+                          <span>Atualizar Servidor Agora</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>O ServONVIF está sincronizado com a ramificação principal do GitHub.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsUpdateModalOpen(true)}
+                          className="text-[11px] font-semibold text-slate-400 hover:text-white underline underline-offset-2 transition"
+                        >
+                          Forçar Re-sincronização
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -4835,6 +5012,96 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                   <Power className="w-3.5 h-3.5" />
                   <span>{isShuttingDown ? "Desligando..." : "Sim, Desligar"}</span>
                 </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: AUTO-UPDATE GITHUB ================= */}
+      {isUpdateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="card-dark rounded-2xl w-full max-w-lg p-6 border border-white/10 shadow-2xl space-y-5 bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-blue-600/10 text-blue-400 border border-blue-500/20">
+                <ArrowUpCircle className={`w-6 h-6 ${isUpdatingSystem ? "animate-spin" : ""}`} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {isUpdatingSystem ? "Atualizando ServONVIF..." : "Confirmar Atualização do GitHub"}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {isUpdatingSystem
+                    ? `Baixando código e reiniciando o motor (${updateCountdown}s)...`
+                    : "O servidor executará o download da versão mais recente do repositório remoto."}
+                </p>
+              </div>
+            </div>
+
+            {isUpdatingSystem ? (
+              <div className="py-6 flex flex-col items-center justify-center space-y-4">
+                <div className="w-14 h-14 rounded-full border-4 border-blue-500/20 border-t-blue-400 animate-spin" />
+                <div className="text-center space-y-1">
+                  <p className="text-xs font-semibold text-slate-200">
+                    Sincronizando com GitHub e reiniciando processos...
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    A página irá recarregar automaticamente assim que o servidor voltar.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 text-xs text-slate-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Versão Atual:</span>
+                    <span className="font-mono font-bold text-blue-400">{systemVersion?.local_commit || "---"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Nova Versão (GitHub):</span>
+                    <span className="font-mono font-bold text-emerald-400">{systemVersion?.remote_commit || "---"}</span>
+                  </div>
+                  <div className="pt-2 border-t border-white/5">
+                    <p className="text-[11px] text-slate-400 italic">
+                      &ldquo;{systemVersion?.remote_commit_message || "Atualização com correções e melhorias."}&rdquo;
+                    </p>
+                  </div>
+                </div>
+
+                {updateFeedback && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                      updateFeedback.success
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                    }`}
+                  >
+                    {updateFeedback.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    )}
+                    <span>{updateFeedback.message}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsUpdateModalOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTriggerSystemUpdate}
+                    className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/20 transition flex items-center gap-2"
+                  >
+                    <ArrowUpCircle className="w-3.5 h-3.5" />
+                    <span>Iniciar Atualização Agora</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
