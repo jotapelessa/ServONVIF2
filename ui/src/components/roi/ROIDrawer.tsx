@@ -52,18 +52,18 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
       }
 
       ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = activeMode === "detection" ? 3 : 1.5;
+      ctx.lineWidth = activeMode === "detection" ? 2 : 1.2;
       ctx.setLineDash([]);
       ctx.stroke();
 
       // Vertices
       roiPoints.forEach((pt, index) => {
         ctx.beginPath();
-        ctx.arc(pt[0] * w, pt[1] * h, activeMode === "detection" ? 6 : 4, 0, Math.PI * 2);
+        ctx.arc(pt[0] * w, pt[1] * h, activeMode === "detection" ? 5 : 3.5, 0, Math.PI * 2);
         ctx.fillStyle = index === 0 ? "#f43f5e" : "#38bdf8";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
         if (activeMode === "detection") {
@@ -86,23 +86,23 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
       }
       if (poly.length >= 3) {
         ctx.closePath();
-        ctx.fillStyle = "rgba(168, 85, 247, 0.35)";
+        ctx.fillStyle = "rgba(168, 85, 247, 0.30)";
         ctx.fill();
       }
 
       ctx.strokeStyle = "#a855f7";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
       ctx.stroke();
 
       // Vertices
       poly.forEach((pt) => {
         ctx.beginPath();
-        ctx.arc(pt[0] * w, pt[1] * h, 4, 0, Math.PI * 2);
+        ctx.arc(pt[0] * w, pt[1] * h, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = "#c084fc";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
       });
     });
@@ -118,12 +118,12 @@ export function ROIDrawer({ camera, onClose, onSaved }: ROIDrawerProps) {
       }
       if (currentIgnorePoints.length >= 3) {
         ctx.closePath();
-        ctx.fillStyle = "rgba(216, 180, 254, 0.4)";
+        ctx.fillStyle = "rgba(216, 180, 254, 0.35)";
         ctx.fill();
       }
 
       ctx.strokeStyle = "#c084fc";
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 1.8;
       ctx.setLineDash([]);
       ctx.stroke();
 
