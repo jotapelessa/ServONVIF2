@@ -91,9 +91,9 @@ if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
 fi
 
 # Gerar estrutura Android do Expo se ainda não gerada
-if [ ! -d "$WORKSPACE_DIR/mobile/android" ]; then
+if [ ! -d "$WORKSPACE_DIR/mobile/android" ] || [ ! -f "$WORKSPACE_DIR/mobile/android/gradlew" ]; then
     echo "📦 Executando expo prebuild..."
-    npx expo prebuild --platform android --no-install
+    npx expo prebuild --platform android --clean --no-install
 fi
 
 cd "$WORKSPACE_DIR/mobile/android"
