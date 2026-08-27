@@ -21,7 +21,7 @@ android {
     applicationVariants.all {
         outputs.all {
             val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            outputImpl?.outputFileName = "ServONVIF-v${defaultConfig.versionName}.apk"
+            outputImpl?.outputFileName = "ServONVIF_TV.apk"
         }
     }
 
