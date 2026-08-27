@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   StatusBar,
 } from "react-native";
@@ -15,11 +14,12 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { SpotlightScreen } from "./src/screens/SpotlightScreen";
 import { PlatesScreen } from "./src/screens/PlatesScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
-import { Video, Car, Settings } from "lucide-react-native";
+import { BottomNavBar, TabType } from "./src/components/BottomNavBar";
+import { theme } from "./src/theme/tokens";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<"CAMERAS" | "PLATES" | "SETTINGS">("CAMERAS");
+  const [activeTab, setActiveTab] = useState<TabType>("CAMERAS");
   const [spotlightCamera, setSpotlightCamera] = useState<Camera | null>(null);
 
   useEffect(() => {
@@ -34,8 +34,8 @@ export default function App() {
   if (isAuthenticated === null) {
     return (
       <View style={styles.splashContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#090d16" />
-        <ActivityIndicator size="large" color="#38bdf8" />
+        <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
+        <ActivityIndicator size="large" color={theme.colors.accent} />
         <Text style={styles.splashText}>Iniciando ServONVIF Mobile...</Text>
       </View>
     );
@@ -44,7 +44,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#090d16" />
+        <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
         <AuthScreen onLoginSuccess={() => setIsAuthenticated(true)} />
       </SafeAreaView>
     );
@@ -52,9 +52,9 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d1322" />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.surface} />
 
-      {/* Main Screen Content */}
+      {/* Main Active Tab Screen View */}
       <View style={styles.content}>
         {activeTab === "CAMERAS" && (
           <HomeScreen onSelectCamera={(cam) => setSpotlightCamera(cam)} />
@@ -65,7 +65,7 @@ export default function App() {
         )}
       </View>
 
-      {/* 5MP Fullscreen Spotlight Modal */}
+      {/* 5MP Fullscreen Spotlight Modal Overlay */}
       {spotlightCamera && (
         <View style={styles.spotlightWrapper}>
           <SpotlightScreen
@@ -75,65 +75,11 @@ export default function App() {
         </View>
       )}
 
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab("CAMERAS")}
-          activeOpacity={0.7}
-        >
-          <Video
-            size={20}
-            color={activeTab === "CAMERAS" ? "#38bdf8" : "#64748b"}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === "CAMERAS" && styles.activeNavText,
-            ]}
-          >
-            Câmeras
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab("PLATES")}
-          activeOpacity={0.7}
-        >
-          <Car
-            size={20}
-            color={activeTab === "PLATES" ? "#38bdf8" : "#64748b"}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === "PLATES" && styles.activeNavText,
-            ]}
-          >
-            Placas LPR
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab("SETTINGS")}
-          activeOpacity={0.7}
-        >
-          <Settings
-            size={20}
-            color={activeTab === "SETTINGS" ? "#38bdf8" : "#64748b"}
-          />
-          <Text
-            style={[
-              styles.navText,
-              activeTab === "SETTINGS" && styles.activeNavText,
-            ]}
-          >
-            Ajustes
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bottom Navigation Dock */}
+      <BottomNavBar
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+      />
     </SafeAreaView>
   );
 }
@@ -141,18 +87,18 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#090d16",
+    backgroundColor: theme.colors.background,
   },
   splashContainer: {
     flex: 1,
-    backgroundColor: "#090d16",
+    backgroundColor: theme.colors.background,
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
   },
   splashText: {
-    color: "#94a3b8",
-    fontSize: 13,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   content: {
     flex: 1,
@@ -160,28 +106,5 @@ const styles = StyleSheet.create({
   spotlightWrapper: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 999,
-  },
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#0d1322",
-    borderTopWidth: 1,
-    borderTopColor: "#1e293b",
-    paddingVertical: 8,
-    paddingBottom: 14,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  navText: {
-    color: "#64748b",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  activeNavText: {
-    color: "#38bdf8",
-    fontWeight: "700",
   },
 });

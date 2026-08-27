@@ -1,44 +1,76 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import { Camera } from "../types";
-import { Maximize2, Video, AlertCircle } from "lucide-react-native";
+import { Maximize2, Video, AlertCircle, Camera as CameraIcon, Check } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { theme } from "../theme/tokens";
 
 interface CameraCardProps {
   camera: Camera;
   onPress: () => void;
+  onQuickSnapshot?: () => void;
   quality?: "main" | "sub";
 }
 
-export const CameraCard: React.FC<CameraCardProps> = ({ camera, onPress, quality = "sub" }) => {
+export const CameraCard: React.FC<CameraCardProps> = ({
+  camera,
+  onPress,
+  onQuickSnapshot,
+  quality = "sub",
+}) => {
   const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSnapshotting, setIsSnapshotting] = useState(false);
 
-  const streamUrl = quality === "main" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url);
+  const streamUrl =
+    quality === "main" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url);
+
+  const handleCardPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    onPress();
+  };
+
+  const handleSnapshotPress = (e: any) => {
+    e.stopPropagation();
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch {}
+    setIsSnapshotting(true);
+    setTimeout(() => setIsSnapshotting(false), 1200);
+    if (onQuickSnapshot) onQuickSnapshot();
+  };
 
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.88} onPress={onPress}>
-      {/* Video Stream Container */}
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.9}
+      onPress={handleCardPress}
+    >
+      {/* 16:9 Video Stream Viewport */}
       <View style={styles.videoContainer}>
         {streamUrl && !hasError ? (
           <Image
             source={{ uri: streamUrl }}
             style={styles.streamImage}
             resizeMode="cover"
-            onLoadStart={() => setIsLoading(true)}
-            onLoadEnd={() => setIsLoading(false)}
-            onError={() => {
-              setHasError(true);
-              setIsLoading(false);
-            }}
+            onError={() => setHasError(true)}
           />
         ) : (
           <View style={styles.errorContainer}>
-            <AlertCircle size={28} color="#ef4444" />
+            <AlertCircle size={28} color={theme.colors.danger} />
             <Text style={styles.errorText}>Stream Offline</Text>
           </View>
         )}
 
-        {/* Top Badges Bar */}
+        {/* Top Badges Overlay */}
         <View style={styles.topBadges}>
           <View style={styles.liveBadge}>
             <View style={styles.pulseDot} />
@@ -52,23 +84,39 @@ export const CameraCard: React.FC<CameraCardProps> = ({ camera, onPress, quality
           </View>
         </View>
 
-        {/* Fullscreen Overlay Button */}
-        <View style={styles.expandIconContainer}>
-          <Maximize2 size={14} color="#ffffff" />
+        {/* Floating Quick Action Buttons */}
+        <View style={styles.bottomOverlayActions}>
+          <TouchableOpacity
+            style={[styles.actionIconBtn, isSnapshotting && styles.actionIconBtnSuccess]}
+            onPress={handleSnapshotPress}
+            activeOpacity={0.7}
+          >
+            {isSnapshotting ? (
+              <Check size={14} color={theme.colors.success} />
+            ) : (
+              <CameraIcon size={14} color="#ffffff" />
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.expandPill}>
+            <Maximize2 size={13} color="#ffffff" />
+          </View>
         </View>
       </View>
 
-      {/* Camera Meta Bottom Bar */}
+      {/* Meta Footer */}
       <View style={styles.metaRow}>
         <View style={styles.metaLeft}>
-          <View style={styles.camIcon}>
-            <Video size={14} color="#38bdf8" />
+          <View style={styles.camIconWrapper}>
+            <Video size={14} color={theme.colors.accent} />
           </View>
-          <View>
+          <View style={styles.metaTexts}>
             <Text style={styles.cameraName} numberOfLines={1}>
               {camera.name}
             </Text>
-            <Text style={styles.cameraIp}>{camera.ip_address || "192.168.1.200"}</Text>
+            <Text style={styles.cameraIp} numberOfLines={1}>
+              {camera.ip_address || "192.168.1.200"} • RTSP H.264
+            </Text>
           </View>
         </View>
 
@@ -82,21 +130,17 @@ export const CameraCard: React.FC<CameraCardProps> = ({ camera, onPress, quality
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#131b2e",
-    borderRadius: 18,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.borderSubtle,
     overflow: "hidden",
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.card,
   },
   videoContainer: {
     width: "100%",
-    height: 200,
+    aspectRatio: 16 / 9,
     backgroundColor: "#020617",
     position: "relative",
     justifyContent: "center",
@@ -112,9 +156,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   errorText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontWeight: "600",
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
   topBadges: {
     position: "absolute",
@@ -129,10 +172,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(225, 29, 72, 0.85)",
+    backgroundColor: "rgba(239, 68, 68, 0.9)",
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 3.5,
+    borderRadius: theme.radius.xs,
   },
   pulseDot: {
     width: 6,
@@ -147,28 +190,45 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   resolutionBadge: {
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
+    backgroundColor: "rgba(13, 20, 36, 0.8)",
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: theme.radius.xs,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.15)",
   },
   resolutionText: {
-    color: "#cbd5e1",
-    fontSize: 9,
-    fontWeight: "700",
+    ...theme.typography.mono,
+    color: theme.colors.textPrimary,
   },
-  expandIconContainer: {
+  bottomOverlayActions: {
     position: "absolute",
     bottom: 10,
     right: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    padding: 6,
-    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionIconBtn: {
+    backgroundColor: "rgba(7, 11, 20, 0.75)",
+    padding: 7,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  actionIconBtnSuccess: {
+    backgroundColor: theme.colors.successMuted,
+    borderColor: theme.colors.successBorder,
+  },
+  expandPill: {
+    backgroundColor: "rgba(7, 11, 20, 0.75)",
+    padding: 7,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   metaRow: {
-    paddingHorizontal: 14,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
@@ -180,36 +240,36 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  camIcon: {
+  camIconWrapper: {
     width: 28,
     height: 28,
-    borderRadius: 8,
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
+    borderRadius: theme.radius.xs,
+    backgroundColor: theme.colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
+  metaTexts: {
+    flex: 1,
+  },
   cameraName: {
-    color: "#f8fafc",
-    fontSize: 13,
-    fontWeight: "700",
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
   },
   cameraIp: {
-    color: "#64748b",
-    fontSize: 10,
-    fontFamily: "monospace",
+    ...theme.typography.mono,
+    color: theme.colors.textMuted,
     marginTop: 1,
   },
   fpsBadge: {
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    backgroundColor: theme.colors.successMuted,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
+    borderColor: theme.colors.successBorder,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: theme.radius.xs,
   },
   fpsText: {
-    color: "#34d399",
-    fontSize: 10,
-    fontWeight: "800",
+    ...theme.typography.mono,
+    color: theme.colors.success,
   },
 });

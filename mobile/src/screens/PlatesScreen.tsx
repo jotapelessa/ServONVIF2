@@ -7,16 +7,19 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
-  Image,
+  TouchableOpacity,
 } from "react-native";
 import { PlateLog } from "../types";
 import { ApiService } from "../services/api";
 import { Header } from "../components/Header";
-import { Car, Search, ShieldCheck, UserCheck, AlertTriangle } from "lucide-react-native";
+import { Car, Search, X, ShieldCheck, UserCheck, AlertTriangle } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { theme } from "../theme/tokens";
 
 export const PlatesScreen: React.FC = () => {
   const [logs, setLogs] = useState<PlateLog[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState<"ALL" | "MORADOR" | "VISITANTE" | "SUSPEITO">("ALL");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [routeType, setRouteType] = useState<"LAN" | "TAILSCALE">("LAN");
@@ -39,47 +42,63 @@ export const PlatesScreen: React.FC = () => {
   }, [loadLogs]);
 
   const onRefresh = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
     setIsRefreshing(true);
     await loadLogs();
   };
 
+  const handleCategoryChange = (cat: "ALL" | "MORADOR" | "VISITANTE" | "SUSPEITO") => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    setFilterCategory(cat);
+  };
+
   const filteredLogs = logs.filter((l) => {
-    const term = searchTerm.toLowerCase();
-    return (
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch =
+      !term ||
       l.plate_number.toLowerCase().includes(term) ||
       (l.owner_name && l.owner_name.toLowerCase().includes(term)) ||
-      (l.vehicle_model && l.vehicle_model.toLowerCase().includes(term))
-    );
+      (l.vehicle_model && l.vehicle_model.toLowerCase().includes(term));
+
+    const matchesCategory =
+      filterCategory === "ALL" ||
+      (l.category && l.category.toUpperCase() === filterCategory);
+
+    return matchesSearch && matchesCategory;
   });
 
-  const getCategoryBadge = (category?: string) => {
-    switch (category) {
+  const getCategoryMeta = (category?: string) => {
+    switch (category?.toUpperCase()) {
       case "MORADOR":
         return {
-          bg: "rgba(16, 185, 129, 0.12)",
-          border: "rgba(16, 185, 129, 0.3)",
-          text: "#34d399",
+          bg: theme.colors.successMuted,
+          border: theme.colors.successBorder,
+          text: theme.colors.success,
           label: "Morador",
         };
       case "VISITANTE":
         return {
-          bg: "rgba(56, 189, 248, 0.12)",
-          border: "rgba(56, 189, 248, 0.3)",
-          text: "#38bdf8",
+          bg: theme.colors.accentMuted,
+          border: theme.colors.accentBorder,
+          text: theme.colors.accent,
           label: "Visitante",
         };
       case "SUSPEITO":
         return {
-          bg: "rgba(239, 68, 68, 0.12)",
-          border: "rgba(239, 68, 68, 0.3)",
-          text: "#f87171",
+          bg: theme.colors.dangerMuted,
+          border: theme.colors.dangerBorder,
+          text: theme.colors.danger,
           label: "Suspeito",
         };
       default:
         return {
-          bg: "rgba(148, 163, 184, 0.12)",
-          border: "rgba(148, 163, 184, 0.3)",
-          text: "#94a3b8",
+          bg: theme.colors.warningMuted,
+          border: theme.colors.warningBorder,
+          text: theme.colors.warning,
           label: "Identificado",
         };
     }
@@ -88,31 +107,66 @@ export const PlatesScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Header
-        title="Reconhecimento de Placas (LPR)"
+        title="Reconhecimento LPR"
         routeType={routeType}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
       />
 
       {/* Search Input Bar */}
-      <View style={styles.searchContainer}>
+      <View style={styles.searchSection}>
         <View style={styles.searchBox}>
-          <Search size={16} color="#64748b" />
+          <Search size={16} color={theme.colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar por placa, morador ou modelo..."
-            placeholderTextColor="#64748b"
+            placeholderTextColor={theme.colors.textDisabled}
             value={searchTerm}
             onChangeText={setSearchTerm}
             autoCapitalize="characters"
           />
+          {searchTerm.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchTerm("")}>
+              <X size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Category Pills Bar */}
+        <View style={styles.categoryPills}>
+          {(["ALL", "MORADOR", "VISITANTE", "SUSPEITO"] as const).map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[
+                styles.categoryChip,
+                filterCategory === cat && styles.activeCategoryChip,
+              ]}
+              onPress={() => handleCategoryChange(cat)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  filterCategory === cat && styles.activeCategoryChipText,
+                ]}
+              >
+                {cat === "ALL"
+                  ? "Todas"
+                  : cat === "MORADOR"
+                  ? "Moradores"
+                  : cat === "VISITANTE"
+                  ? "Visitantes"
+                  : "Suspeitos"}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
       {isLoading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#38bdf8" />
-          <Text style={styles.loadingText}>Carregando histórico LPR...</Text>
+          <ActivityIndicator size="large" color={theme.colors.accent} />
+          <Text style={styles.loadingText}>Carregando registros LPR...</Text>
         </View>
       ) : (
         <FlatList
@@ -123,34 +177,38 @@ export const PlatesScreen: React.FC = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor="#38bdf8"
+              tintColor={theme.colors.accent}
             />
           }
           renderItem={({ item }) => {
-            const badge = getCategoryBadge(item.category);
+            const meta = getCategoryMeta(item.category);
             return (
               <View style={styles.logCard}>
                 <View style={styles.logHeader}>
+                  {/* Mercosul Plate Container */}
                   <View style={styles.plateTag}>
-                    <Text style={styles.plateText}>{item.plate_number}</Text>
+                    <View style={styles.mercosulBlueHeader}>
+                      <Text style={styles.mercosulCountry}>BRASIL</Text>
+                    </View>
+                    <Text style={styles.plateNumberText}>{item.plate_number}</Text>
                   </View>
 
                   <View
                     style={[
                       styles.categoryBadge,
-                      { backgroundColor: badge.bg, borderColor: badge.border },
+                      { backgroundColor: meta.bg, borderColor: meta.border },
                     ]}
                   >
-                    <Text style={[styles.categoryText, { color: badge.text }]}>
-                      {badge.label}
+                    <Text style={[styles.categoryText, { color: meta.text }]}>
+                      {meta.label}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.logMeta}>
+                <View style={styles.logDetails}>
                   <Text style={styles.ownerText}>
                     {item.owner_name ? `${item.owner_name} • ` : ""}
-                    {item.vehicle_model || "Veículo Detectado"}
+                    {item.vehicle_model || "Veículo na Garagem"}
                   </Text>
                   <Text style={styles.dateText}>
                     {new Date(item.timestamp).toLocaleString("pt-BR")}
@@ -161,8 +219,8 @@ export const PlatesScreen: React.FC = () => {
           }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Car size={44} color="#475569" />
-              <Text style={styles.emptyTitle}>Nenhuma placa detectada</Text>
+              <Car size={44} color={theme.colors.textDisabled} />
+              <Text style={styles.emptyTitle}>Nenhuma placa encontrada</Text>
               <Text style={styles.emptySubtitle}>
                 Quando um veículo passar pela câmera da garagem, as placas aparecerão aqui em tempo real.
               </Text>
@@ -177,31 +235,57 @@ export const PlatesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#090d16",
+    backgroundColor: theme.colors.background,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "#0d1322",
+  searchSection: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    gap: 8,
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#131b2e",
+    backgroundColor: theme.colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: "#1e293b",
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 8,
   },
   searchInput: {
     flex: 1,
-    color: "#ffffff",
-    fontSize: 12,
+    color: theme.colors.textPrimary,
+    ...theme.typography.body,
+  },
+  categoryPills: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  categoryChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+  activeCategoryChip: {
+    backgroundColor: theme.colors.accentMuted,
+    borderColor: theme.colors.accentBorder,
+  },
+  categoryChipText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textMuted,
+  },
+  activeCategoryChipText: {
+    color: theme.colors.accent,
   },
   listContent: {
-    padding: 16,
+    padding: theme.spacing.lg,
   },
   centerContainer: {
     flex: 1,
@@ -210,16 +294,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    color: "#94a3b8",
-    fontSize: 13,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   logCard: {
-    backgroundColor: "#131b2e",
-    borderRadius: 14,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: "#1e293b",
-    padding: 14,
-    marginBottom: 10,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    ...theme.shadows.subtle,
   },
   logHeader: {
     flexDirection: "row",
@@ -227,42 +312,54 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   plateTag: {
-    backgroundColor: "#000000",
+    backgroundColor: "#ffffff",
     borderWidth: 1.5,
-    borderColor: "#38bdf8",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderColor: "#003399",
+    borderRadius: 5,
+    width: 105,
+    overflow: "hidden",
+    alignItems: "center",
   },
-  plateText: {
+  mercosulBlueHeader: {
+    backgroundColor: "#003399",
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: 1,
+  },
+  mercosulCountry: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 7,
     fontWeight: "900",
-    fontFamily: "monospace",
+    letterSpacing: 0.5,
+  },
+  plateNumberText: {
+    color: "#000000",
+    fontSize: 12,
+    fontWeight: "900",
     letterSpacing: 1,
+    fontFamily: "monospace",
+    paddingVertical: 1,
   },
   categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: theme.radius.xs,
     borderWidth: 1,
   },
   categoryText: {
-    fontSize: 10,
-    fontWeight: "700",
+    ...theme.typography.captionBold,
   },
-  logMeta: {
+  logDetails: {
     marginTop: 10,
     gap: 2,
   },
   ownerText: {
-    color: "#f8fafc",
-    fontSize: 12,
-    fontWeight: "600",
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
   },
   dateText: {
-    color: "#64748b",
-    fontSize: 10,
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
   emptyContainer: {
     alignItems: "center",
@@ -271,13 +368,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyTitle: {
-    color: "#f8fafc",
-    fontSize: 15,
-    fontWeight: "700",
+    ...theme.typography.h2,
+    color: theme.colors.textPrimary,
   },
   emptySubtitle: {
-    color: "#64748b",
-    fontSize: 12,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
     textAlign: "center",
     maxWidth: 280,
   },

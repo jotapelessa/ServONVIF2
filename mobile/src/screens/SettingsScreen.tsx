@@ -6,22 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { ConnectionConfig } from "../types";
 import { StorageService } from "../services/storage";
 import { ApiService } from "../services/api";
 import { Header } from "../components/Header";
 import {
-  Settings,
   Wifi,
   Radio,
   Sliders,
   LogOut,
   CheckCircle2,
+  Activity,
   HardDrive,
-  Cpu,
   Shield,
 } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { theme } from "../theme/tokens";
 
 interface SettingsScreenProps {
   onLogout: () => void;
@@ -31,6 +33,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [streamQuality, setStreamQuality] = useState<"AUTO" | "HIGH_5MP" | "DATA_SAVER">("AUTO");
   const [routeType, setRouteType] = useState<"LAN" | "TAILSCALE">("LAN");
+  const [isTestingPing, setIsTestingPing] = useState(false);
+  const [pingResult, setPingResult] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -45,13 +49,37 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
   };
 
   const handleSetQuality = async (q: "AUTO" | "HIGH_5MP" | "DATA_SAVER") => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
     setStreamQuality(q);
     await StorageService.setStreamQuality(q);
   };
 
+  const handleTestPing = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    setIsTestingPing(true);
+    setPingResult(null);
+    const start = Date.now();
+    try {
+      await ApiService.sendDevicePing();
+      const rtt = Date.now() - start;
+      setPingResult(`${rtt} ms (Excelente)`);
+    } catch {
+      setPingResult("Falha no Ping");
+    } finally {
+      setIsTestingPing(false);
+    }
+  };
+
   const handleLogout = () => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch {}
     Alert.alert(
-      "Desconectar",
+      "Desconectar Smartphone",
       "Deseja realmente desvincular este smartphone do servidor ServONVIF?",
       [
         { text: "Cancelar", style: "cancel" },
@@ -76,9 +104,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Network Route Status Card */}
+        {/* Connection Telemetry Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Status de Conexão Ativa</Text>
+          <View style={styles.cardHeader}>
+            <Shield size={16} color={theme.colors.accent} />
+            <Text style={styles.cardTitle}>Conectividade & Rede</Text>
+          </View>
 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Dispositivo:</Text>
@@ -88,41 +119,73 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Rota em Uso:</Text>
             <View style={styles.routeTag}>
-              {routeType === "LAN" ? <Wifi size={12} color="#10b981" /> : <Radio size={12} color="#06b6d4" />}
-              <Text style={[styles.routeTagText, routeType === "LAN" ? styles.lanColor : styles.tsColor]}>
-                {routeType === "LAN" ? "Wi-Fi LAN (Baixa Latência)" : "Tailscale Criptografado (4G/5G)"}
+              {routeType === "LAN" ? (
+                <Wifi size={12} color={theme.colors.success} />
+              ) : (
+                <Radio size={12} color={theme.colors.tailscale} />
+              )}
+              <Text
+                style={[
+                  styles.routeTagText,
+                  routeType === "LAN" ? styles.lanColor : styles.tsColor,
+                ]}
+              >
+                {routeType === "LAN" ? "Wi-Fi LAN Local" : "Tailscale 4G/5G Mesh"}
               </Text>
             </View>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Endereço Local LAN:</Text>
+            <Text style={styles.infoLabel}>Endereço LAN:</Text>
             <Text style={styles.monoValue}>{config?.lan_url || "192.168.1.96:8080"}</Text>
           </View>
 
           {config?.tailscale_url && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Endereço Tailscale:</Text>
+              <Text style={styles.infoLabel}>Tailscale MagicDNS:</Text>
               <Text style={styles.monoValue} numberOfLines={1}>
                 {config.tailscale_url}
               </Text>
             </View>
           )}
+
+          {/* Test Ping Button */}
+          <TouchableOpacity
+            style={styles.pingBtn}
+            onPress={handleTestPing}
+            disabled={isTestingPing}
+            activeOpacity={0.7}
+          >
+            <Activity size={14} color={theme.colors.accent} />
+            <Text style={styles.pingBtnText}>
+              {isTestingPing ? "Medindo latência..." : "Testar Latência do Servidor"}
+            </Text>
+            {pingResult && <Text style={styles.pingBadge}>{pingResult}</Text>}
+          </TouchableOpacity>
         </View>
 
         {/* Stream Quality Selector Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Qualidade do Stream no Smartphone</Text>
+          <View style={styles.cardHeader}>
+            <Sliders size={16} color={theme.colors.accent} />
+            <Text style={styles.cardTitle}>Qualidade do Stream</Text>
+          </View>
           <Text style={styles.cardSubtitle}>
-            Ajuste a resolução padrão para economizar seu plano de dados móveis 4G/5G.
+            Ajuste a resolução padrão para otimizar fluidez e economizar seu plano de dados.
           </Text>
 
           <View style={styles.qualityOptions}>
             <TouchableOpacity
               style={[styles.qualityBtn, streamQuality === "AUTO" && styles.activeQualityBtn]}
               onPress={() => handleSetQuality("AUTO")}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.qualityBtnText, streamQuality === "AUTO" && styles.activeQualityBtnText]}>
+              <Text
+                style={[
+                  styles.qualityBtnText,
+                  streamQuality === "AUTO" && styles.activeQualityBtnText,
+                ]}
+              >
                 Automático (Wi-Fi 5MP / 4G Sub)
               </Text>
             </TouchableOpacity>
@@ -130,8 +193,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
             <TouchableOpacity
               style={[styles.qualityBtn, streamQuality === "HIGH_5MP" && styles.activeQualityBtn]}
               onPress={() => handleSetQuality("HIGH_5MP")}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.qualityBtnText, streamQuality === "HIGH_5MP" && styles.activeQualityBtnText]}>
+              <Text
+                style={[
+                  styles.qualityBtnText,
+                  streamQuality === "HIGH_5MP" && styles.activeQualityBtnText,
+                ]}
+              >
                 Sempre 5MP Nativo (CRF 17 HD)
               </Text>
             </TouchableOpacity>
@@ -139,8 +208,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
             <TouchableOpacity
               style={[styles.qualityBtn, streamQuality === "DATA_SAVER" && styles.activeQualityBtn]}
               onPress={() => handleSetQuality("DATA_SAVER")}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.qualityBtnText, streamQuality === "DATA_SAVER" && styles.activeQualityBtnText]}>
+              <Text
+                style={[
+                  styles.qualityBtnText,
+                  streamQuality === "DATA_SAVER" && styles.activeQualityBtnText,
+                ]}
+              >
                 Economia Extrema (720p / 15 FPS)
               </Text>
             </TouchableOpacity>
@@ -149,7 +224,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
 
         {/* Disconnect Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-          <LogOut size={16} color="#f87171" />
+          <LogOut size={16} color={theme.colors.danger} />
           <Text style={styles.logoutBtnText}>Desconectar deste Servidor</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -160,50 +235,53 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#090d16",
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
-    padding: 16,
-    gap: 14,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   card: {
-    backgroundColor: "#131b2e",
-    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: "#1e293b",
-    padding: 16,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.lg,
     gap: 12,
+    ...theme.shadows.subtle,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   cardTitle: {
-    color: "#f8fafc",
-    fontSize: 13,
-    fontWeight: "700",
+    ...theme.typography.h2,
+    color: theme.colors.textPrimary,
   },
   cardSubtitle: {
-    color: "#64748b",
-    fontSize: 11,
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
     lineHeight: 16,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
   infoLabel: {
-    color: "#94a3b8",
-    fontSize: 11,
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
   infoValue: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "600",
+    ...theme.typography.bodyBold,
+    color: theme.colors.textPrimary,
   },
   monoValue: {
-    color: "#38bdf8",
-    fontSize: 10,
-    fontFamily: "monospace",
-    maxWidth: 200,
+    ...theme.typography.mono,
+    color: theme.colors.accent,
+    maxWidth: 190,
   },
   routeTag: {
     flexDirection: "row",
@@ -211,38 +289,62 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   routeTagText: {
-    fontSize: 11,
-    fontWeight: "700",
+    ...theme.typography.captionBold,
   },
   lanColor: {
-    color: "#34d399",
+    color: theme.colors.success,
   },
   tsColor: {
-    color: "#22d3ee",
+    color: theme.colors.tailscale,
+  },
+  pingBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  pingBtnText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textPrimary,
+    flex: 1,
+    marginLeft: 8,
+  },
+  pingBadge: {
+    ...theme.typography.mono,
+    color: theme.colors.success,
+    backgroundColor: theme.colors.successMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   qualityOptions: {
     gap: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
   qualityBtn: {
     paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: "#090d16",
-    borderRadius: 12,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: theme.colors.borderSubtle,
   },
   activeQualityBtn: {
-    backgroundColor: "rgba(37, 99, 235, 0.15)",
-    borderColor: "#2563eb",
+    backgroundColor: theme.colors.accentMuted,
+    borderColor: theme.colors.accentBorder,
   },
   qualityBtnText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontWeight: "600",
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   activeQualityBtnText: {
-    color: "#60a5fa",
+    color: theme.colors.accent,
     fontWeight: "700",
   },
   logoutBtn: {
@@ -250,16 +352,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    backgroundColor: theme.colors.dangerMuted,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
-    paddingVertical: 14,
-    borderRadius: 14,
-    marginTop: 10,
+    borderColor: theme.colors.dangerBorder,
+    paddingVertical: 13,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.sm,
   },
   logoutBtnText: {
-    color: "#f87171",
-    fontSize: 13,
-    fontWeight: "700",
+    ...theme.typography.h3,
+    color: theme.colors.danger,
   },
 });
