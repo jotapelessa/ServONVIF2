@@ -13,6 +13,18 @@ TV_VERSION="v2.1.0"
 MOBILE_VERSION="v1.0.0"
 export CI=1
 
+# Configurar limites de memória JVM para evitar OOM Killer no Codespaces
+export _JAVA_OPTIONS="-Xmx2048m -XX:MaxMetaspaceSize=512m"
+export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false"
+
+# Configurar swap adicional para evitar que o CMake seja finalizado por falta de RAM
+if [ ! -f /swapfile ] && command -v swapon &> /dev/null; then
+    (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 2>/dev/null) && \
+    sudo chmod 600 /swapfile 2>/dev/null && \
+    sudo mkswap /swapfile 2>/dev/null && \
+    sudo swapon /swapfile 2>/dev/null || true
+fi
+
 # 1. Configurar Java 17 obrigatório
 if ! dpkg -s openjdk-17-jdk >/dev/null 2>&1; then
     echo "📦 Instalando OpenJDK 17..."
@@ -96,7 +108,7 @@ echo "📦 Executando expo prebuild..."
 rm -rf "$WORKSPACE_DIR/mobile/android"
 CI=1 npx expo prebuild --platform android --clean --no-install
 
-# Aplicar patches de compatibilidade (cameraview maven repo + buildConfig)
+# Aplicar patches de compatibilidade (cameraview maven repo + buildConfig + memory guards)
 python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
 
 cd "$WORKSPACE_DIR/mobile/android"

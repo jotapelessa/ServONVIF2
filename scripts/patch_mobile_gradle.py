@@ -8,15 +8,27 @@ def patch():
     app_gradle = os.path.join(mobile_android, "app", "build.gradle")
     gradle_properties = os.path.join(mobile_android, "gradle.properties")
 
-    # 1. Patch gradle.properties to enable buildConfig globally
+    # 1. Patch gradle.properties to enable buildConfig and prevent OOM Killer in Codespaces
     if os.path.exists(gradle_properties):
         with open(gradle_properties, "r", encoding="utf-8") as f:
             props = f.read()
-        if "android.defaults.buildfeatures.buildconfig=true" not in props:
-            props += "\nandroid.defaults.buildfeatures.buildconfig=true\n"
-            with open(gradle_properties, "w", encoding="utf-8") as f:
-                f.write(props)
-            print("✅ Added buildconfig=true to gradle.properties")
+        
+        settings = [
+            "android.defaults.buildfeatures.buildconfig=true",
+            "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m",
+            "org.gradle.parallel=false",
+            "org.gradle.workers.max=2"
+        ]
+        for setting in settings:
+            key = setting.split("=")[0]
+            if key not in props:
+                props += f"\n{setting}\n"
+            else:
+                props = re.sub(rf"^{re.escape(key)}=.*$", setting, props, flags=re.MULTILINE)
+
+        with open(gradle_properties, "w", encoding="utf-8") as f:
+            f.write(props)
+        print("✅ Configured memory bounds and buildconfig in gradle.properties")
 
     # 2. Patch root build.gradle for expo-camera local maven repo
     if os.path.exists(root_gradle):
