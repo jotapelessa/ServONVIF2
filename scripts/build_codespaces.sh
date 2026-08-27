@@ -9,19 +9,20 @@ WORKSPACE_DIR="$(pwd)"
 OUTPUT_DIR="$WORKSPACE_DIR/build-outputs"
 mkdir -p "$OUTPUT_DIR"
 
-# 1. Configurar Java 17 obrigatório (se o padrão for Java 21/25)
+TV_VERSION="v2.1.0"
+MOBILE_VERSION="v1.0.0"
+
+# 1. Configurar Java 17 obrigatório
 if ! dpkg -s openjdk-17-jdk >/dev/null 2>&1; then
     echo "📦 Instalando OpenJDK 17..."
     sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-17-jdk
 fi
 
-# Localizar caminho do Java 17 no Linux
 if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
     export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 elif [ -d "/usr/lib/jvm/java-1.17.0-openjdk-amd64" ]; then
     export JAVA_HOME="/usr/lib/jvm/java-1.17.0-openjdk-amd64"
 else
-    # Fallback genérico para encontrar java 17
     JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" | head -n 1)
     if [ -n "$JAVA_17_PATH" ]; then
         export JAVA_HOME="$JAVA_17_PATH"
@@ -29,7 +30,7 @@ else
 fi
 export PATH="$JAVA_HOME/bin:$PATH"
 
-echo "☕ Usando versão do Java:"
+echo "☕ Versão do Java:"
 java -version
 
 # 2. Configurar Android SDK
@@ -64,23 +65,22 @@ if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s
 fi
 
 echo "=================================================="
-echo "📺 Compilando APK 1: ServONVIF TV (Smart TV / PiP)..."
+echo "📺 Compilando APK 1: ServONVIF TV $TV_VERSION..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/android"
 chmod +x ./gradlew
 ./gradlew assembleDebug --no-daemon
 
-# Copiar APK de TV para a pasta de saída
-if [ -f "$WORKSPACE_DIR/android/app/build/outputs/apk/debug/ServONVIF_TV.apk" ]; then
-    cp "$WORKSPACE_DIR/android/app/build/outputs/apk/debug/ServONVIF_TV.apk" "$OUTPUT_DIR/ServONVIF_TV.apk"
-    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV.apk"
-elif [ -f "$WORKSPACE_DIR/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-    cp "$WORKSPACE_DIR/android/app/build/outputs/apk/debug/app-debug.apk" "$OUTPUT_DIR/ServONVIF_TV.apk"
-    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV.apk"
+# Localizar e copiar APK de TV com nome e versão
+TV_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
+if [ -n "$TV_APK" ]; then
+    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk"
+    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV.apk"
+    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk"
 fi
 
 echo "=================================================="
-echo "📱 Compilando APK 2: ServONVIF Mobile (Smartphone)..."
+echo "📱 Compilando APK 2: ServONVIF Mobile $MOBILE_VERSION..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/mobile"
 
@@ -90,7 +90,7 @@ if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
     npm install --silent
 fi
 
-# Gerar estrutura Android do Expo se ainda não gerada
+# Gerar estrutura Android do Expo
 if [ ! -d "$WORKSPACE_DIR/mobile/android" ] || [ ! -f "$WORKSPACE_DIR/mobile/android/gradlew" ]; then
     echo "📦 Executando expo prebuild..."
     npx expo prebuild --platform android --clean --no-install
@@ -100,11 +100,12 @@ cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
 ./gradlew assembleDebug --no-daemon
 
-# Localizar e copiar APK Mobile
+# Localizar e copiar APK Mobile com nome e versão
 MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
 if [ -n "$MOBILE_APK" ]; then
+    cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk"
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile.apk"
-    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_Mobile.apk"
+    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk"
 fi
 
 echo "=================================================="
@@ -113,3 +114,20 @@ echo "=================================================="
 echo "Os APKs gerados estão na pasta 'build-outputs/':"
 ls -lh "$OUTPUT_DIR"
 echo "=================================================="
+
+# 4. Publicar / Atualizar Release no GitHub
+if command -v gh &> /dev/null; then
+    echo "📦 Atualizando Release no GitHub..."
+    if gh auth status >/dev/null 2>&1; then
+        gh release create "v2.1.0" \
+            "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
+            "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
+            --title "ServONVIF v2.1.0 - TV & Mobile Apps" \
+            --notes "🚀 **Lançamento Oficial ServONVIF v2.1.0**
+- 📺 **ServONVIF_TV_v2.1.0.apk**: Aplicativo para Smart TV / TV Box com PiP overlay e controle remoto D-pad.
+- 📱 **ServONVIF_Mobile_v1.0.0.apk**: Aplicativo para Smartphone com Tailscale, streaming 5MP ao vivo e feed LPR de placas." \
+            --clobber && echo "🌟 GitHub Release atualizada com sucesso!" || echo "ℹ️ Release já existente ou criada."
+    else
+        echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
+    fi
+fi

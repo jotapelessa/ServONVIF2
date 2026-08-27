@@ -1,4 +1,4 @@
-name: Build ServONVIF APKs
+name: Build and Release ServONVIF APKs
 
 on:
   workflow_dispatch:
@@ -10,9 +10,12 @@ on:
       - 'mobile/**'
       - '.github/workflows/build-apks.yml'
 
+permissions:
+  contents: write
+
 jobs:
-  build-tv-apk:
-    name: Build ServONVIF TV APK
+  build-and-release:
+    name: Build APKs and Publish GitHub Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -26,59 +29,52 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Build TV APK
-        run: |
-          cd android
-          chmod +x ./gradlew
-          ./gradlew assembleDebug
-
-      - name: Upload ServONVIF TV APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ServONVIF_TV_APK
-          path: |
-            android/app/build/outputs/apk/debug/ServONVIF_TV.apk
-            android/app/build/outputs/apk/debug/app-debug.apk
-
-  build-mobile-apk:
-    name: Build ServONVIF Mobile APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Build ServONVIF TV APK
+        run: |
+          mkdir -p build-outputs
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+          TV_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
+          cp "$TV_APK" ../build-outputs/ServONVIF_TV_v2.1.0.apk
 
-      - name: Install Mobile Dependencies
+      - name: Build ServONVIF Mobile APK
         run: |
           cd mobile
           npm install
-
-      - name: Expo Prebuild & Build APK
-        run: |
-          cd mobile
-          npx expo prebuild --platform android
+          npx expo prebuild --platform android --clean --no-install
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleDebug
-          mkdir -p ../../build-outputs
-          find app/build/outputs/apk -name "*.apk" -exec cp {} ../../build-outputs/ServONVIF_Mobile.apk \;
+          ./gradlew assembleDebug --no-daemon
+          MOBILE_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
+          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile_v1.0.0.apk
 
-      - name: Upload ServONVIF Mobile APK
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ServONVIF_Mobile_APK
-          path: build-outputs/ServONVIF_Mobile.apk
+          name: ServONVIF_APKs
+          path: build-outputs/*.apk
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v2.1.0
+          name: "ServONVIF v2.1.0 - TV & Mobile Apps"
+          body: |
+            🚀 **Lançamento Oficial ServONVIF v2.1.0**
+            
+            ### 📦 Aplicativos Disponíveis:
+            - 📺 **ServONVIF_TV_v2.1.0.apk**: Aplicativo para Smart TV / TV Box com PiP overlay e suporte a controle remoto D-pad.
+            - 📱 **ServONVIF_Mobile_v1.0.0.apk**: Aplicativo para Smartphone com integração Tailscale, visualizador 5MP ao vivo e feed LPR de placas.
+          files: |
+            build-outputs/ServONVIF_TV_v2.1.0.apk
+            build-outputs/ServONVIF_Mobile_v1.0.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

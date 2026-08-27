@@ -11,8 +11,8 @@ android {
         applicationId = "com.servonvif.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 54
-        versionName = "001.006.054"
+        versionCode = 55
+        versionName = "2.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -21,7 +21,7 @@ android {
     applicationVariants.all {
         outputs.all {
             val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            outputImpl?.outputFileName = "ServONVIF_TV.apk"
+            outputImpl?.outputFileName = "ServONVIF_TV_v2.1.0.apk"
         }
     }
 
