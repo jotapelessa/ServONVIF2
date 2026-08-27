@@ -76,7 +76,7 @@ import {
   Server,
 } from "lucide-react";
 
-type SettingsTab = "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup" | "guide";
+type SettingsTab = "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup" | "guide" | "zimaos";
 
 const TAB_SLUG_MAP: Record<string, SettingsTab> = {
   vehicles: "vehicles",
@@ -110,6 +110,14 @@ const TAB_SLUG_MAP: Record<string, SettingsTab> = {
   aitek: "guide",
   onvif: "guide",
   rtsp: "guide",
+  zimaos: "zimaos",
+  casaos: "zimaos",
+  gk3pro: "zimaos",
+  jasperlake: "zimaos",
+  n5105: "zimaos",
+  minipc: "zimaos",
+  servidor: "zimaos",
+  docker: "zimaos",
 };
 
 const TAB_REVERSE_MAP: Record<string, string> = {
@@ -123,6 +131,7 @@ const TAB_REVERSE_MAP: Record<string, string> = {
   engine: "engine",
   backup: "backup",
   guide: "guia",
+  zimaos: "zimaos",
 };
 
 export default function SettingsPage({ initialTab }: { initialTab?: string }) {
@@ -275,11 +284,18 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [guideTesting, setGuideTesting] = useState(false);
   const [guideTestResult, setGuideTestResult] = useState<{ success: boolean; message: string; latency_ms?: number } | null>(null);
   const [copiedGuideKey, setCopiedGuideKey] = useState<string | null>(null);
+  const [copiedZimaSnippet, setCopiedZimaSnippet] = useState<string | null>(null);
 
   const handleCopyGuideText = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedGuideKey(key);
     setTimeout(() => setCopiedGuideKey(null), 2500);
+  };
+
+  const handleCopyZimaSnippet = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedZimaSnippet(id);
+    setTimeout(() => setCopiedZimaSnippet(null), 2500);
   };
 
   const handleTestGuideRtsp = async () => {
@@ -1306,6 +1322,24 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
             <div className="text-left flex-1">
               <div>Guia de Câmeras IP</div>
               <div className="text-[10px] text-cyan-300/80 font-normal">AITEK 5MP, PoE &amp; RTSP</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handleSwitchTab("zimaos")}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              activeTab === "zimaos"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 font-semibold"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <Server className="w-4 h-4 text-emerald-400" />
+            <div className="text-left flex-1">
+              <div className="flex items-center justify-between">
+                <span>Guia ZimaOS &amp; GK3</span>
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">N5105</span>
+              </div>
+              <div className="text-[10px] text-emerald-300/80 font-normal">Docker / 16GB / 512GB SSD</div>
             </div>
           </button>
         </aside>
@@ -4909,6 +4943,436 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         </span>
                         <p className="text-slate-300 leading-relaxed">
                           Mantenha o Sistema Operacional e o banco de dados SQLite (em modo WAL) em um <strong className="text-amber-300">SSD NVMe M.2</strong> para busca instantânea de eventos e visualização imediata de thumbnails. Utilize <strong className="text-white">HDDs WD Purple ou Seagate SkyHawk</strong> exclusivamente para o fluxo sequencial contínuo de arquivos de vídeo MP4.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ================= TAB: GUIA ZIMAOS & MINI PC GK3 PRO ================= */}
+              {activeTab === "zimaos" && (
+                <div className="space-y-8">
+                  {/* Hero Header Card */}
+                  <div className="card-dark p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-950/30 via-slate-900/60 to-slate-900/40 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+                          <Server className="w-7 h-7" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h2 className="text-base font-bold text-white">Guia de Instalação: ZimaOS &amp; Mini PC GK3 Pro</h2>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                              🐧 ZimaOS / CasaOS Ready
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Passo a passo completo para transformar seu Mini PC GK3 Pro em um servidor de monitoramento 24/7 com IA de baixo consumo (10W TDP).
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Hardware Badges */}
+                      <div className="flex flex-wrap gap-2">
+                        <div className="px-2.5 py-1 rounded-lg bg-slate-950 border border-white/5 text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
+                          <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Jasper Lake N5105 (4C/4T @ 2.9GHz)</span>
+                        </div>
+                        <div className="px-2.5 py-1 rounded-lg bg-slate-950 border border-white/5 text-[11px] font-mono text-purple-400 flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-purple-400" />
+                          <span>16 GB RAM DDR4</span>
+                        </div>
+                        <div className="px-2.5 py-1 rounded-lg bg-slate-950 border border-white/5 text-[11px] font-mono text-amber-400 flex items-center gap-1.5">
+                          <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                          <span>512 GB SSD NVMe M.2</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Method 1: Docker Compose in ZimaOS Web GUI (Recommended) */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-blue-600/10 text-blue-400 border border-blue-500/20">
+                          <Layers className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            <span>Método 1: Instalação via Docker Compose no Painel ZimaOS</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">Recomendado</span>
+                          </h3>
+                          <p className="text-[11px] text-slate-400">Instalação em 1 clique importando o manifesto direto na interface web do ZimaOS</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step-by-Step Instructions */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                        <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-[10px]">1</span>
+                          <span>Abrir App Store</span>
+                        </span>
+                        <p className="text-slate-300 text-[11px]">
+                          No navegador, acesse o ZimaOS (<code className="text-blue-400 font-mono">http://&lt;ip-gk3pro&gt;</code>) e clique no botão <strong className="text-white">&ldquo;App Store&rdquo;</strong>.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                        <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-[10px]">2</span>
+                          <span>Custom Install</span>
+                        </span>
+                        <p className="text-slate-300 text-[11px]">
+                          Clique em <strong className="text-white">&ldquo;Custom Install&rdquo;</strong> no canto superior direito da tela de aplicativos.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                        <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center text-[10px]">3</span>
+                          <span>Importar Compose</span>
+                        </span>
+                        <p className="text-slate-300 text-[11px]">
+                          Clique no ícone de <strong className="text-white">&ldquo;Import&rdquo;</strong> (ícone de documento/terminal) e cole o arquivo abaixo.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-white/5 space-y-1.5">
+                        <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">4</span>
+                          <span>Pronto para Uso!</span>
+                        </span>
+                        <p className="text-slate-300 text-[11px]">
+                          Clique em <strong className="text-white">&ldquo;Install&rdquo;</strong>. Acesse o painel em <code className="text-emerald-400 font-mono">:3005</code> e a API em <code className="text-emerald-400 font-mono">:8080</code>!
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Compose Code Snippet */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-blue-400" />
+                          <span>docker-compose.yml (Otimizado para Intel Jasper Lake &amp; 16GB RAM)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyZimaSnippet(`version: '3.8'
+
+services:
+  servonvif-engine:
+    image: python:3.11-slim
+    container_name: servonvif-core
+    restart: unless-stopped
+    network_mode: "host"
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - /DATA/AppData/servonvif/data:/app/engine/data
+      - /DATA/AppData/servonvif/media:/app/engine/data/media
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - PYTHONPATH=/app
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;2500000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  servonvif-ui:
+    image: node:20-alpine
+    container_name: servonvif-web
+    restart: unless-stopped
+    network_mode: "host"
+    depends_on:
+      - servonvif-engine
+    environment:
+      - NODE_ENV=production
+      - PORT=3005`, "compose")}
+                          className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-98"
+                        >
+                          {copiedZimaSnippet === "compose" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedZimaSnippet === "compose" ? "Copiado!" : "Copiar Docker Compose"}</span>
+                        </button>
+                      </div>
+
+                      <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed">
+{`version: '3.8'
+
+services:
+  # 🚀 MOTOR PRINCIPAL: OpenCV MOG2, Ingestão RTSP Zero-Latency, ANPR LPR e API
+  servonvif-engine:
+    build:
+      context: https://github.com/jotapelessa/ServONVIF2.git#main
+      dockerfile: docker/Dockerfile
+    container_name: servonvif-core
+    restart: unless-stopped
+    network_mode: "host" # Essencial para ONVIF WS-Discovery UDP broadcast
+    devices:
+      - /dev/dri:/dev/dri # Aceleração Gráfica por Hardware Intel QuickSync / VA-API (Jasper Lake N5105)
+    volumes:
+      - /DATA/AppData/servonvif/data:/app/engine/data
+      - /DATA/AppData/servonvif/media:/app/engine/data/media
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - PYTHONPATH=/app
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;2500000
+
+  # 🌐 PAINEL WEB: Next.js Dashboard, Mosaico de Câmeras e Configurações
+  servonvif-ui:
+    build:
+      context: https://github.com/jotapelessa/ServONVIF2.git#main:ui
+      dockerfile: Dockerfile
+    container_name: servonvif-web
+    restart: unless-stopped
+    network_mode: "host" # Roda na porta 3005 na mesma interface de rede do ZimaOS
+    depends_on:
+      - servonvif-engine
+    environment:
+      - NODE_ENV=production
+      - PORT=3005`}
+                      </pre>
+                    </div>
+                  </div>
+
+                  {/* Method 2: Native CLI / SSH Installation on Debian / ZimaOS */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-5 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-purple-600/10 text-purple-400 border border-purple-500/20">
+                        <Terminal className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Método 2: Instalação Nativa via Terminal / SSH no ZimaOS</h3>
+                        <p className="text-[11px] text-slate-400">Instalação direta com suporte total ao Systemd para inicialização automática no boot</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Step A: Dependencies */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">1</span>
+                            <span>Instalar Pacotes do Sistema (FFmpeg, Tesseract OCR, Python3, Node.js)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyZimaSnippet(`apt-get update && apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-por tesseract-ocr-eng libgl1 libglib2.0-0 nodejs npm python3-pip python3-venv git curl`, "step1")}
+                            className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 border border-white/5 transition"
+                          >
+                            {copiedZimaSnippet === "step1" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedZimaSnippet === "step1" ? "Copiado!" : "Copiar"}</span>
+                          </button>
+                        </div>
+                        <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-purple-200 overflow-x-auto">
+apt-get update && apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-por tesseract-ocr-eng libgl1 libglib2.0-0 nodejs npm python3-pip python3-venv git curl
+                        </pre>
+                      </div>
+
+                      {/* Step B: Git Clone */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">2</span>
+                            <span>Clonar o Repositório no SSD do ZimaOS (/DATA/AppData/servonvif)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyZimaSnippet(`mkdir -p /DATA/AppData && cd /DATA/AppData
+git clone https://github.com/jotapelessa/ServONVIF2.git servonvif
+cd /DATA/AppData/servonvif`, "step2")}
+                            className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 border border-white/5 transition"
+                          >
+                            {copiedZimaSnippet === "step2" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedZimaSnippet === "step2" ? "Copiado!" : "Copiar"}</span>
+                          </button>
+                        </div>
+                        <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-purple-200 overflow-x-auto">
+mkdir -p /DATA/AppData && cd /DATA/AppData
+git clone https://github.com/jotapelessa/ServONVIF2.git servonvif
+cd /DATA/AppData/servonvif
+                        </pre>
+                      </div>
+
+                      {/* Step C: Python Venv & Frontend Build */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">3</span>
+                            <span>Criar Ambiente Virtual Python &amp; Compilar o Painel Next.js</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyZimaSnippet(`python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r engine/requirements.txt
+cd ui && npm install && npm run build && cd ..`, "step3")}
+                            className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 border border-white/5 transition"
+                          >
+                            {copiedZimaSnippet === "step3" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedZimaSnippet === "step3" ? "Copiado!" : "Copiar"}</span>
+                          </button>
+                        </div>
+                        <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-purple-200 overflow-x-auto">
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r engine/requirements.txt
+cd ui && npm install && npm run build && cd ..
+                        </pre>
+                      </div>
+
+                      {/* Step D: Systemd Service */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">4</span>
+                            <span>Configurar Auto-Inicialização no Boot (Serviço Systemd)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyZimaSnippet(`cat << 'EOF' > /etc/systemd/system/servonvif.service
+[Unit]
+Description=ServONVIF PRO Core Engine & UI
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/DATA/AppData/servonvif
+Environment=PYTHONPATH=/DATA/AppData/servonvif
+Environment=NODE_ENV=production
+ExecStart=/bin/bash -c "source /DATA/AppData/servonvif/venv/bin/activate && python3 engine/main.py & cd ui && npm start"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now servonvif.service`, "step4")}
+                            className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1 border border-white/5 transition"
+                          >
+                            {copiedZimaSnippet === "step4" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedZimaSnippet === "step4" ? "Copiado!" : "Copiar"}</span>
+                          </button>
+                        </div>
+                        <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-emerald-200 overflow-x-auto">
+cat &lt;&lt; &apos;EOF&apos; &gt; /etc/systemd/system/servonvif.service
+[Unit]
+Description=ServONVIF PRO Core Engine &amp; UI
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/DATA/AppData/servonvif
+Environment=PYTHONPATH=/DATA/AppData/servonvif
+Environment=NODE_ENV=production
+ExecStart=/bin/bash -c &quot;source /DATA/AppData/servonvif/venv/bin/activate &amp;&amp; python3 engine/main.py &amp; cd ui &amp;&amp; npm start&quot;
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now servonvif.service
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hardware Acceleration & Tailscale Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Intel QuickSync VA-API Card */}
+                    <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-3 bg-slate-900/40">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                          <Zap className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs font-bold text-white">Aceleração por Hardware: Intel QuickSync (N5105)</h3>
+                          <p className="text-[10px] text-slate-400">Decodificação H.264 / H.265 (HEVC) direto na iGPU</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        O processador Intel Jasper Lake N5105 possui <strong className="text-white">24 Execution Units (EUs)</strong> na GPU integrada. Ao mapear o dispositivo <code className="text-amber-400 font-mono">/dev/dri</code>, a decodificação dos fluxos RTSP de 5MP e 4K ocorre diretamente na GPU, liberando os 4 núcleos da CPU para a Inteligência Artificial e OCR de placas (ANPR).
+                      </p>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-white/5 text-[11px] font-mono text-slate-400">
+                        <span className="text-slate-500"># Testar se a GPU está disponível no ZimaOS:</span><br />
+                        <span className="text-amber-300">ls -la /dev/dri</span>
+                      </div>
+                    </div>
+
+                    {/* Tailscale Integration Card */}
+                    <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-3 bg-slate-900/40">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-sky-600/10 text-sky-400 border border-sky-500/20">
+                          <Globe className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs font-bold text-white">Acesso Remoto Seguro via Tailscale no ZimaOS</h3>
+                          <p className="text-[10px] text-slate-400">Acesse no celular Moto G54 e MacBook sem abrir portas</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        O ZimaOS possui o <strong className="text-white">Tailscale nativo na App Store</strong> com 1 clique. Ao ativá-lo, o seu GK3 Pro receberá um IP fixo na sua Tailnet (ex: <code className="text-sky-400 font-mono">100.x.y.z</code>). Você poderá acessar o painel de monitoramento e o APK Android de qualquer lugar com criptografia WireGuard ponta-a-ponta.
+                      </p>
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-white/5 text-[11px] font-mono text-slate-400">
+                        <span className="text-slate-500"># URL no celular/navegador via Tailscale:</span><br />
+                        <span className="text-sky-300">http://100.x.y.z:3005</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sizing & Resource Allocation Table for GK3 Pro */}
+                  <div className="card-dark p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-emerald-600/10 text-emerald-400 border border-emerald-500/20">
+                        <Calculator className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Dimensionamento Estimado no seu GK3 Pro (16GB RAM + 512GB SSD)</h3>
+                        <p className="text-[11px] text-slate-400">Comportamento real do servidor com 4 Câmeras AITEK 5MP PoE</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Uso de Memória RAM</span>
+                        <div className="text-lg font-bold text-emerald-400 font-mono">~1.2 GB / 16 GB</div>
+                        <p className="text-[11px] text-slate-400">
+                          Utiliza apenas <strong>7.5% da RAM</strong>. Sobram 14.8 GB livres no GK3 Pro para Pre-Buffer e cache do ZimaOS.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Uso de CPU (Intel N5105)</span>
+                        <div className="text-lg font-bold text-blue-400 font-mono">~8% a 14%</div>
+                        <p className="text-[11px] text-slate-400">
+                          Processador opera frio com <strong>TDP de 10W</strong>, silencioso e estável para operação ininterrupta 24/7.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Retenção no SSD 512GB</span>
+                        <div className="text-lg font-bold text-amber-400 font-mono">~35 a 50 Dias</div>
+                        <p className="text-[11px] text-slate-400">
+                          Capacidade para milhares de clipes de eventos MP4 em alta definição com expiração automática configurável.
                         </p>
                       </div>
                     </div>

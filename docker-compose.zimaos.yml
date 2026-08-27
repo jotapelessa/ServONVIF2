@@ -1,0 +1,58 @@
+# =========================================================================
+# 🐧 ServONVIF PRO - ZimaOS / CasaOS / Mini PC (GK3 Pro N5105)
+# Arquivo de Implantação Otimizado para Intel Jasper Lake QSV & 16GB RAM
+# =========================================================================
+# Como usar no ZimaOS:
+# 1. No painel ZimaOS, vá em App Store -> "Custom Install" (ou Importar)
+# 2. Cole o conteúdo deste arquivo e clique em Instalar
+# 3. Acesse em http://<IP_DO_ZIMAOS>:3005
+# =========================================================================
+
+version: '3.8'
+
+services:
+  # 🚀 MOTOR PRINCIPAL: OpenCV MOG2, Ingestão RTSP Zero-Latency, ANPR LPR e API
+  servonvif-engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: servonvif-core
+    restart: unless-stopped
+    network_mode: "host" # Essencial para ONVIF WS-Discovery UDP broadcast e latência ultra-baixa
+    devices:
+      - /dev/dri:/dev/dri # Aceleração Gráfica por Hardware Intel QuickSync / VA-API (Jasper Lake N5105)
+    volumes:
+      - /DATA/AppData/servonvif/data:/app/engine/data
+      - /DATA/AppData/servonvif/media:/app/engine/data/media
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;2500000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # 🌐 PAINEL WEB: Next.js 14 Dashboard, Mosaico de Câmeras e Configurações
+  servonvif-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: servonvif-web
+    restart: unless-stopped
+    network_mode: "host" # Roda na porta 3005 na mesma interface do ZimaOS
+    depends_on:
+      - servonvif-engine
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
