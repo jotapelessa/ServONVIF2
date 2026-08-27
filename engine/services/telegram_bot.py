@@ -488,7 +488,7 @@ class TelegramService:
             return True, f"📸 Foto de teste em Qualidade Máxima ({w}x{h} - {w*h/1000000:.1f}MP) enviada com sucesso para o Telegram!"
         return False, "Falha ao enviar foto para a API do Telegram."
 
-    async def send_test_video(self, camera_id: Optional[int] = None) -> tuple[bool, str]:
+    async def send_test_video(self, camera_id: Optional[int] = None, duration_seconds: Optional[float] = None) -> tuple[bool, str]:
         from engine.core.camera_manager import camera_manager
         from engine.core.media_writer import MediaWriter
 
@@ -504,40 +504,75 @@ class TelegramService:
         if not target_ingestor:
             return False, "Nenhuma câmera ativa no momento."
 
-        # Grab up to 5s from ring buffer
-        window = target_ingestor.ring_buffer.get_window(pre_seconds=5.0)
-        if not window or len(window) < 10:
+        target_duration = float(duration_seconds or getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 30))
+        if target_duration <= 0:
+            target_duration = 30.0
+
+        # Retrieve window with timestamps from ring buffer
+        pairs = target_ingestor.ring_buffer.get_window_with_timestamps(pre_seconds=target_duration)
+        
+        # If ring buffer does not have full requested duration yet (e.g. server recently started), collect remaining frames live
+        curr_buf_time = (pairs[-1][1] - pairs[0][1]) if len(pairs) >= 2 else 0.0
+        if curr_buf_time < (target_duration * 0.9):
+            collected = list(pairs)
+            start_collect = time.time()
+            needed_duration = target_duration - curr_buf_time
+            last_appended = 0.0
+            
+            while (time.time() - start_collect) < needed_duration:
+                await asyncio.sleep(0.04)
+                if target_ingestor._latest_frame is not None:
+                    now_t = time.time()
+                    if now_t - last_appended >= 0.048:
+                        last_appended = now_t
+                        with target_ingestor._frame_lock:
+                            collected.append((target_ingestor._latest_frame.copy(), now_t))
+            pairs = collected
+
+        if not pairs or len(pairs) < 10:
             if target_ingestor._latest_frame is not None:
-                window = [target_ingestor._latest_frame.copy() for _ in range(60)]
+                now_t = time.time()
+                pairs = [(target_ingestor._latest_frame.copy(), now_t + i * 0.05) for i in range(int(target_duration * 20))]
             else:
                 return False, "Buffer de vídeo insuficiente para gravação de teste."
 
+        frames = [p[0] for p in pairs]
+        timestamps = [p[1] for p in pairs]
+
+        # Calculate exact real FPS from elapsed timestamps
+        if len(timestamps) >= 2 and (timestamps[-1] - timestamps[0]) > 0.5:
+            real_elapsed = timestamps[-1] - timestamps[0]
+            calculated_fps = (len(frames) - 1) / real_elapsed
+            actual_fps = max(5.0, min(60.0, calculated_fps))
+        else:
+            actual_fps = 20.0
+
         now = datetime.utcnow()
         cam = target_ingestor.camera
-        h, w = window[0].shape[:2]
+        h, w = frames[0].shape[:2]
 
         video_path = MediaWriter.save_video_clip(
             camera_id=cam.id,
             timestamp=now,
-            frames=window,
-            fps=20.0
+            frames=frames,
+            fps=actual_fps
         )
 
         if not video_path:
             return False, "Erro ao codificar clipe de vídeo MP4."
 
-        duration = len(window) / 20.0
+        final_duration = len(frames) / actual_fps if actual_fps > 0 else target_duration
         success = await self.send_video_clip(
             camera_id=cam.id,
             camera_name=cam.name,
             video_path=video_path,
             score=0.99,
-            duration_seconds=duration,
+            duration_seconds=final_duration,
             event_dt=now
         )
 
         if success:
-            return True, f"🎥 Clipe de teste em Qualidade Máxima ({w}x{h} HD - CRF 17) enviado com sucesso para o Telegram!"
+            return True, f"🎥 Clipe de teste em Qualidade Máxima ({w}x{h} HD • {final_duration:.1f}s • CRF 17) enviado com sucesso para o Telegram!"
         return False, "Falha ao enviar clipe de vídeo para a API do Telegram."
 
 telegram_service = TelegramService()

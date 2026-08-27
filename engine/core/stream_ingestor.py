@@ -36,7 +36,8 @@ class StreamIngestor:
         self._grabber_thread: Optional[threading.Thread] = None
         self._processor_thread: Optional[threading.Thread] = None
 
-        self.ring_buffer = CircularRingBuffer(max_duration_seconds=settings.DEFAULT_BUFFER_SECONDS)
+        max_buf_sec = max(60.0, float(getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 30)) + float(getattr(settings, "DEFAULT_BUFFER_SECONDS", 10)) + 15.0)
+        self.ring_buffer = CircularRingBuffer(max_duration_seconds=max_buf_sec)
         self.motion_detector = MotionDetector(
             roi_polygon=camera.roi_polygon,
             ignore_polygons=getattr(camera, "ignore_polygons", None),

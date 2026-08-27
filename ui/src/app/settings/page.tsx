@@ -890,7 +890,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     setTestingVideo(true);
     setTelegramTestResult(null);
     try {
-      const res = await apiClient.testTelegramVideo();
+      const res = await apiClient.testTelegramVideo(Number(telegramVideoDuration) || 30);
       setTelegramTestResult({ success: true, message: res.message });
     } catch (e: any) {
       setTelegramTestResult({
@@ -3463,7 +3463,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                           className="flex items-center justify-center gap-2 py-2.5 px-3 bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 rounded-xl text-xs font-semibold transition shadow-sm active:scale-95 disabled:opacity-50"
                         >
                           {testingVideo ? <Loader2 className="w-4 h-4 animate-spin text-sky-400" /> : <Video className="w-4 h-4 text-sky-400" />}
-                          <span>{testingVideo ? "Gravando HD..." : "🎥 Vídeo HD Máximo"}</span>
+                          <span>{testingVideo ? `Gravando ${telegramVideoDuration}s HD...` : `🎥 Vídeo HD (${telegramVideoDuration}s)`}</span>
                         </button>
 
                         {/* Botão 3: Backup JSON */}

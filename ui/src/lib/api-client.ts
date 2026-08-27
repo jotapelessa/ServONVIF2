@@ -309,8 +309,11 @@ export const apiClient = {
     return data;
   },
 
-  async testTelegramVideo(): Promise<any> {
-    const res = await fetch(`${getApiBase()}/api/settings/telegram/test-video`, {
+  async testTelegramVideo(duration?: number): Promise<any> {
+    const url = duration
+      ? `${getApiBase()}/api/settings/telegram/test-video?duration=${duration}`
+      : `${getApiBase()}/api/settings/telegram/test-video`;
+    const res = await fetch(url, {
       method: "POST",
     });
     const data = await res.json();

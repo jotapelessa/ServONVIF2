@@ -280,8 +280,8 @@ async def test_telegram_photo():
     return {"success": True, "message": msg}
 
 @router.post("/telegram/test-video")
-async def test_telegram_video():
-    success, msg = await telegram_service.send_test_video()
+async def test_telegram_video(duration: Optional[int] = None):
+    success, msg = await telegram_service.send_test_video(duration_seconds=duration)
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}
