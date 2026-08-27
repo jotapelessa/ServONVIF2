@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { apiClient, API_BASE, getApiBase, SettingsResponse, TailscaleStatus, SystemVersionInfo } from "@/lib/api-client";
+import { apiClient, API_BASE, getApiBase, SettingsResponse, TailscaleStatus, SystemVersionInfo, StorageDetailedResponse } from "@/lib/api-client";
 import {
   ArrowLeft,
   Bell,
@@ -74,6 +74,7 @@ import {
   ExternalLink,
   Calculator,
   Server,
+  Info,
 } from "lucide-react";
 
 type SettingsTab = "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup" | "guide" | "zimaos";
@@ -226,7 +227,21 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [telegramWatermarkEnabled, setTelegramWatermarkEnabled] = useState(true);
 
   const [retentionDays, setRetentionDays] = useState(7);
+  const [maxStorageQuotaGb, setMaxStorageQuotaGb] = useState(0);
+  const [minFreeDiskGb, setMinFreeDiskGb] = useState(5.0);
+  const [autoCleanupEnabled, setAutoCleanupEnabled] = useState(true);
   const [bufferSeconds, setBufferSeconds] = useState(5);
+
+  // Storage Tab Detailed State
+  const [storageData, setStorageData] = useState<StorageDetailedResponse | null>(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
+  const [refreshingStorage, setRefreshingStorage] = useState(false);
+  const [savingStorage, setSavingStorage] = useState(false);
+  const [storageActionMsg, setStorageActionMsg] = useState<{ success: boolean; text: string } | null>(null);
+  const [cleaningCameraId, setCleaningCameraId] = useState<number | null>(null);
+  const [wipeModalOpen, setWipeModalOpen] = useState(false);
+  const [wipeConfirmText, setWipeConfirmText] = useState("");
+  const [wipingStorage, setWipingStorage] = useState(false);
 
   // Read-only server info
   const [serverInfo, setServerInfo] = useState<SettingsResponse | null>(null);
@@ -484,6 +499,9 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
         setLprMotorcycleEnabled(data.lpr_motorcycle_enabled ?? true);
         setLprCooldownSeconds(data.lpr_cooldown_seconds ?? 30);
         setRetentionDays(data.retention_days || 7);
+        setMaxStorageQuotaGb(data.max_storage_quota_gb || 0);
+        setMinFreeDiskGb(data.min_free_disk_gb || 5.0);
+        setAutoCleanupEnabled(data.auto_cleanup_enabled ?? true);
         setBufferSeconds(data.default_buffer_seconds || 5);
         setIsProcessingPaused(data.processing_paused ?? false);
         fetchTailscaleStatus();
@@ -747,6 +765,9 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     if (activeTab === "backup") {
       fetchSystemVersion();
     }
+    if (activeTab === "storage") {
+      fetchStorageDetailed(true);
+    }
   }, [activeTab, logLevelFilter]);
 
   const handleCopyLogsForAntigravity = () => {
@@ -926,10 +947,102 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       setCleanupResult(res.message);
       const data = await apiClient.getSettings();
       setServerInfo(data);
+      await fetchStorageDetailed(false);
     } catch (e: any) {
       setCleanupResult("Erro na limpeza: " + (e.message || e));
     } finally {
       setRunningCleanup(false);
+    }
+  };
+
+  const fetchStorageDetailed = async (showLoading = false) => {
+    if (showLoading) setLoadingStorage(true);
+    setRefreshingStorage(true);
+    try {
+      const data = await apiClient.getStorageDetailed();
+      setStorageData(data);
+      if (data.policy) {
+        setRetentionDays(data.policy.retention_days || 7);
+        setMaxStorageQuotaGb(data.policy.max_storage_quota_gb || 0);
+        setMinFreeDiskGb(data.policy.min_free_disk_gb || 5.0);
+        setAutoCleanupEnabled(data.policy.auto_cleanup_enabled ?? true);
+      }
+    } catch (e: any) {
+      console.error("Failed to load storage details:", e);
+    } finally {
+      if (showLoading) setLoadingStorage(false);
+      setRefreshingStorage(false);
+    }
+  };
+
+  const handleSaveStoragePolicy = async () => {
+    setSavingStorage(true);
+    setStorageActionMsg(null);
+    try {
+      await apiClient.updateStorageConfig({
+        retention_days: Number(retentionDays),
+        max_storage_quota_gb: Number(maxStorageQuotaGb),
+        min_free_disk_gb: Number(minFreeDiskGb),
+        auto_cleanup_enabled: autoCleanupEnabled,
+      });
+      setStorageActionMsg({ success: true, text: "Políticas de retenção e armazenamento salvas com sucesso!" });
+      await fetchStorageDetailed(false);
+    } catch (e: any) {
+      setStorageActionMsg({ success: false, text: e.message || "Erro ao salvar políticas de armazenamento" });
+    } finally {
+      setSavingStorage(false);
+    }
+  };
+
+  const handleRunStorageCleanup = async (days?: number) => {
+    setRunningCleanup(true);
+    setStorageActionMsg(null);
+    try {
+      const res = await apiClient.triggerCleanup(days);
+      setStorageActionMsg({ success: true, text: res.message || "Limpeza de retenção executada com sucesso!" });
+      await fetchStorageDetailed(false);
+      const s = await apiClient.getSettings();
+      setServerInfo(s);
+    } catch (e: any) {
+      setStorageActionMsg({ success: false, text: e.message || "Erro ao executar limpeza" });
+    } finally {
+      setRunningCleanup(false);
+    }
+  };
+
+  const handleCleanupCamera = async (camId: number, camName: string) => {
+    if (!confirm(`Tem certeza que deseja apagar todas as gravações e fotos de '${camName}' (ID #${camId})?`)) return;
+    setCleaningCameraId(camId);
+    setStorageActionMsg(null);
+    try {
+      const res = await apiClient.cleanupCameraStorage(camId);
+      setStorageActionMsg({ success: true, text: res.message });
+      await fetchStorageDetailed(false);
+      const s = await apiClient.getSettings();
+      setServerInfo(s);
+    } catch (e: any) {
+      setStorageActionMsg({ success: false, text: e.message || "Erro ao limpar câmera" });
+    } finally {
+      setCleaningCameraId(null);
+    }
+  };
+
+  const handleWipeAllStorage = async () => {
+    if (wipeConfirmText !== "CONFIRMAR_LIMPEZA_TOTAL") return;
+    setWipingStorage(true);
+    setStorageActionMsg(null);
+    try {
+      const res = await apiClient.wipeAllStorage(wipeConfirmText);
+      setStorageActionMsg({ success: true, text: res.message });
+      setWipeModalOpen(false);
+      setWipeConfirmText("");
+      await fetchStorageDetailed(false);
+      const s = await apiClient.getSettings();
+      setServerInfo(s);
+    } catch (e: any) {
+      setStorageActionMsg({ success: false, text: e.message || "Erro na limpeza total" });
+    } finally {
+      setWipingStorage(false);
     }
   };
 
@@ -3564,73 +3677,660 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
               {/* ================= TAB: STORAGE ================= */}
               {activeTab === "storage" && (
                 <div className="space-y-6">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                      <HardDrive className="w-5 h-5 text-amber-400" />
-                      <span>Armazenamento &amp; Retenção Automática</span>
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Gerencie a política de expiração de gravações e limpeza de espaço em disco.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-                      <div className="text-xs text-slate-400">Total de Arquivos</div>
-                      <div className="text-xl font-bold text-slate-100 mt-1">{serverInfo?.storage?.total_files || 0}</div>
-                    </div>
-                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-                      <div className="text-xs text-slate-400">Espaço Ocupado</div>
-                      <div className="text-xl font-bold text-amber-400 mt-1">
-                        {serverInfo?.storage?.total_size_mb || 0} MB
-                      </div>
-                    </div>
-                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-                      <div className="text-xs text-slate-400">Diretório de Gravações</div>
-                      <div className="text-xs font-mono text-slate-300 mt-1 truncate" title={serverInfo?.storage?.media_path}>
-                        {serverInfo?.storage?.media_path || "data/media"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pt-2">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                        Dias de Retenção (Exclusão automática)
-                      </label>
-                      <input
-                        type="number"
-                        value={retentionDays}
-                        onChange={(e) => setRetentionDays(Number(e.target.value))}
-                        min={1}
-                        max={365}
-                        className="w-48 bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+                      <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <HardDrive className="w-5 h-5 text-amber-400" />
+                        <span>Armazenamento, Retenção &amp; Saúde do Disco</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Monitore partições do host, gerencie cotas de gravação, reciclagem FIFO e limpeza granular por câmera.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fetchStorageDetailed(false)}
+                        disabled={refreshingStorage}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${refreshingStorage ? "animate-spin text-amber-400" : ""}`} />
+                        <span>{refreshingStorage ? "Atualizando..." : "Recarregar Dados"}</span>
+                      </button>
+
+                      {storageData?.disk && (
+                        <div
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${
+                            storageData.disk.used_percent >= 95
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                              : storageData.disk.used_percent >= 80
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              storageData.disk.used_percent >= 95
+                                ? "bg-rose-400 animate-ping"
+                                : storageData.disk.used_percent >= 80
+                                ? "bg-amber-400"
+                                : "bg-emerald-400"
+                            }`}
+                          />
+                          <span>
+                            {storageData.disk.used_percent >= 95
+                              ? "Disco Crítico (>95%)"
+                              : storageData.disk.used_percent >= 80
+                              ? "Disco em Atenção (>80%)"
+                              : "Disco Saudável"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Feedback Message */}
+                  {storageActionMsg && (
+                    <div
+                      className={`p-3.5 rounded-xl border flex items-center justify-between text-xs animate-in fade-in duration-200 ${
+                        storageActionMsg.success
+                          ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                          : "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {storageActionMsg.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                        )}
+                        <span>{storageActionMsg.text}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setStorageActionMsg(null)}
+                        className="text-slate-400 hover:text-white text-sm leading-none ml-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Visual Partition Gauge & 4 Key Cards */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-slate-900/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <Gauge className="w-4 h-4 text-amber-400" />
+                        <span>Ocupação do Volume do Host ({storageData?.disk?.total_gb || 0} GB)</span>
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        {storageData?.disk?.used_percent || 0}% em uso • {storageData?.disk?.free_gb || 0} GB livres
+                      </span>
+                    </div>
+
+                    {/* Multi-color Bar */}
+                    <div className="w-full bg-slate-950 rounded-xl h-4 overflow-hidden flex border border-slate-800 p-0.5 shadow-inner">
+                      {/* ServONVIF portion */}
+                      <div
+                        className="bg-gradient-to-r from-blue-600 to-sky-400 h-full rounded-l transition-all duration-500"
+                        style={{ width: `${Math.max(1, Math.min(100, storageData?.servonvif?.pct_of_disk || 0.5))}%` }}
+                        title={`ServONVIF: ${storageData?.servonvif?.total_size_mb || 0} MB (${storageData?.servonvif?.pct_of_disk || 0}%)`}
+                      />
+                      {/* OS & other apps portion */}
+                      <div
+                        className="bg-slate-700/80 h-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (storageData?.disk?.used_percent || 0) - (storageData?.servonvif?.pct_of_disk || 0)
+                            )
+                          )}%`,
+                        }}
+                        title={`Sistema Operacional & Outros: ${(
+                          (storageData?.disk?.used_gb || 0) - (storageData?.servonvif?.total_size_gb || 0)
+                        ).toFixed(1)} GB`}
+                      />
+                      {/* Free Space */}
+                      <div
+                        className="bg-emerald-500/20 h-full rounded-r transition-all duration-500"
+                        style={{ width: `${Math.max(0, storageData?.disk?.free_percent || 0)}%` }}
+                        title={`Espaço Livre: ${storageData?.disk?.free_gb || 0} GB (${storageData?.disk?.free_percent || 0}%)`}
                       />
                     </div>
 
-                    <div className="flex items-center gap-3 pt-3">
-                      <button
-                        type="button"
-                        onClick={() => handleSaveSettings()}
-                        disabled={saving}
-                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-amber-600/25"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{saving ? "Salvando..." : "Salvar Política de Armazenamento"}</span>
-                      </button>
+                    {/* Legend */}
+                    <div className="flex flex-wrap items-center gap-4 text-[11px] pt-0.5 text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm bg-gradient-to-r from-blue-600 to-sky-400" />
+                        <span>Gravações ServONVIF ({storageData?.servonvif?.total_size_mb || 0} MB)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm bg-slate-700" />
+                        <span>Sistema &amp; Docker ({((storageData?.disk?.used_gb || 0) - (storageData?.servonvif?.total_size_gb || 0)).toFixed(1)} GB)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm bg-emerald-500/30 border border-emerald-500/40" />
+                        <span>Espaço Livre ({storageData?.disk?.free_gb || 0} GB)</span>
+                      </div>
+                    </div>
 
+                    {/* 4 Cards Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5">
+                        <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-1.5">
+                          <HardDrive className="w-3.5 h-3.5 text-blue-400" />
+                          <span>SSD / Disco Total</span>
+                        </div>
+                        <div className="text-xl font-bold text-white mt-1">
+                          {storageData?.disk?.total_gb || 0} <span className="text-xs text-slate-400 font-normal">GB</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1 truncate" title={storageData?.disk?.media_path}>
+                          {storageData?.disk?.media_path || "data/media"}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5">
+                        <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-1.5">
+                          <Video className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Vídeos &amp; Mídia CFTV</span>
+                        </div>
+                        <div className="text-xl font-bold text-sky-400 mt-1">
+                          {storageData?.servonvif?.total_size_mb || 0} <span className="text-xs text-slate-400 font-normal">MB</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {storageData?.servonvif?.videos_count || 0} vídeos • {storageData?.servonvif?.thumbs_count || 0} fotos
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5">
+                        <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Espaço Livre Host</span>
+                        </div>
+                        <div className="text-xl font-bold text-emerald-400 mt-1">
+                          {storageData?.disk?.free_gb || 0} <span className="text-xs text-slate-400 font-normal">GB</span>
+                        </div>
+                        <div className="text-[10px] text-emerald-500/80 mt-1 font-mono">
+                          {storageData?.disk?.free_percent || 0}% de folga disponível
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5">
+                        <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Autonomia Estimada</span>
+                        </div>
+                        <div className="text-xl font-bold text-amber-400 mt-1">
+                          ~{storageData?.estimations?.est_days_remaining || 0} <span className="text-xs text-slate-400 font-normal">dias</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          ~{storageData?.estimations?.est_events_remaining || 0} clipes (@{storageData?.estimations?.avg_video_size_mb || 0}MB)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 1: Configuração de Políticas de Retenção & Auto-Limpeza */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-5 bg-slate-900/60">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-amber-600/10 text-amber-400 border border-amber-500/20">
+                          <Sliders className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Políticas de Retenção &amp; Auto-Limpeza Inteligente</h3>
+                          <p className="text-[11px] text-slate-400">Configure as regras de expiração de gravações e proteção de disco</p>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 font-semibold">
+                        Reciclagem FIFO Ativa
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {/* Campo 1: Retenção por Dias */}
+                      <div className="space-y-2 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-400" />
+                            <span>1. Retenção Baseada em Tempo (Dias)</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                            {retentionDays} {retentionDays === 1 ? "Dia" : "Dias"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Gravações com data anterior a este limite são removidas periodicamente pelo worker.
+                        </p>
+
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[7, 15, 30, 60, 90, 180, 365].map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setRetentionDays(d)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                                retentionDays === d
+                                  ? "bg-amber-600 text-white shadow-sm shadow-amber-600/30"
+                                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
+                              }`}
+                            >
+                              {d}d
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2">
+                          <input
+                            type="range"
+                            min={1}
+                            max={365}
+                            value={retentionDays}
+                            onChange={(e) => setRetentionDays(Number(e.target.value))}
+                            className="flex-1 accent-amber-500"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={retentionDays}
+                            onChange={(e) => setRetentionDays(Math.max(1, Number(e.target.value)))}
+                            className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-100 font-mono text-center focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Campo 2: Cota Máxima de Espaço (Quota GB) */}
+                      <div className="space-y-2 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <HardDrive className="w-3.5 h-3.5 text-blue-400" />
+                            <span>2. Cota Máxima de Espaço (Quota GB)</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                            {maxStorageQuotaGb === 0 ? "Ilimitado" : `${maxStorageQuotaGb} GB`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Limita o tamanho máximo da pasta de mídia. Ao atingir a cota, os arquivos mais antigos são limpos.
+                        </p>
+
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[
+                            { label: "Ilimitado", val: 0 },
+                            { label: "10 GB", val: 10 },
+                            { label: "25 GB", val: 25 },
+                            { label: "50 GB", val: 50 },
+                            { label: "100 GB", val: 100 },
+                            { label: "250 GB", val: 250 },
+                            { label: "400 GB", val: 400 },
+                          ].map((item) => (
+                            <button
+                              key={item.val}
+                              type="button"
+                              onClick={() => setMaxStorageQuotaGb(item.val)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                                maxStorageQuotaGb === item.val
+                                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-3 pt-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={2000}
+                            value={maxStorageQuotaGb}
+                            onChange={(e) => setMaxStorageQuotaGb(Math.max(0, Number(e.target.value)))}
+                            placeholder="0 = Ilimitado"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 text-xs text-slate-100 font-mono focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Campo 3: Margem de Segurança Mínima no Host (OS Guard) */}
+                      <div className="space-y-2 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>3. Folga Mínima do Host (OS Guard)</span>
+                          </label>
+                          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            {minFreeDiskGb} GB
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Garante espaço mínimo livre no SSD para que o sistema operacional (ZimaOS/Linux) não trave.
+                        </p>
+
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {[3.0, 5.0, 10.0, 20.0].map((gb) => (
+                            <button
+                              key={gb}
+                              type="button"
+                              onClick={() => setMinFreeDiskGb(gb)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                                minFreeDiskGb === gb
+                                  ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
+                              }`}
+                            >
+                              {gb.toFixed(1)} GB
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Campo 4: Worker de Limpeza Automática */}
+                      <div className="space-y-2 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                              <Activity className="w-3.5 h-3.5 text-purple-400" />
+                              <span>4. Limpeza Automática em Background</span>
+                            </label>
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                                autoCleanupEnabled
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-slate-800 text-slate-400"
+                              }`}
+                            >
+                              {autoCleanupEnabled ? "Ativo (Ciclo 6h)" : "Desativado"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                            Executa a cada 6 horas para limpar automaticamente eventos expirados no SQLite e arquivos no disco.
+                          </p>
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setAutoCleanupEnabled(!autoCleanupEnabled)}
+                            className={`w-full py-2 px-3 rounded-lg text-xs font-semibold border transition flex items-center justify-center gap-2 ${
+                              autoCleanupEnabled
+                                ? "bg-emerald-600/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-600/25"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            <span>{autoCleanupEnabled ? "✓ Worker de Auto-Limpeza Habilitado" : "✕ Auto-Limpeza Desabilitada"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end pt-2 border-t border-slate-800/80">
                       <button
                         type="button"
-                        onClick={handleManualCleanup}
-                        disabled={runningCleanup}
-                        className="bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2"
+                        onClick={handleSaveStoragePolicy}
+                        disabled={savingStorage}
+                        className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-amber-600/25 active:scale-95"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>{runningCleanup ? "Executando limpeza..." : "Executar Limpeza Manual Agora"}</span>
+                        {savingStorage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span>{savingStorage ? "Salvando Políticas..." : "Salvar Políticas de Armazenamento"}</span>
                       </button>
                     </div>
-                    {cleanupResult && <div className="text-xs text-slate-300 mt-2">{cleanupResult}</div>}
                   </div>
+
+                  {/* Card 2: Detalhamento por Câmera */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-slate-900/60">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-sky-600/10 text-sky-400 border border-sky-500/20">
+                          <Layers className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white">Consumo por Câmera Conectada</h3>
+                          <p className="text-[11px] text-slate-400">Detalhamento individual de eventos gravados e espaço ocupado</p>
+                        </div>
+                      </div>
+
+                      <span className="text-xs text-slate-400 font-mono">
+                        {storageData?.cameras?.length || 0} {storageData?.cameras?.length === 1 ? "Câmera" : "Câmeras"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 pt-1">
+                      {storageData?.cameras && storageData.cameras.length > 0 ? (
+                        storageData.cameras.map((cam) => (
+                          <div
+                            key={cam.camera_id}
+                            className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-700 transition"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-white">{cam.camera_name}</span>
+                                <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                  ID #{cam.camera_id}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                                <span className="flex items-center gap-1 text-sky-300">
+                                  <Film className="w-3 h-3 text-sky-400" />
+                                  {cam.videos_count} vídeos ({cam.videos_size_mb} MB)
+                                </span>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 text-slate-300">
+                                  <ImageIcon className="w-3 h-3 text-emerald-400" />
+                                  {cam.thumbs_count} fotos ({cam.thumbs_size_mb} MB)
+                                </span>
+                              </div>
+
+                              {/* Small Bar */}
+                              <div className="w-48 bg-slate-900 rounded-full h-1.5 overflow-hidden mt-1.5">
+                                <div
+                                  className="bg-sky-500 h-full rounded-full"
+                                  style={{ width: `${Math.max(2, Math.min(100, cam.pct_of_servonvif))}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 self-end sm:self-center">
+                              <div className="text-right">
+                                <div className="text-sm font-bold text-amber-400 font-mono">{cam.size_mb} MB</div>
+                                <div className="text-[10px] text-slate-500">{cam.pct_of_servonvif}% do ServONVIF</div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCleanupCamera(cam.camera_id, cam.camera_name)}
+                                disabled={cleaningCameraId === cam.camera_id || cam.total_files === 0}
+                                className="px-2.5 py-1.5 bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 rounded-lg text-xs font-semibold transition disabled:opacity-30 flex items-center gap-1.5"
+                                title="Apagar todos os vídeos e fotos desta câmera"
+                              >
+                                {cleaningCameraId === cam.camera_id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                                <span>Limpar</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 text-xs text-slate-500 bg-slate-950/40 rounded-xl border border-slate-800/40">
+                          Nenhuma gravação registrada no momento.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Ferramentas de Limpeza Manual e Manutenção */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-4 bg-slate-900/60">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-rose-600/10 text-rose-400 border border-rose-500/20">
+                        <Trash2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Ações de Limpeza Manual &amp; Manutenção Imediata</h3>
+                        <p className="text-[11px] text-slate-400">Libere espaço imediatamente disparando rotinas de expiração forçada</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                      {/* Botão 1: Limpeza da Política Atual */}
+                      <button
+                        type="button"
+                        onClick={() => handleRunStorageCleanup()}
+                        disabled={runningCleanup}
+                        className="p-3 bg-amber-600/15 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 rounded-xl text-xs font-semibold transition flex flex-col items-start gap-1 text-left disabled:opacity-50 active:scale-98"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold">
+                          {runningCleanup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4 text-amber-400" />}
+                          <span>Limpeza da Política</span>
+                        </div>
+                        <span className="text-[10px] text-slate-300 font-normal">
+                          Exclui arquivos anteriores a {retentionDays} dias
+                        </span>
+                      </button>
+
+                      {/* Botão 2: Limpeza 7 Dias */}
+                      <button
+                        type="button"
+                        onClick={() => handleRunStorageCleanup(7)}
+                        disabled={runningCleanup}
+                        className="p-3 bg-slate-950 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 rounded-xl text-xs font-semibold transition flex flex-col items-start gap-1 text-left disabled:opacity-50 active:scale-98"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <Trash2 className="w-4 h-4 text-slate-400" />
+                          <span>Excluir &gt; 7 Dias</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          Remove todas as gravações com +7 dias
+                        </span>
+                      </button>
+
+                      {/* Botão 3: Limpeza 15 Dias */}
+                      <button
+                        type="button"
+                        onClick={() => handleRunStorageCleanup(15)}
+                        disabled={runningCleanup}
+                        className="p-3 bg-slate-950 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 rounded-xl text-xs font-semibold transition flex flex-col items-start gap-1 text-left disabled:opacity-50 active:scale-98"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <Trash2 className="w-4 h-4 text-slate-400" />
+                          <span>Excluir &gt; 15 Dias</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          Remove todas as gravações com +15 dias
+                        </span>
+                      </button>
+
+                      {/* Botão 4: Wipe Geral de Mídia */}
+                      <button
+                        type="button"
+                        onClick={() => setWipeModalOpen(true)}
+                        className="p-3 bg-rose-600/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl text-xs font-semibold transition flex flex-col items-start gap-1 text-left active:scale-98"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-rose-300 hover:text-white">
+                          <AlertTriangle className="w-4 h-4 text-rose-400" />
+                          <span>Redefinição Total</span>
+                        </div>
+                        <span className="text-[10px] text-rose-300/80 hover:text-white font-normal">
+                          Apaga 100% dos vídeos e fotos
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Mapeamento de Diretório & Suporte a Disco Externo */}
+                  <div className="card-dark p-5 rounded-2xl border border-white/5 space-y-3 bg-slate-900/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FolderArchive className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-bold text-white">Diretório de Armazenamento no Host</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-semibold">
+                        Leitura &amp; Escrita Habilitadas (RW)
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-sky-300 select-all">
+                      {storageData?.disk?.media_path || "data/media"}
+                    </div>
+
+                    <div className="p-3.5 bg-blue-500/5 rounded-xl border border-blue-500/15 space-y-1.5 text-xs text-slate-300">
+                      <div className="font-bold text-blue-400 flex items-center gap-1.5">
+                        <Info className="w-3.5 h-3.5" />
+                        <span>Dica para ZimaOS / CasaOS / Mini PC GK3 Pro:</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Para direcionar as gravações para um <strong>HD Externo USB 3.0 ou SSD SATA secundário</strong>, basta montar o volume no Docker mapeando o diretório de destino:
+                      </p>
+                      <div className="bg-slate-950 p-2 rounded border border-slate-800 font-mono text-[10px] text-emerald-300 select-all">
+                        -v /media/seu_hd_externo/servonvif_media:/app/engine/data/media
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modal de Confirmação: Wipe Geral de Mídia */}
+                  {wipeModalOpen && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                      <div className="bg-slate-900 border border-rose-500/30 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+                        <div className="flex items-center gap-3 text-rose-400">
+                          <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                            <AlertTriangle className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-base font-bold text-white">Limpeza Total de Mídia (Wipe)</h3>
+                            <p className="text-xs text-rose-300">Esta ação é irreversível!</p>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Todos os <strong>{storageData?.servonvif?.total_files || 0} arquivos</strong> ({storageData?.servonvif?.total_size_mb || 0} MB de vídeos e snapshots) de todas as câmeras serão permanentemente excluídos do disco.
+                        </p>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-slate-400 block">
+                            Digite <strong className="text-rose-400 font-mono">CONFIRMAR_LIMPEZA_TOTAL</strong> para autorizar:
+                          </label>
+                          <input
+                            type="text"
+                            value={wipeConfirmText}
+                            onChange={(e) => setWipeConfirmText(e.target.value)}
+                            placeholder="CONFIRMAR_LIMPEZA_TOTAL"
+                            className="w-full bg-slate-950 border border-rose-500/30 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-rose-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2.5 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWipeModalOpen(false);
+                              setWipeConfirmText("");
+                            }}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleWipeAllStorage}
+                            disabled={wipeConfirmText !== "CONFIRMAR_LIMPEZA_TOTAL" || wipingStorage}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-rose-600/30"
+                          >
+                            {wipingStorage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            <span>{wipingStorage ? "Apagando..." : "Confirmar e Apagar Tudo"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

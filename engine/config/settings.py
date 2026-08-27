@@ -16,8 +16,11 @@ class Settings(BaseSettings):
     MEDIA_DIR: Path = DATA_DIR / "media"
     DB_PATH: Path = DATA_DIR / "servonvif.db"
 
-    # Retention
+    # Retention & Storage Policy
     RETENTION_DAYS: int = 7
+    MAX_STORAGE_QUOTA_GB: int = 0  # 0 = unlimited / disk total
+    MIN_FREE_DISK_GB: float = 5.0   # minimum free GB before emergency cleanup
+    AUTO_CLEANUP_ENABLED: bool = True
 
     # Motion Detection Defaults
     DEFAULT_BUFFER_SECONDS: int = 10

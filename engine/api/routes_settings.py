@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 import cv2
 import numpy as np
 from loguru import logger
@@ -37,6 +38,9 @@ class SettingsUpdate(BaseModel):
     telegram_include_prebuffer: Optional[bool] = None
     telegram_watermark_enabled: Optional[bool] = None
     retention_days: Optional[int] = None
+    max_storage_quota_gb: Optional[int] = None
+    min_free_disk_gb: Optional[float] = None
+    auto_cleanup_enabled: Optional[bool] = None
     default_buffer_seconds: Optional[int] = None
     lpr_enabled: Optional[bool] = None
     lpr_min_confidence: Optional[float] = None
@@ -45,6 +49,15 @@ class SettingsUpdate(BaseModel):
     lpr_alarm_on_blocked: Optional[bool] = None
     lpr_motorcycle_enabled: Optional[bool] = None
     lpr_cooldown_seconds: Optional[int] = None
+
+class StorageConfigUpdate(BaseModel):
+    retention_days: Optional[int] = None
+    max_storage_quota_gb: Optional[int] = None
+    min_free_disk_gb: Optional[float] = None
+    auto_cleanup_enabled: Optional[bool] = None
+
+class StorageWipePayload(BaseModel):
+    confirm_text: str  # Must be "CONFIRMAR_LIMPEZA_TOTAL"
 
 class TelegramTestPayload(BaseModel):
     bot_token: Optional[str] = None
@@ -153,6 +166,9 @@ async def get_current_settings():
         "server_ws_url": f"ws://{local_ip}:{settings.PORT}/ws/events",
         "server_http_url": f"http://{local_ip}:{settings.PORT}",
         "retention_days": settings.RETENTION_DAYS,
+        "max_storage_quota_gb": getattr(settings, "MAX_STORAGE_QUOTA_GB", 0),
+        "min_free_disk_gb": getattr(settings, "MIN_FREE_DISK_GB", 5.0),
+        "auto_cleanup_enabled": getattr(settings, "AUTO_CLEANUP_ENABLED", True),
         "default_buffer_seconds": settings.DEFAULT_BUFFER_SECONDS,
         "telegram_enabled": settings.TELEGRAM_ENABLED,
         "telegram_paused": settings.TELEGRAM_PAUSED,
@@ -254,6 +270,18 @@ async def update_settings(payload: SettingsUpdate):
         settings.RETENTION_DAYS = payload.retention_days
         await set_system_setting("retention_days", payload.retention_days)
 
+    if payload.max_storage_quota_gb is not None:
+        settings.MAX_STORAGE_QUOTA_GB = payload.max_storage_quota_gb
+        await set_system_setting("max_storage_quota_gb", payload.max_storage_quota_gb)
+
+    if payload.min_free_disk_gb is not None:
+        settings.MIN_FREE_DISK_GB = payload.min_free_disk_gb
+        await set_system_setting("min_free_disk_gb", payload.min_free_disk_gb)
+
+    if payload.auto_cleanup_enabled is not None:
+        settings.AUTO_CLEANUP_ENABLED = payload.auto_cleanup_enabled
+        await set_system_setting("auto_cleanup_enabled", payload.auto_cleanup_enabled)
+
     if payload.default_buffer_seconds is not None:
         settings.DEFAULT_BUFFER_SECONDS = payload.default_buffer_seconds
         await set_system_setting("default_buffer_seconds", payload.default_buffer_seconds)
@@ -294,9 +322,188 @@ async def test_telegram_backup():
     return {"success": True, "message": msg}
 
 @router.post("/cleanup")
-async def trigger_manual_cleanup():
-    deleted_count = await retention_worker.cleanup_old_media()
-    return {"message": f"Limpeza concluída com sucesso. {deleted_count} itens antigos processados."}
+async def trigger_manual_cleanup(days: Optional[int] = None):
+    deleted_count = await retention_worker.cleanup_old_media(days=days)
+    return {"message": f"Limpeza concluída com sucesso. {deleted_count} itens antigos processados.", "deleted_count": deleted_count}
+
+@router.get("/storage/detailed")
+async def get_storage_detailed(db: AsyncSession = Depends(get_db)):
+    """
+    Returns enterprise storage metrics: partition capacity, ServONVIF media usage,
+    per-camera breakdown, retention policy and remaining days estimation.
+    """
+    import shutil
+    from engine.database.models import Camera
+    media_dir = settings.MEDIA_DIR
+    media_dir.mkdir(parents=True, exist_ok=True)
+
+    total_bytes_disk, used_bytes_disk, free_bytes_disk = shutil.disk_usage(str(media_dir))
+    
+    total_disk_gb = round(total_bytes_disk / (1024 ** 3), 1)
+    used_disk_gb = round(used_bytes_disk / (1024 ** 3), 1)
+    free_disk_gb = round(free_bytes_disk / (1024 ** 3), 1)
+    disk_percent = round((used_bytes_disk / max(total_bytes_disk, 1)) * 100, 1)
+
+    total_files = 0
+    total_bytes = 0
+    video_files = 0
+    video_bytes = 0
+    thumb_files = 0
+    thumb_bytes = 0
+
+    per_camera_map = {}
+
+    for root, dirs, files in os.walk(media_dir):
+        for f in files:
+            fpath = os.path.join(root, f)
+            total_files += 1
+            try:
+                sz = os.path.getsize(fpath)
+                total_bytes += sz
+                
+                rel = os.path.relpath(fpath, media_dir)
+                parts = rel.split(os.sep)
+                cam_id_str = parts[0] if len(parts) > 1 and parts[0].isdigit() else "0"
+                cid = int(cam_id_str)
+                
+                if cid not in per_camera_map:
+                    per_camera_map[cid] = {
+                        "camera_id": cid,
+                        "videos_count": 0,
+                        "videos_bytes": 0,
+                        "thumbs_count": 0,
+                        "thumbs_bytes": 0,
+                        "total_files": 0,
+                        "total_bytes": 0,
+                    }
+                
+                per_camera_map[cid]["total_files"] += 1
+                per_camera_map[cid]["total_bytes"] += sz
+
+                if f.endswith(('.mp4', '.mkv', '.avi')):
+                    video_files += 1
+                    video_bytes += sz
+                    per_camera_map[cid]["videos_count"] += 1
+                    per_camera_map[cid]["videos_bytes"] += sz
+                elif f.endswith(('.jpg', '.jpeg', '.png')):
+                    thumb_files += 1
+                    thumb_bytes += sz
+                    per_camera_map[cid]["thumbs_count"] += 1
+                    per_camera_map[cid]["thumbs_bytes"] += sz
+            except Exception:
+                pass
+
+    # Fetch camera list from DB
+    cam_result = await db.execute(select(Camera))
+    cams = cam_result.scalars().all()
+    cam_names = {c.id: c.name for c in cams}
+
+    per_camera_list = []
+    for cid, data in per_camera_map.items():
+        cname = cam_names.get(cid, f"Câmera #{cid}" if cid > 0 else "Geral / Desconhecido")
+        sz_mb = round(data["total_bytes"] / (1024 * 1024), 2)
+        v_mb = round(data["videos_bytes"] / (1024 * 1024), 2)
+        t_mb = round(data["thumbs_bytes"] / (1024 * 1024), 2)
+        per_camera_list.append({
+            "camera_id": cid,
+            "camera_name": cname,
+            "total_files": data["total_files"],
+            "videos_count": data["videos_count"],
+            "thumbs_count": data["thumbs_count"],
+            "size_mb": sz_mb,
+            "videos_size_mb": v_mb,
+            "thumbs_size_mb": t_mb,
+            "pct_of_servonvif": round((data["total_bytes"] / max(total_bytes, 1)) * 100, 1)
+        })
+
+    # Add active cameras that don't have recordings yet
+    for c in cams:
+        if c.id not in per_camera_map:
+            per_camera_list.append({
+                "camera_id": c.id,
+                "camera_name": c.name,
+                "total_files": 0,
+                "videos_count": 0,
+                "thumbs_count": 0,
+                "size_mb": 0.0,
+                "videos_size_mb": 0.0,
+                "thumbs_size_mb": 0.0,
+                "pct_of_servonvif": 0.0
+            })
+
+    per_camera_list.sort(key=lambda x: x["size_mb"], reverse=True)
+
+    # Estimate remaining recording days based on average video size and free space
+    avg_video_mb = (video_bytes / (1024 * 1024)) / max(video_files, 1) if video_files > 0 else 8.5
+    free_mb = free_bytes_disk / (1024 * 1024)
+    est_events_capacity = int(free_mb / max(avg_video_mb, 1.0))
+    est_days_capacity = max(1, int(est_events_capacity / 50))
+
+    return {
+        "disk": {
+            "total_gb": total_disk_gb,
+            "used_gb": used_disk_gb,
+            "free_gb": free_disk_gb,
+            "used_percent": disk_percent,
+            "free_percent": round(100.0 - disk_percent, 1),
+            "media_path": str(media_dir.resolve()),
+            "is_writable": os.access(str(media_dir), os.W_OK),
+        },
+        "servonvif": {
+            "total_files": total_files,
+            "total_size_mb": round(total_bytes / (1024 * 1024), 2),
+            "total_size_gb": round(total_bytes / (1024 ** 3), 3),
+            "videos_count": video_files,
+            "videos_size_mb": round(video_bytes / (1024 * 1024), 2),
+            "thumbs_count": thumb_files,
+            "thumbs_size_mb": round(thumb_bytes / (1024 * 1024), 2),
+            "pct_of_disk": round((total_bytes / max(total_bytes_disk, 1)) * 100, 2),
+        },
+        "policy": {
+            "retention_days": settings.RETENTION_DAYS,
+            "max_storage_quota_gb": getattr(settings, "MAX_STORAGE_QUOTA_GB", 0),
+            "min_free_disk_gb": getattr(settings, "MIN_FREE_DISK_GB", 5.0),
+            "auto_cleanup_enabled": getattr(settings, "AUTO_CLEANUP_ENABLED", True),
+        },
+        "estimations": {
+            "avg_video_size_mb": round(avg_video_mb, 2),
+            "est_events_remaining": est_events_capacity,
+            "est_days_remaining": est_days_capacity,
+        },
+        "cameras": per_camera_list
+    }
+
+@router.post("/storage/config")
+async def update_storage_config(payload: StorageConfigUpdate):
+    if payload.retention_days is not None:
+        settings.RETENTION_DAYS = payload.retention_days
+        await set_system_setting("retention_days", payload.retention_days)
+
+    if payload.max_storage_quota_gb is not None:
+        settings.MAX_STORAGE_QUOTA_GB = payload.max_storage_quota_gb
+        await set_system_setting("max_storage_quota_gb", payload.max_storage_quota_gb)
+
+    if payload.min_free_disk_gb is not None:
+        settings.MIN_FREE_DISK_GB = payload.min_free_disk_gb
+        await set_system_setting("min_free_disk_gb", payload.min_free_disk_gb)
+
+    if payload.auto_cleanup_enabled is not None:
+        settings.AUTO_CLEANUP_ENABLED = payload.auto_cleanup_enabled
+        await set_system_setting("auto_cleanup_enabled", payload.auto_cleanup_enabled)
+
+    return {"message": "Políticas de armazenamento salvas com sucesso!"}
+
+@router.post("/storage/cleanup-camera/{camera_id}")
+async def cleanup_camera_storage(camera_id: int):
+    deleted_count = await retention_worker.cleanup_by_camera(camera_id)
+    return {"message": f"Todos os vídeos da Câmera #{camera_id} foram removidos ({deleted_count} registros)."}
+
+@router.post("/storage/wipe-all")
+async def wipe_all_storage(payload: StorageWipePayload):
+    if payload.confirm_text != "CONFIRMAR_LIMPEZA_TOTAL":
+        raise HTTPException(status_code=400, detail="Texto de confirmação inválido. Digite 'CONFIRMAR_LIMPEZA_TOTAL'.")
+    deleted_count = await retention_worker.wipe_all_media()
+    return {"message": f"Limpeza total executada com sucesso! {deleted_count} eventos e gravações apagados."}
 
 @router.get("/qr-pairing")
 async def get_pairing_qr_code(host: Optional[str] = None):

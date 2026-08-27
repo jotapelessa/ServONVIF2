@@ -74,6 +74,9 @@ export interface SettingsResponse {
   server_ws_url?: string;
   server_http_url?: string;
   retention_days?: number;
+  max_storage_quota_gb?: number;
+  min_free_disk_gb?: number;
+  auto_cleanup_enabled?: boolean;
   default_buffer_seconds?: number;
   telegram_enabled?: boolean;
   telegram_paused?: boolean;
@@ -106,6 +109,50 @@ export interface SettingsResponse {
     ram_total_mb: number;
     system_ram_used_mb: number;
   };
+}
+
+export interface StorageDetailedResponse {
+  disk: {
+    total_gb: number;
+    used_gb: number;
+    free_gb: number;
+    used_percent: number;
+    free_percent: number;
+    media_path: string;
+    is_writable: boolean;
+  };
+  servonvif: {
+    total_files: number;
+    total_size_mb: number;
+    total_size_gb: number;
+    videos_count: number;
+    videos_size_mb: number;
+    thumbs_count: number;
+    thumbs_size_mb: number;
+    pct_of_disk: number;
+  };
+  policy: {
+    retention_days: number;
+    max_storage_quota_gb: number;
+    min_free_disk_gb: number;
+    auto_cleanup_enabled: boolean;
+  };
+  estimations: {
+    avg_video_size_mb: number;
+    est_events_remaining: number;
+    est_days_remaining: number;
+  };
+  cameras: Array<{
+    camera_id: number;
+    camera_name: string;
+    total_files: number;
+    videos_count: number;
+    thumbs_count: number;
+    size_mb: number;
+    videos_size_mb: number;
+    thumbs_size_mb: number;
+    pct_of_servonvif: number;
+  }>;
 }
 
 export const apiClient = {
@@ -330,12 +377,53 @@ export const apiClient = {
     return data;
   },
 
-  async triggerCleanup(): Promise<any> {
-    const res = await fetch(`${getApiBase()}/api/settings/cleanup`, {
+  async triggerCleanup(days?: number): Promise<any> {
+    const url = days ? `${getApiBase()}/api/settings/cleanup?days=${days}` : `${getApiBase()}/api/settings/cleanup`;
+    const res = await fetch(url, {
       method: "POST",
     });
-    if (!res.ok) throw new Error("Failed to run cleanup");
+    if (!res.ok) throw new Error("Falha ao executar limpeza de armazenamento");
     return res.json();
+  },
+
+  async getStorageDetailed(): Promise<StorageDetailedResponse> {
+    const res = await fetch(`${getApiBase()}/api/settings/storage/detailed`);
+    if (!res.ok) throw new Error("Falha ao obter detalhes de armazenamento");
+    return res.json();
+  },
+
+  async updateStorageConfig(config: {
+    retention_days?: number;
+    max_storage_quota_gb?: number;
+    min_free_disk_gb?: number;
+    auto_cleanup_enabled?: boolean;
+  }): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/settings/storage/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error("Falha ao atualizar políticas de armazenamento");
+    return res.json();
+  },
+
+  async cleanupCameraStorage(cameraId: number): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/settings/storage/cleanup-camera/${cameraId}`, {
+      method: "POST",
+    });
+    if (!res.ok) throw new Error(`Falha ao limpar gravações da câmera ${cameraId}`);
+    return res.json();
+  },
+
+  async wipeAllStorage(confirmText: string): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/settings/storage/wipe-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm_text: confirmText }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha na limpeza geral");
+    return data;
   },
 
   async getDiagnosticsLogs(limit = 150, level = "ALL"): Promise<any> {

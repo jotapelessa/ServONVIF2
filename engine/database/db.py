@@ -110,6 +110,18 @@ async def load_persisted_system_settings() -> None:
                     settings.RETENTION_DAYS = int(all_settings["retention_days"])
                 except Exception:
                     pass
+            if "max_storage_quota_gb" in all_settings and all_settings["max_storage_quota_gb"]:
+                try:
+                    settings.MAX_STORAGE_QUOTA_GB = int(all_settings["max_storage_quota_gb"])
+                except Exception:
+                    pass
+            if "min_free_disk_gb" in all_settings and all_settings["min_free_disk_gb"]:
+                try:
+                    settings.MIN_FREE_DISK_GB = float(all_settings["min_free_disk_gb"])
+                except Exception:
+                    pass
+            if "auto_cleanup_enabled" in all_settings and all_settings["auto_cleanup_enabled"] is not None:
+                settings.AUTO_CLEANUP_ENABLED = all_settings["auto_cleanup_enabled"].lower() == "true"
             if "default_buffer_seconds" in all_settings and all_settings["default_buffer_seconds"]:
                 try:
                     settings.DEFAULT_BUFFER_SECONDS = int(all_settings["default_buffer_seconds"])
