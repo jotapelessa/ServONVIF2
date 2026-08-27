@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ServONVIF Mobile",
+    "slug": "servonvif-mobile",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#090d16"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.servonvif.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#090d16"
+      },
+      "package": "com.servonvif.mobile"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita o acesso à câmera para ler o QR Code de emparelhamento do ServONVIF."
+        }
+      ]
+    ]
+  }
+}

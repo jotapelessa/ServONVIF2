@@ -549,6 +549,21 @@ export const apiClient = {
     return data;
   },
 
+  async generateMobilePairToken(): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/auth/generate-pair-token`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao gerar token de emparelhamento");
+    return data;
+  },
+
+  async getConnectionInfo(): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/auth/connection-info`);
+    if (!res.ok) throw new Error("Falha ao obter informações de conexão");
+    return res.json();
+  },
+
   async bulkDeviceAction(action: "ALLOW_ALL" | "PAUSE_ALL" | "BLOCK_UNKNOWN" | "UNBLOCK_ALL"): Promise<any> {
     const res = await fetch(`${getApiBase()}/api/devices/bulk-status`, {
       method: "POST",

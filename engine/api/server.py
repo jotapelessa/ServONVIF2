@@ -12,6 +12,7 @@ from engine.api.routes_stream import router as stream_router
 from engine.api.routes_settings import router as settings_router
 from engine.api.routes_devices import router as devices_router
 from engine.api.routes_vehicles import router as vehicles_router
+from engine.api.routes_auth import router as auth_router
 from engine.api.websocket_hub import ws_hub
 from engine.core.camera_manager import camera_manager
 from engine.core.power_manager import power_manager
@@ -64,6 +65,7 @@ app.include_router(stream_router)
 app.include_router(settings_router)
 app.include_router(devices_router)
 app.include_router(vehicles_router)
+app.include_router(auth_router)
 
 @app.websocket("/ws/events")
 async def websocket_events_endpoint(

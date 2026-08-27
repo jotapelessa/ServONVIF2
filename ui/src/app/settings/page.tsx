@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { apiClient, API_BASE, getApiBase, SettingsResponse, TailscaleStatus, SystemVersionInfo, StorageDetailedResponse } from "@/lib/api-client";
 import {
   ArrowLeft,
@@ -204,6 +205,10 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     status: "ALLOWED",
     notes: "",
   });
+  const [isPairMobileModalOpen, setIsPairMobileModalOpen] = useState(false);
+  const [mobilePairBundle, setMobilePairBundle] = useState<any>(null);
+  const [generatingPairToken, setGeneratingPairToken] = useState(false);
+  const [copiedMobileString, setCopiedMobileString] = useState(false);
 
   // LPR / Vehicles State
   const [vehicles, setVehicles] = useState<any[]>([]);
@@ -605,6 +610,19 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       fetchDevices();
     } catch (e: any) {
       alert("Erro ao cadastrar dispositivo: " + (e.message || e));
+    }
+  };
+
+  const handleOpenMobilePairModal = async () => {
+    setIsPairMobileModalOpen(true);
+    setGeneratingPairToken(true);
+    try {
+      const data = await apiClient.generateMobilePairToken();
+      setMobilePairBundle(data);
+    } catch (e: any) {
+      alert("Erro ao gerar token para smartphone: " + (e.message || e));
+    } finally {
+      setGeneratingPairToken(false);
     }
   };
 
@@ -2621,6 +2639,14 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <button
+                        onClick={handleOpenMobilePairModal}
+                        className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-lg shadow-blue-600/20"
+                      >
+                        <Smartphone className="w-4 h-4" />
+                        <span>📱 Emparelhar Smartphone</span>
+                      </button>
+
+                      <button
                         onClick={() => setIsAddDeviceModalOpen(true)}
                         className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/20"
                       >
@@ -3487,6 +3513,111 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                             </button>
                           </div>
                         </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modal 3: Emparelhamento Smartphone com QR Code */}
+                  {isPairMobileModalOpen && (
+                    <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                      <div className="bg-[#131b2e] border border-blue-500/40 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+                        <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-blue-950/40 to-indigo-950/40">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                              <Smartphone className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                                <span>Emparelhar Smartphone</span>
+                                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold border border-blue-500/30">Mobile App</span>
+                              </h3>
+                              <p className="text-xs text-slate-400">Acesso ao vivo seguro via Tailscale &amp; Wi-Fi</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setIsPairMobileModalOpen(false);
+                              setCopiedMobileString(false);
+                            }}
+                            className="text-slate-400 hover:text-white p-1 rounded-lg"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="p-6 flex flex-col items-center text-center space-y-4 text-xs">
+                          {generatingPairToken ? (
+                            <div className="py-12 flex flex-col items-center gap-3 text-slate-400">
+                              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                              <span>Gerando chave de emparelhamento criptografada...</span>
+                            </div>
+                          ) : mobilePairBundle ? (
+                            <>
+                              {/* QR Code Container with High Contrast & Rounded border */}
+                              <div className="p-4 bg-white rounded-2xl shadow-xl border-4 border-blue-500/20">
+                                <QRCodeSVG
+                                  value={JSON.stringify(mobilePairBundle.pairing_bundle)}
+                                  size={210}
+                                  level="H"
+                                  includeMargin={false}
+                                />
+                              </div>
+
+                              <div className="space-y-1.5 max-w-xs">
+                                <div className="text-sm font-bold text-white flex items-center justify-center gap-1.5">
+                                  <QrCode className="w-4 h-4 text-blue-400" />
+                                  <span>Aponte a câmera do App</span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  Abra o <strong>ServONVIF Mobile</strong> no celular e toque em <em>"Escanear QR Code"</em> para login automático.
+                                </p>
+                              </div>
+
+                              {/* Technical Endpoints Info Box */}
+                              <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-2 text-left text-[11px]">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">Rede Local (Wi-Fi):</span>
+                                  <span className="font-mono text-emerald-400 font-bold">{mobilePairBundle.connection_info?.lan_url}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400">Acesso Remoto (Tailscale):</span>
+                                  <span className="font-mono text-cyan-400 font-bold truncate max-w-[180px]" title={mobilePairBundle.connection_info?.tailscale_url || "Tailscale IP"}>
+                                    {mobilePairBundle.connection_info?.tailscale_url || "100.x.y.z:8080"}
+                                  </span>
+                                </div>
+                                <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
+                                  <span>Expira em: 15 minutos</span>
+                                  <span className="text-amber-400/90 font-mono font-semibold">Chave de Uso Único</span>
+                                </div>
+                              </div>
+
+                              {/* Copy Raw Connection String Button */}
+                              <div className="w-full flex items-center gap-2 pt-1">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(JSON.stringify(mobilePairBundle.pairing_bundle));
+                                    setCopiedMobileString(true);
+                                    setTimeout(() => setCopiedMobileString(false), 3000);
+                                  }}
+                                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white py-2.5 rounded-xl border border-slate-700/80 font-bold transition flex items-center justify-center gap-1.5 text-xs"
+                                >
+                                  {copiedMobileString ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                                  <span>{copiedMobileString ? "Copiado!" : "Copiar Chave Manual"}</span>
+                                </button>
+
+                                <button
+                                  onClick={handleOpenMobilePairModal}
+                                  className="p-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700/80 transition"
+                                  title="Gerar Novo Token"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="py-6 text-slate-400">Falha ao carregar token de emparelhamento.</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
