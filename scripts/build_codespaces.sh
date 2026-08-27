@@ -11,6 +11,7 @@ mkdir -p "$OUTPUT_DIR"
 
 TV_VERSION="v2.1.0"
 MOBILE_VERSION="v1.0.0"
+export CI=1
 
 # 1. Configurar Java 17 obrigatório
 if ! dpkg -s openjdk-17-jdk >/dev/null 2>&1; then
@@ -90,10 +91,10 @@ if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
     npm install --silent
 fi
 
-# Gerar estrutura limpa do Expo Android
+# Gerar estrutura limpa do Expo Android sem prompt interativo
 echo "📦 Executando expo prebuild..."
 rm -rf "$WORKSPACE_DIR/mobile/android"
-npx expo prebuild --platform android --clean --no-install
+CI=1 npx expo prebuild --platform android --clean --no-install
 
 # Aplicar patches de compatibilidade (cameraview maven repo + buildConfig)
 python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
