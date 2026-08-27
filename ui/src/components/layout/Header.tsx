@@ -15,6 +15,7 @@ import {
   Car,
   Cpu,
   HardDrive,
+  ArrowUpCircle,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -38,19 +39,22 @@ export function Header({
     ram_total_mb: number;
   } | null>(null);
   const [appVersion, setAppVersion] = useState<string>("001.006.053");
+  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadInitialData() {
       try {
-        const [metricData, settingsData] = await Promise.all([
+        const [metricData, settingsData, versionData] = await Promise.all([
           apiClient.getMetrics().catch(() => null),
           apiClient.getSettings().catch(() => null),
+          apiClient.getSystemVersion().catch(() => null),
         ]);
         if (isMounted) {
           if (metricData) setMetrics(metricData);
           if (settingsData?.version) setAppVersion(settingsData.version);
+          if (versionData?.update_available) setUpdateAvailable(true);
         }
       } catch (e) {
         // Silently ignore during initial boot
@@ -168,6 +172,17 @@ export function Header({
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden md:inline">Ajustes</span>
           </Link>
+
+          {updateAvailable && (
+            <Link
+              href="/settings?tab=backup"
+              title="Nova versão disponível no GitHub! Clique para atualizar."
+              className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/30 transition animate-pulse"
+            >
+              <ArrowUpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Update</span>
+            </Link>
+          )}
         </div>
 
         <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
