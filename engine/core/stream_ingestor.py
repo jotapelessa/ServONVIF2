@@ -114,15 +114,17 @@ class StreamIngestor:
         )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
-        # High-stability TCP RTSP parameters with 2.5s socket timeout
+        # High-stability, zero-delay TCP RTSP capture options
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
             "rtsp_transport;tcp|"
-            "buffer_size;1024000|"
-            "max_delay;500000|"
+            "buffer_size;102400|"
+            "max_delay;50000|"
+            "flags;low_delay|"
+            "fflags;nobuffer|"
             "stimeout;2500000"
         )
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
 
     def _grabber_loop(self) -> None:
@@ -197,7 +199,7 @@ class StreamIngestor:
 
             # 1. Update circular RAM ring buffer & MJPEG broadcast
             self.ring_buffer.push(frame, is_keyframe=True, timestamp=frame_time)
-            mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=65, max_fps=10.0)
+            mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
 
             # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
             if self._is_recording_event:
