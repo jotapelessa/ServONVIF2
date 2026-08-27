@@ -185,8 +185,12 @@ export const apiClient = {
     return res.json();
   },
 
-  async scanCameras(): Promise<any[]> {
-    const res = await fetch(`${getApiBase()}/api/cameras/scan`, { method: "POST" });
+  async scanCameras(options?: { custom_ip?: string; custom_subnet?: string }): Promise<any[]> {
+    const res = await fetch(`${getApiBase()}/api/cameras/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options || {}),
+    });
     if (!res.ok) throw new Error("Failed to scan cameras");
     return res.json();
   },

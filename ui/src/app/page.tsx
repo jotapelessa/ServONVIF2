@@ -21,6 +21,7 @@ import {
   Radio,
   Layers,
   Network,
+  Search,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -43,17 +44,20 @@ export default function Dashboard() {
   const [newCameraName, setNewCameraName] = useState("");
   const [newCameraRTSP, setNewCameraRTSP] = useState("");
   const [newCameraSensitivity, setNewCameraSensitivity] = useState(0.03);
+  const [scanCustomTarget, setScanCustomTarget] = useState("");
 
   useEffect(() => {
     fetchCameras();
   }, [fetchCameras]);
 
-  const handleScan = async () => {
+  const handleScan = async (customTarget?: string) => {
     setIsScanModalOpen(true);
     setIsScanning(true);
     setScannedCameras([]);
     try {
-      const results = await apiClient.scanCameras();
+      const target = customTarget !== undefined ? customTarget : scanCustomTarget;
+      const opts = target && target.trim() ? { custom_ip: target.trim() } : undefined;
+      const results = await apiClient.scanCameras(opts);
       setScannedCameras(results);
     } catch (e) {
       console.error("Scan failed:", e);
@@ -276,6 +280,28 @@ export default function Dashboard() {
               </button>
             </div>
 
+            {/* Direct IP / Custom Subnet Scan Input Bar */}
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Escanear IP específico (ex: 192.168.1.200 ou 192.168.1.0/24)"
+                value={scanCustomTarget}
+                onChange={(e) => setScanCustomTarget(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleScan(scanCustomTarget);
+                }}
+                className="flex-1 bg-transparent border-0 px-2 py-1 text-xs text-white placeholder-slate-500 focus:outline-none"
+              />
+              <button
+                onClick={() => handleScan(scanCustomTarget)}
+                disabled={isScanning}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5 shrink-0"
+              >
+                {isScanning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                <span>Buscar IP</span>
+              </button>
+            </div>
+
             {/* Scanned List Area */}
             <div className="flex-1 overflow-y-auto space-y-2.5 min-h-[180px] p-1">
               {isScanning ? (
@@ -340,7 +366,7 @@ export default function Dashboard() {
             {/* Footer Buttons */}
             <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
               <button
-                onClick={handleScan}
+                onClick={() => handleScan()}
                 disabled={isScanning}
                 className="h-8 px-3 text-xs font-semibold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 rounded-lg transition disabled:opacity-50"
               >

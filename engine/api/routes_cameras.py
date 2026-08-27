@@ -46,9 +46,19 @@ async def list_cameras(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Camera))
     return result.scalars().all()
 
+class CameraScanPayload(BaseModel):
+    custom_ip: Optional[str] = None
+    custom_subnet: Optional[str] = None
+
 @router.post("/scan", response_model=List[dict])
-async def scan_network_cameras():
-    cameras = await ONVIFDiscovery.discover_cameras(timeout_seconds=7.0)
+async def scan_network_cameras(payload: Optional[CameraScanPayload] = None):
+    custom_ip = payload.custom_ip if payload else None
+    custom_subnet = payload.custom_subnet if payload else None
+    cameras = await ONVIFDiscovery.discover_cameras(
+        timeout_seconds=7.0,
+        custom_ip=custom_ip,
+        custom_subnet=custom_subnet
+    )
     return cameras
 
 @router.post("/", response_model=Camera)

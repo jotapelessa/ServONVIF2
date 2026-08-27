@@ -2,15 +2,16 @@ import asyncio
 import socket
 import re
 import concurrent.futures
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from loguru import logger
 from engine.api.routes_settings import get_local_ip
 
 class ONVIFDiscovery:
     """
-    High-Speed Dual-Engine camera discovery:
-    1. WS-Discovery (UDP Multicast on 239.255.255.250:3702).
-    2. Ultra-Fast Multi-Threaded Subnet Scanner (554, 8554, 8000, 8899, 37777, 34567) completed in < 3 seconds.
+    High-Speed Resilient Dual-Engine Camera Discovery:
+    1. WS-Discovery (UDP Multicast on 239.255.255.250:3702, 255.255.255.255:3702, and Subnet Broadcasts).
+    2. Parallel Subnet Scanner across all detected LAN subnets (Ports 554, 80, 8554, 8000, 8899, 37777, 34567).
+    3. Direct IP / Custom Range Probing with RTSP path auto-resolution.
     """
 
     WS_DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -30,19 +31,33 @@ class ONVIFDiscovery:
         </e:Body>
     </e:Envelope>"""
 
-    PRIORITY_CAMERA_PORTS = [554, 8554, 8000, 8899, 37777, 34567]
+    PRIORITY_CAMERA_PORTS = [554, 80, 8554, 8000, 8899, 37777, 34567]
+    COMMON_RTSP_PATHS = ["/live/0/MAIN", "/stream1", "/h264Preview_01_main", "/Streaming/Channels/101", "/onvif1", "/live/ch0"]
 
     @classmethod
-    async def discover_cameras(cls, timeout_seconds: float = 6.0) -> List[Dict[str, Any]]:
+    async def discover_cameras(
+        cls,
+        timeout_seconds: float = 5.0,
+        custom_ip: Optional[str] = None,
+        custom_subnet: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Runs both ONVIF WS-Discovery and concurrent Subnet Port Scan.
+        Runs ONVIF WS-Discovery and concurrent Subnet/IP Port Scan.
         """
         discovered_map: Dict[str, Dict[str, Any]] = {}
 
+        # 0. If a specific IP is requested, run ultra-fast targeted probe first
+        if custom_ip and custom_ip.strip():
+            ip_clean = custom_ip.strip()
+            direct_cam = await cls._probe_single_ip(ip_clean)
+            if direct_cam:
+                discovered_map[ip_clean] = direct_cam
+                logger.info(f"Targeted Scan: Discovered Camera at {ip_clean}")
+
         # 1. Run ONVIF WS-Discovery concurrently
-        onvif_task = asyncio.create_task(cls._discover_onvif(timeout_seconds=1.5))
+        onvif_task = asyncio.create_task(cls._discover_onvif(timeout_seconds=2.0))
         # 2. Run High-Speed Subnet Port Scan concurrently
-        scan_task = asyncio.create_task(cls._scan_subnet_fast(timeout_per_host=0.4))
+        scan_task = asyncio.create_task(cls._scan_subnet_fast(timeout_per_host=0.4, target_subnet=custom_subnet))
 
         try:
             onvif_results, port_results = await asyncio.gather(onvif_task, scan_task, return_exceptions=True)
@@ -63,7 +78,35 @@ class ONVIFDiscovery:
         return list(discovered_map.values())
 
     @classmethod
-    async def _discover_onvif(cls, timeout_seconds: float = 1.5) -> List[Dict[str, Any]]:
+    async def _probe_single_ip(cls, ip: str) -> Optional[Dict[str, Any]]:
+        """Directly probes a single IP across all camera ports."""
+        loop = asyncio.get_running_loop()
+
+        def do_probe():
+            for port in [554, 80, 8000, 8554, 8899, 37777, 34567]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.6)
+                    res = s.connect_ex((ip, port))
+                    s.close()
+                    if res == 0:
+                        stream_path = "/live/0/MAIN" if port == 554 else "/stream1"
+                        return {
+                            "name": f"Câmera IP ({ip})",
+                            "ip": ip,
+                            "port": port,
+                            "onvif_service_url": f"http://{ip}:80/onvif/device_service",
+                            "default_rtsp": f"rtsp://{ip}:554{stream_path}",
+                            "type": "ONVIF / RTSP Direto",
+                        }
+                except Exception:
+                    pass
+            return None
+
+        return await loop.run_in_executor(None, do_probe)
+
+    @classmethod
+    async def _discover_onvif(cls, timeout_seconds: float = 2.0) -> List[Dict[str, Any]]:
         cameras = []
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.settimeout(timeout_seconds)
@@ -72,10 +115,12 @@ class ONVIFDiscovery:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             probe_bytes = cls.WS_DISCOVERY_PROBE.encode("utf-8")
             
-            try:
-                sock.sendto(probe_bytes, ("239.255.255.250", 3702))
-            except Exception:
-                pass
+            # Send to standard multicast and general broadcast
+            for target_addr in [("239.255.255.250", 3702), ("255.255.255.255", 3702), ("192.168.1.255", 3702), ("192.168.0.255", 3702)]:
+                try:
+                    sock.sendto(probe_bytes, target_addr)
+                except Exception:
+                    pass
 
             loop = asyncio.get_running_loop()
 
@@ -99,7 +144,7 @@ class ONVIFDiscovery:
                             "ip": ip,
                             "port": 80,
                             "onvif_service_url": onvif_url,
-                            "default_rtsp": f"rtsp://{ip}:554/stream1",
+                            "default_rtsp": f"rtsp://{ip}:554/live/0/MAIN",
                             "type": "ONVIF Profile S",
                         })
                     except Exception:
@@ -115,14 +160,31 @@ class ONVIFDiscovery:
         return cameras
 
     @classmethod
-    async def _scan_subnet_fast(cls, timeout_per_host: float = 0.4) -> List[Dict[str, Any]]:
+    async def _scan_subnet_fast(
+        cls,
+        timeout_per_host: float = 0.35,
+        target_subnet: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Scans entire /24 subnet across camera ports in parallel using a thread pool of 200 workers.
+        Scans entire /24 subnets in parallel using a thread pool of 200 workers.
         Finishes in ~2 seconds.
         """
-        local_ip = get_local_ip()
-        parts = local_ip.split(".")
-        subnet_prefix = ".".join(parts[:3]) if len(parts) == 4 else "192.168.1"
+        subnets_to_scan = []
+        if target_subnet and target_subnet.strip():
+            clean_sub = target_subnet.strip().rstrip(".0/24").rstrip(".0")
+            parts = clean_sub.split(".")
+            if len(parts) >= 3:
+                subnets_to_scan.append(".".join(parts[:3]))
+
+        if not subnets_to_scan:
+            local_ip = get_local_ip()
+            parts = local_ip.split(".")
+            main_subnet = ".".join(parts[:3]) if len(parts) == 4 else "192.168.1"
+            subnets_to_scan.append(main_subnet)
+            if main_subnet != "192.168.1":
+                subnets_to_scan.append("192.168.1")
+            if main_subnet != "192.168.0":
+                subnets_to_scan.append("192.168.0")
 
         def test_port(target_ip: str, port: int) -> Optional[Dict[str, Any]]:
             try:
@@ -131,12 +193,12 @@ class ONVIFDiscovery:
                 res = s.connect_ex((target_ip, port))
                 s.close()
                 if res == 0:
-                    stream_path = "/stream" if port == 8554 else "/h264Preview_01_main"
+                    stream_path = "/live/0/MAIN" if port == 554 else "/stream1"
                     return {
                         "name": f"Câmera IP ({target_ip}:{port})",
                         "ip": target_ip,
                         "port": port,
-                        "default_rtsp": f"rtsp://{target_ip}:{port}{stream_path}",
+                        "default_rtsp": f"rtsp://{target_ip}:554{stream_path}",
                         "type": f"Porta {port} Aberta",
                     }
             except Exception:
@@ -148,9 +210,10 @@ class ONVIFDiscovery:
         def run_thread_pool():
             results = []
             targets = [
-                (f"{subnet_prefix}.{host_num}", port)
+                (f"{sub_prefix}.{host_num}", port)
+                for sub_prefix in subnets_to_scan
                 for host_num in range(1, 255)
-                for port in cls.PRIORITY_CAMERA_PORTS
+                for port in [554, 80, 8000, 8554]
             ]
             with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
                 futures = [executor.submit(test_port, ip, port) for ip, port in targets]
@@ -161,3 +224,4 @@ class ONVIFDiscovery:
             return results
 
         return await loop.run_in_executor(None, run_thread_pool)
+
