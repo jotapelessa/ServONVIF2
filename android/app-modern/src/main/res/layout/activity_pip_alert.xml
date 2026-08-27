@@ -4,19 +4,19 @@
     android:id="@+id/pipCardContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    app:cardCornerRadius="14dp"
-    app:cardElevation="16dp"
-    app:cardBackgroundColor="#0F172A"
-    app:cardMaxElevation="20dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="24dp"
+    app:cardBackgroundColor="@color/dark_bg"
+    app:cardMaxElevation="28dp"
     android:clickable="true"
     android:focusable="true">
 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#0F172A">
+        android:background="@color/dark_bg">
 
-        <!-- Live MJPEG Stream Video Player -->
+        <!-- Live Stream Web Video Player -->
         <WebView
             android:id="@+id/pipWebView"
             android:layout_width="match_parent"
@@ -31,18 +31,24 @@
             android:layout_alignParentTop="true"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="#CC020617"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp">
+            android:background="@color/glass_header"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp">
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_live_badge"
+                android:layout_marginEnd="8dp" />
 
             <TextView
                 android:id="@+id/tvCameraTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="🔴 Portão Principal"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
+                android:text="Portão Principal"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 android:singleLine="true"
                 android:ellipsize="end" />
@@ -52,40 +58,58 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="10s"
-                android:textColor="#38BDF8"
+                android:textColor="@color/blue_accent"
                 android:textSize="11sp"
                 android:textStyle="bold"
+                android:fontFamily="monospace"
                 android:layout_marginStart="8dp" />
 
             <TextView
                 android:id="@+id/btnPipClose"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:text="✕"
                 android:gravity="center"
-                android:textColor="#EF4444"
+                android:textColor="@color/red_alert"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:layout_marginStart="10dp"
-                android:background="#33EF4444"
+                android:background="@drawable/btn_tv_action_dark_selector"
                 android:clickable="true"
                 android:focusable="true" />
         </LinearLayout>
 
-        <!-- Bottom Action Bar / Hint -->
+        <!-- Bottom Action Bar / Remote Control Legend -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:orientation="vertical">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@color/glass_header"
+                android:paddingVertical="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="[OK] Tela Cheia • [VOLTAR] Fechar"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <ProgressBar
                 android:id="@+id/pipProgressBar"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:progressTint="#38BDF8"
-                android:progressBackgroundTint="#334155"
+                android:layout_height="3dp"
+                android:progressTint="@color/blue_accent"
+                android:progressBackgroundTint="@color/card_border"
                 android:max="100"
                 android:progress="100" />
         </LinearLayout>
