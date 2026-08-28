@@ -2,7 +2,7 @@
   "expo": {
     "name": "ServONVIF Mobile",
     "slug": "servonvif-mobile",
-    "version": "002.002.131",
+    "version": "002.002.132",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -13,7 +13,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.servonvif.mobile"
+      "bundleIdentifier": "com.servonvif.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Permita o acesso à câmera para ler o QR Code de emparelhamento do ServONVIF."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,14 @@
         "backgroundColor": "#070B14"
       },
       "package": "com.servonvif.mobile",
-      "versionCode": 2002131
+      "versionCode": 2002132,
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "CAMERA",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ]
     },
     "plugins": [
       [

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,19 +9,37 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Dimensions,
 } from "react-native";
-import { Shield, QrCode, ArrowRight, Server, Sparkles, CheckCircle2 } from "lucide-react-native";
+import {
+  Shield,
+  QrCode,
+  ArrowRight,
+  Server,
+  Sparkles,
+  Camera as CameraIcon,
+  X,
+  Zap,
+  ZapOff,
+  RefreshCw,
+} from "lucide-react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { ApiService } from "../services/api";
 import { PairingBundle } from "../types";
+import { MobileLogger } from "../services/mobileLogger";
 import { theme } from "../theme/tokens";
 
 interface AuthScreenProps {
   onLoginSuccess: () => void;
 }
 
+const { width } = Dimensions.get("window");
+const SCAN_AREA_SIZE = width * 0.7;
+
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
-  const [mode, setMode] = useState<"QR_PASTE" | "MANUAL">("QR_PASTE");
+  const [mode, setMode] = useState<"QR_CAMERA" | "QR_PASTE" | "MANUAL">("QR_CAMERA");
   const [rawJsonInput, setRawJsonInput] = useState("");
   const [serverUrlInput, setServerUrlInput] = useState("192.168.1.96:8080");
   const [tokenInput, setTokenInput] = useState("");
@@ -29,7 +47,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleTabChange = (newMode: "QR_PASTE" | "MANUAL") => {
+  // QR Camera Scanner State
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [isScanningActive, setIsScanningActive] = useState(true);
+
+  const handleTabChange = (newMode: "QR_CAMERA" | "QR_PASTE" | "MANUAL") => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch {}
@@ -37,51 +61,84 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     setErrorMsg(null);
   };
 
-  const handlePairFromJson = async () => {
-    if (!rawJsonInput.trim()) {
-      setErrorMsg("Cole a chave ou o código do QR Code gerado no painel web.");
+  const processPairingData = async (dataString: string) => {
+    const trimmed = dataString.trim();
+    if (!trimmed) {
+      setErrorMsg("Nenhum dado recebido do QR Code.");
       return;
     }
 
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {}
-
+    MobileLogger.info("AUTH", `Processando dados de emparelhamento: ${trimmed.slice(0, 40)}...`);
     setIsLoading(true);
     setErrorMsg(null);
+
     try {
       let bundle: PairingBundle;
-      if (rawJsonInput.trim().startsWith("{")) {
-        bundle = JSON.parse(rawJsonInput);
-      } else {
+      if (trimmed.startsWith("{")) {
+        bundle = JSON.parse(trimmed);
+      } else if (trimmed.includes("pair_")) {
+        // Direct pair token
         bundle = {
           app: "ServONVIF_Mobile",
-          token: rawJsonInput.trim(),
+          token: trimmed,
           lan_url: "http://192.168.1.96:8080",
-          tailscale_url: undefined,
           expires_at: Date.now() + 900000,
         };
+      } else {
+        throw new Error("Formato do QR Code não reconhecido pelo ServONVIF.");
       }
 
       await ApiService.pairDeviceWithBundle(bundle, deviceName);
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
+      MobileLogger.info("AUTH", `Emparelhamento concluído com sucesso para ${deviceName}`);
+      setIsScannerOpen(false);
       onLoginSuccess();
     } catch (e: any) {
+      MobileLogger.error("AUTH", `Falha ao emparelhar: ${e.message}`, e);
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } catch {}
       setErrorMsg(e.message || "Falha ao emparelhar com o servidor ServONVIF.");
     } finally {
       setIsLoading(false);
+      setIsScanningActive(true);
     }
+  };
+
+  const handleBarcodeScanned = ({ data }: { data: string }) => {
+    if (!isScanningActive || isLoading) return;
+    setIsScanningActive(false);
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch {}
+
+    processPairingData(data);
+  };
+
+  const openCameraScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const res = await requestCameraPermission();
+      if (!res.granted) {
+        setErrorMsg("Permissão de câmera negada. Permita o acesso nas configurações do Android.");
+        MobileLogger.warn("AUTH", "Permissão de câmera negada pelo usuário.");
+        return;
+      }
+    }
+    setIsScanningActive(true);
+    setIsScannerOpen(true);
   };
 
   const handleManualConnect = async () => {
     let cleanUrl = serverUrlInput.trim();
     if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
       cleanUrl = `http://${cleanUrl}`;
+    }
+    // Auto-append default port 8080 if missing
+    if (!cleanUrl.slice(8).includes(":")) {
+      cleanUrl = `${cleanUrl}:8080`;
     }
 
     try {
@@ -105,6 +162,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       } catch {}
       onLoginSuccess();
     } catch (e: any) {
+      MobileLogger.error("AUTH", `Erro conexão manual: ${e.message}`, e);
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } catch {}
@@ -123,16 +181,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         {/* Brand Hero */}
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <Shield size={34} color={theme.colors.accent} />
+            <Shield size={36} color={theme.colors.accent} />
           </View>
           <Text style={styles.appName}>ServONVIF Mobile</Text>
           <Text style={styles.appTagline}>
-            Acesso ao vivo e inteligente às suas câmeras 5MP via Tailscale Mesh e Wi-Fi Local.
+            Acesso ao vivo e inteligente às câmeras 5MP via Tailscale Mesh e Wi-Fi Local.
           </Text>
         </View>
 
         {/* Tab Switcher */}
         <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabBtn, mode === "QR_CAMERA" && styles.activeTabBtn]}
+            onPress={() => handleTabChange("QR_CAMERA")}
+            activeOpacity={0.8}
+          >
+            <CameraIcon size={14} color={mode === "QR_CAMERA" ? theme.colors.textPrimary : theme.colors.textMuted} />
+            <Text style={[styles.tabText, mode === "QR_CAMERA" && styles.activeTabText]}>
+              Ler QR Code
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.tabBtn, mode === "QR_PASTE" && styles.activeTabBtn]}
             onPress={() => handleTabChange("QR_PASTE")}
@@ -140,7 +209,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           >
             <QrCode size={14} color={mode === "QR_PASTE" ? theme.colors.textPrimary : theme.colors.textMuted} />
             <Text style={[styles.tabText, mode === "QR_PASTE" && styles.activeTabText]}>
-              QR Code / Chave
+              Colar Chave
             </Text>
           </TouchableOpacity>
 
@@ -151,7 +220,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           >
             <Server size={14} color={mode === "MANUAL" ? theme.colors.textPrimary : theme.colors.textMuted} />
             <Text style={[styles.tabText, mode === "MANUAL" && styles.activeTabText]}>
-              Endereço Manual
+              Manual
             </Text>
           </TouchableOpacity>
         </View>
@@ -175,7 +244,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             />
           </View>
 
-          {mode === "QR_PASTE" ? (
+          {mode === "QR_CAMERA" && (
+            <View style={styles.cameraActionBox}>
+              <Text style={styles.helpText}>
+                Aponte a câmera para o QR Code na tela do computador (Ajustes &gt; Dispositivos):
+              </Text>
+              <TouchableOpacity
+                style={styles.scanLauncherBtn}
+                onPress={openCameraScanner}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                <CameraIcon size={24} color="#ffffff" />
+                <Text style={styles.scanLauncherBtnText}>Abrir Leitor de QR Code</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {mode === "QR_PASTE" && (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Chave de Emparelhamento</Text>
               <Text style={styles.helpText}>
@@ -190,8 +276,25 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 multiline
                 numberOfLines={3}
               />
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => processPairingData(rawJsonInput)}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryBtnText}>Conectar e Autorizar</Text>
+                    <ArrowRight size={16} color="#ffffff" />
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
-          ) : (
+          )}
+
+          {mode === "MANUAL" && (
             <>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Endereço do Servidor (LAN ou Tailscale)</Text>
@@ -216,35 +319,93 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                   autoCapitalize="none"
                 />
               </View>
+
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={handleManualConnect}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryBtnText}>Conectar Manualmente</Text>
+                    <ArrowRight size={16} color="#ffffff" />
+                  </>
+                )}
+              </TouchableOpacity>
             </>
           )}
-
-          {/* Connect Action Button */}
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={mode === "QR_PASTE" ? handlePairFromJson : handleManualConnect}
-            disabled={isLoading}
-            activeOpacity={0.85}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" size="small" />
-            ) : (
-              <>
-                <Text style={styles.primaryBtnText}>Conectar e Autorizar</Text>
-                <ArrowRight size={16} color="#ffffff" />
-              </>
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* Security / Tailscale Feature Banner */}
         <View style={styles.guaranteeBox}>
           <Sparkles size={16} color={theme.colors.accent} />
           <Text style={styles.guaranteeText}>
-            Túnel criptografado ponto a ponto. Dispensa a instalação do aplicativo oficial do Tailscale no celular.
+            Túnel criptografado ponto a ponto. Funciona em Wi-Fi local e 4G/5G via Tailscale Mesh.
           </Text>
         </View>
       </ScrollView>
+
+      {/* QR Code Scanner Fullscreen Modal */}
+      <Modal
+        visible={isScannerOpen}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setIsScannerOpen(false)}
+      >
+        <View style={styles.scannerContainer}>
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            enableTorch={torchEnabled}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr"],
+            }}
+            onBarcodeScanned={isScanningActive ? handleBarcodeScanned : undefined}
+          />
+
+          {/* Scanner Header Controls */}
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity
+              style={styles.scannerControlBtn}
+              onPress={() => setIsScannerOpen(false)}
+            >
+              <X size={24} color="#ffffff" />
+            </TouchableOpacity>
+
+            <Text style={styles.scannerTitle}>Escanear ServONVIF</Text>
+
+            <TouchableOpacity
+              style={styles.scannerControlBtn}
+              onPress={() => setTorchEnabled(!torchEnabled)}
+            >
+              {torchEnabled ? <Zap size={24} color="#f59e0b" /> : <ZapOff size={24} color="#ffffff" />}
+            </TouchableOpacity>
+          </View>
+
+          {/* Viewfinder Target Box */}
+          <View style={styles.viewfinderOverlay}>
+            <View style={styles.scanTarget}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </View>
+            <Text style={styles.scannerInstructions}>
+              Centralize o QR Code gerado no Painel Web
+            </Text>
+          </View>
+
+          {isLoading && (
+            <View style={styles.scannerLoadingOverlay}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={styles.scannerLoadingText}>Validando Servidor...</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -264,8 +425,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   iconContainer: {
-    width: 64,
-    height: 64,
+    width: 68,
+    height: 68,
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.accentMuted,
     borderWidth: 1,
@@ -348,7 +509,8 @@ const styles = StyleSheet.create({
   helpText: {
     ...theme.typography.caption,
     color: theme.colors.textMuted,
-    marginBottom: 8,
+    marginBottom: 10,
+    lineHeight: 16,
   },
   input: {
     backgroundColor: theme.colors.background,
@@ -361,8 +523,27 @@ const styles = StyleSheet.create({
     ...theme.typography.body,
   },
   textArea: {
-    height: 80,
+    height: 70,
     textAlignVertical: "top",
+    marginBottom: theme.spacing.md,
+  },
+  cameraActionBox: {
+    paddingVertical: theme.spacing.sm,
+  },
+  scanLauncherBtn: {
+    backgroundColor: "#2563eb",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 15,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.xs,
+    ...theme.shadows.subtle,
+  },
+  scanLauncherBtnText: {
+    color: "#ffffff",
+    ...theme.typography.h3,
   },
   primaryBtn: {
     backgroundColor: "#2563eb",
@@ -396,5 +577,93 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     flex: 1,
     lineHeight: 16,
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  scannerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  scannerTitle: {
+    ...theme.typography.h3,
+    color: "#ffffff",
+  },
+  scannerControlBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewfinderOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scanTarget: {
+    width: SCAN_AREA_SIZE,
+    height: SCAN_AREA_SIZE,
+    position: "relative",
+  },
+  corner: {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderColor: "#3b82f6",
+  },
+  topLeft: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 8,
+  },
+  topRight: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 8,
+  },
+  bottomLeft: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 8,
+  },
+  bottomRight: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 8,
+  },
+  scannerInstructions: {
+    ...theme.typography.captionBold,
+    color: "#ffffff",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 24,
+  },
+  scannerLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  scannerLoadingText: {
+    ...theme.typography.bodyBold,
+    color: "#ffffff",
   },
 });

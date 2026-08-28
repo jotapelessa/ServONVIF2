@@ -92,5 +92,26 @@ def patch():
         with open(app_gradle, "w", encoding="utf-8") as f:
             f.write(content)
 
+    # 4. Patch AndroidManifest.xml for cleartext traffic and hardware camera features
+    manifest_path = os.path.join(mobile_android, "app", "src", "main", "AndroidManifest.xml")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = f.read()
+
+        # Ensure android:usesCleartextTraffic="true" in <application>
+        if 'android:usesCleartextTraffic="true"' not in manifest:
+            manifest = manifest.replace("<application", '<application android:usesCleartextTraffic="true"', 1)
+            print("✅ Injected android:usesCleartextTraffic='true' into AndroidManifest.xml")
+
+        # Ensure CAMERA permission
+        if 'android.permission.CAMERA' not in manifest:
+            manifest = manifest.replace("<manifest", '<manifest\n    xmlns:tools="http://schemas.android.com/tools"', 1)
+            perm_snippet = '\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />\n'
+            manifest = manifest.replace("</manifest>", f"{perm_snippet}</manifest>")
+            print("✅ Injected CAMERA permissions and hardware features into AndroidManifest.xml")
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            f.write(manifest)
+
 if __name__ == "__main__":
     patch()
