@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  TabType, 
-  Camera, 
-  LprDetection, 
-  SecurityEvent, 
-  SystemHealth, 
-  TVSettings 
-} from './types';
+  Tv, 
+  Grid, 
+  Car, 
+  History, 
+  Activity, 
+  Settings, 
+  FlaskConical
+} from 'lucide-react';
 import { 
   INITIAL_CAMERAS, 
   INITIAL_LPR_DETECTIONS, 
@@ -14,6 +15,14 @@ import {
   INITIAL_SYSTEM_HEALTH, 
   INITIAL_SETTINGS 
 } from './data/mockData';
+import { 
+  Camera, 
+  LprDetection, 
+  SecurityEvent, 
+  SystemHealth, 
+  TVSettings, 
+  TabType 
+} from './types';
 import { TopAppBar } from './components/TopAppBar';
 import { HomeTab } from './components/HomeTab';
 import { MosaicGridTab } from './components/MosaicGridTab';
@@ -26,14 +35,13 @@ import { SpotlightFullscreenModal } from './components/SpotlightFullscreenModal'
 import { PictureInPictureFloating } from './components/PictureInPictureFloating';
 import { RemoteControlOverlay } from './components/RemoteControlOverlay';
 import { AndroidCodeExporter } from './components/AndroidCodeExporter';
-import { Camera as CameraIcon, CheckCircle2 } from 'lucide-react';
 import { TvApiService } from './services/apiService';
 
 export default function App() {
   // Navigation & State
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [cameras, setCameras] = useState<Camera[]>(INITIAL_CAMERAS);
-  const [selectedCamera, setSelectedCamera] = useState<Camera>(INITIAL_CAMERAS[0]);
+  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [lprDetections, setLprDetections] = useState<LprDetection[]>(INITIAL_LPR_DETECTIONS);
   const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>(INITIAL_EVENTS);
   const [systemHealth, setSystemHealth] = useState<SystemHealth>(INITIAL_SYSTEM_HEALTH);
@@ -44,14 +52,19 @@ export default function App() {
     async function loadLiveData() {
       try {
         const realCams = await TvApiService.fetchCameras();
+        setCameras(realCams);
         if (realCams.length > 0) {
-          setCameras(realCams);
-          setSelectedCamera((prev) => realCams.find((c) => c.id === prev.id) || realCams[0]);
+          setSelectedCamera((prev) => (prev ? (realCams.find((c) => c.id === prev.id) || realCams[0]) : realCams[0]));
+        } else {
+          setSelectedCamera(null);
         }
+
         const realLpr = await TvApiService.fetchLprDetections();
-        if (realLpr.length > 0) setLprDetections(realLpr);
+        setLprDetections(realLpr);
+
         const realEvts = await TvApiService.fetchEvents();
-        if (realEvts.length > 0) setSecurityEvents(realEvts);
+        setSecurityEvents(realEvts);
+
         const health = await TvApiService.fetchSystemHealth();
         setSystemHealth((prev) => ({ ...prev, ...health }));
       } catch (e) {
@@ -59,7 +72,7 @@ export default function App() {
       }
     }
     loadLiveData();
-    const interval = setInterval(loadLiveData, 8000);
+    const interval = setInterval(loadLiveData, 6000);
     return () => clearInterval(interval);
   }, []);
 
@@ -74,7 +87,7 @@ export default function App() {
   });
 
   // D-pad Spatial Focus tracking
-  const [focusedElementId, setFocusedElementId] = useState<string | null>('hero-btn-fullscreen');
+  const [focusedElementId, setFocusedElementId] = useState<string | null>('hero-btn-watch');
 
   // Handle D-pad element focus
   const handleElementFocus = useCallback((id: string) => {
@@ -86,7 +99,11 @@ export default function App() {
     setSettings((prev) => ({ ...prev, ...newSettings }));
     if (newSettings.pipEnabled !== undefined) {
       if (newSettings.pipEnabled) {
-        setPipCamera(selectedCamera);
+        if ((window as any).AndroidNative?.triggerPiP && selectedCamera) {
+          (window as any).AndroidNative.triggerPiP(selectedCamera.id, selectedCamera.name);
+        } else {
+          setPipCamera(selectedCamera);
+        }
       } else {
         setPipCamera(null);
       }
@@ -97,7 +114,7 @@ export default function App() {
   const handleTakeSnapshot = (cam: Camera) => {
     setSnapshotToast({
       visible: true,
-      text: `Snapshot 5MP salvo: ${cam.name} (${new Date().toLocaleTimeString('pt-BR')})`,
+      text: `Snapshot salvo: ${cam.name} (${new Date().toLocaleTimeString('pt-BR')})`,
     });
     setTimeout(() => {
       setSnapshotToast({ visible: false, text: '' });
@@ -117,176 +134,124 @@ export default function App() {
           d.id === id ? { ...d, ownerName: newOwner, category: newCategory } : d
         );
       }
-      // Add new detection
-      const newEntry: LprDetection = {
-        id,
-        plate: newOwner.split(' ')[0] || 'BRA2E19',
-        plateType: 'mercosul',
-        category: newCategory,
-        vehicleType: 'Carro Cadastrado',
-        model: newOwner,
-        color: 'Prata',
-        confidence: 99.1,
-        timestamp: 'Recém Cadastrado',
-        thumbnailUrl:
-          'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80',
-        ownerName: newOwner,
-        cameraName: 'Garagem & Portão de Entrada',
-        speedKmH: 15,
-        accessStatus: newCategory === 'suspicious' ? 'blocked' : 'authorized',
-      };
-      return [newEntry, ...prev];
+      return prev;
     });
   };
 
-  // Auto-tour (Ronda Automática)
-  useEffect(() => {
-    if (!settings.autoTourActive) return;
-
-    const interval = setInterval(() => {
-      setSelectedCamera((prev) => {
-        const idx = cameras.findIndex((c) => c.id === prev.id);
-        const next = (idx + 1) % cameras.length;
-        return cameras[next];
-      });
-    }, settings.autoTourInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [settings.autoTourActive, settings.autoTourInterval, cameras]);
-
-  // Periodic Telemetry & Network Ping simulation
-  const handleRefreshHealth = () => {
-    const randomLatency = Math.floor(Math.random() * 6) + 6;
-    setSystemHealth((prev) => ({
-      ...prev,
-      latencyMs: randomLatency,
-      cpuUsage: Math.floor(Math.random() * 15) + 20,
-    }));
+  // Refresh System Health manually
+  const handleRefreshHealth = async () => {
+    const health = await TvApiService.fetchSystemHealth();
+    setSystemHealth((prev) => ({ ...prev, ...health }));
   };
 
-  // Clear cache action
   const handleClearCache = () => {
-    setSystemHealth((prev) => ({
-      ...prev,
-      diskFreeGb: +(prev.diskFreeGb + 1.4).toFixed(1),
-    }));
+    setSnapshotToast({
+      visible: true,
+      text: 'Cache de buffers e telemetria limpo com sucesso!',
+    });
+    setTimeout(() => {
+      setSnapshotToast({ visible: false, text: '' });
+    }, 3000);
   };
 
-  // D-pad Remote Control Actions (Leanback Navigation)
-  const handleDpadUp = () => {
-    const focusableElements = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        'button, [tabindex="0"], a, input'
-      )
-    ).filter((el) => el.offsetParent !== null && !el.hasAttribute('disabled'));
-
-    if (focusableElements.length === 0) return;
-    const currentIndex = focusableElements.findIndex(
-      (el) => el.id === focusedElementId || el === document.activeElement
-    );
-    const prevIndex = (currentIndex - 1 + focusableElements.length) % focusableElements.length;
-    const target = focusableElements[prevIndex];
-    target.focus();
-    if (target.id) setFocusedElementId(target.id);
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const handleDpadDown = () => {
-    const focusableElements = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        'button, [tabindex="0"], a, input'
-      )
-    ).filter((el) => el.offsetParent !== null && !el.hasAttribute('disabled'));
-
-    if (focusableElements.length === 0) return;
-    const currentIndex = focusableElements.findIndex(
-      (el) => el.id === focusedElementId || el === document.activeElement
-    );
-    const nextIndex = (currentIndex + 1) % focusableElements.length;
-    const target = focusableElements[nextIndex];
-    target.focus();
-    if (target.id) setFocusedElementId(target.id);
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const handleDpadLeft = () => {
-    handleDpadUp();
-  };
-
-  const handleDpadRight = () => {
-    handleDpadDown();
-  };
-
-  const handleDpadOk = () => {
-    if (focusedElementId) {
-      const el = document.getElementById(focusedElementId);
-      if (el) {
-        el.click();
-      }
-    }
-  };
-
-  const handleDpadBack = () => {
-    if (fullscreenCamera) {
-      setFullscreenCamera(null);
-    } else if (activeTab !== 'home') {
-      setActiveTab('home');
-    }
-  };
-
-  const handleDpadHome = () => {
-    if (fullscreenCamera) setFullscreenCamera(null);
-    setActiveTab('home');
-  };
-
-  // Keyboard navigation binding (Arrow keys, Enter, Esc, 1-6)
+  // =========================================================================
+  // D-PAD & KEYBOARD EVENT HANDLER (Android TV Remote & Physical Keys)
+  // =========================================================================
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user typing in text input
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
-        return;
+      // 1. Direct Number Keys 1-7 for Tabs
+      if (e.key === '1') { e.preventDefault(); setActiveTab('home'); return; }
+      if (e.key === '2') { e.preventDefault(); setActiveTab('mosaic'); return; }
+      if (e.key === '3') { e.preventDefault(); setActiveTab('lpr'); return; }
+      if (e.key === '4') { e.preventDefault(); setActiveTab('recordings'); return; }
+      if (e.key === '5') { e.preventDefault(); setActiveTab('testlab'); return; }
+      if (e.key === '6') { e.preventDefault(); setActiveTab('health'); return; }
+      if (e.key === '7') { e.preventDefault(); setActiveTab('settings'); return; }
+
+      // 2. Escape / Back Button
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (fullscreenCamera) {
+          e.preventDefault();
+          setFullscreenCamera(null);
+          return;
+        }
+        if (pipCamera) {
+          e.preventDefault();
+          setPipCamera(null);
+          return;
+        }
+        if (showRemote) {
+          e.preventDefault();
+          setShowRemote(false);
+          return;
+        }
+        if (showAndroidCode) {
+          e.preventDefault();
+          setShowAndroidCode(false);
+          return;
+        }
       }
 
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        handleDpadUp();
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        handleDpadDown();
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handleDpadLeft();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleDpadRight();
-      } else if (e.key === 'Escape' || e.key === 'Backspace') {
-        e.preventDefault();
-        handleDpadBack();
-      } else if (e.key === '1') {
-        setActiveTab('home');
-      } else if (e.key === '2') {
-        setActiveTab('mosaic');
-      } else if (e.key === '3') {
-        setActiveTab('lpr');
-      } else if (e.key === '4') {
-        setActiveTab('recordings');
-      } else if (e.key === '5') {
-        setActiveTab('testlab');
-      } else if (e.key === '6') {
-        setActiveTab('health');
-      } else if (e.key === '7') {
-        setActiveTab('settings');
+      // 3. Arrow Keys Navigation (D-pad Spatial Traversal)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        const focusableElements = Array.from(
+          document.querySelectorAll('.tv-focus-target')
+        ) as HTMLElement[];
+
+        if (focusableElements.length === 0) return;
+
+        const currentActive = document.activeElement as HTMLElement;
+        const currentIndex = focusableElements.indexOf(currentActive);
+
+        let nextIndex = 0;
+        if (currentIndex !== -1) {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            nextIndex = (currentIndex + 1) % focusableElements.length;
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            nextIndex = (currentIndex - 1 + focusableElements.length) % focusableElements.length;
+          }
+        }
+
+        const target = focusableElements[nextIndex];
+        if (target) {
+          target.focus();
+          setFocusedElementId(target.id || null);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedElementId, fullscreenCamera, activeTab]);
+  }, [fullscreenCamera, pipCamera, showRemote, showAndroidCode]);
+
+  // Remote D-pad Emulation
+  const handleDpadUp = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+  };
+  const handleDpadDown = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+  };
+  const handleDpadLeft = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+  };
+  const handleDpadRight = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  };
+  const handleDpadOk = () => {
+    const active = document.activeElement as HTMLElement;
+    if (active) active.click();
+  };
+  const handleDpadBack = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  };
+  const handleDpadHome = () => {
+    setActiveTab('home');
+  };
 
   return (
-    <div className="min-h-screen bg-[#070B14] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden">
+    <div className="relative flex flex-col min-h-screen bg-[#070B14] text-slate-100 font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden">
       
-      {/* 1. TOP APP BAR (Navigation, Clock, Route Status) */}
+      {/* 1. TOP APP BAR (Responsive & Adaptive) */}
       <TopAppBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -297,13 +262,20 @@ export default function App() {
         onElementFocus={handleElementFocus}
       />
 
+      {/* SNAPSHOT NOTIFICATION TOAST */}
+      {snapshotToast.visible && (
+        <div className="fixed top-20 right-8 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-emerald-500 text-black font-bold text-sm shadow-[0_0_25px_rgba(16,185,129,0.7)] animate-bounce">
+          <span>{snapshotToast.text}</span>
+        </div>
+      )}
+
       {/* 2. MAIN ACTIVE TAB CONTENT */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 w-full">
         {activeTab === 'home' && (
           <HomeTab
             cameras={cameras}
             selectedCamera={selectedCamera}
-            onSelectCamera={setSelectedCamera}
+            onSelectCamera={(cam) => setSelectedCamera(cam)}
             lprDetections={lprDetections}
             securityEvents={securityEvents}
             settings={settings}
@@ -313,11 +285,13 @@ export default function App() {
             onTakeSnapshot={handleTakeSnapshot}
             onPlayRecording={(evt) => {
               const cam = cameras.find((c) => c.id === evt.cameraId) || selectedCamera;
-              setSelectedCamera(cam);
+              if (cam) setSelectedCamera(cam);
               setActiveTab('recordings');
             }}
             onViewLprEvent={(lpr) => {
-              setActiveTab('lpr');
+              const cam = cameras.find((c) => c.name.includes(lpr.cameraName.split(' ')[0])) || selectedCamera;
+              if (cam) setSelectedCamera(cam);
+              setActiveTab('recordings');
             }}
             focusedElementId={focusedElementId}
             onElementFocus={handleElementFocus}
@@ -342,7 +316,7 @@ export default function App() {
             onElementFocus={handleElementFocus}
             onViewPlayback={(lpr) => {
               const cam = cameras.find((c) => c.name.includes(lpr.cameraName.split(' ')[0])) || selectedCamera;
-              setSelectedCamera(cam);
+              if (cam) setSelectedCamera(cam);
               setActiveTab('recordings');
             }}
           />
@@ -353,7 +327,7 @@ export default function App() {
             cameras={cameras}
             events={securityEvents}
             selectedCamera={selectedCamera}
-            onSelectCamera={setSelectedCamera}
+            onSelectCamera={(cam) => setSelectedCamera(cam)}
             focusedElementId={focusedElementId}
             onElementFocus={handleElementFocus}
             onOpenFullscreen={(cam) => setFullscreenCamera(cam)}
@@ -366,13 +340,19 @@ export default function App() {
             systemHealth={systemHealth}
             onSimulateMotion={(camId) => {
               const cam = cameras.find((c) => c.id === camId) || selectedCamera;
-              setSnapshotToast({
-                visible: true,
-                text: `🚨 Movimento Simulado: ${cam.name}`,
-              });
-              setTimeout(() => setSnapshotToast({ visible: false, text: '' }), 3500);
+              if (cam) {
+                setSnapshotToast({
+                  visible: true,
+                  text: `🚨 Movimento Simulado: ${cam.name}`,
+                });
+                setTimeout(() => setSnapshotToast({ visible: false, text: '' }), 3500);
+              }
             }}
-            onTriggerPiP={(cam) => setPipCamera(cam)}
+            onTriggerPiP={(cam) => {
+              if (!(window as any).AndroidNative?.triggerPiP) {
+                setPipCamera(cam);
+              }
+            }}
             focusedElementId={focusedElementId}
             onElementFocus={handleElementFocus}
           />
@@ -412,8 +392,8 @@ export default function App() {
         />
       )}
 
-      {/* 4. FLOATING PICTURE-IN-PICTURE (PiP Android TV) */}
-      {pipCamera && settings.pipEnabled && !fullscreenCamera && (
+      {/* 4. FLOATING PICTURE-IN-PICTURE (Fallback Web apenas quando não houver ponte nativa Android) */}
+      {pipCamera && settings.pipEnabled && !fullscreenCamera && !(window as any).AndroidNative && (
         <PictureInPictureFloating
           camera={pipCamera}
           onClose={() => setPipCamera(null)}
@@ -438,31 +418,6 @@ export default function App() {
       {/* 6. ANDROID TV CODE & ARCHITECTURE EXPORTER */}
       {showAndroidCode && (
         <AndroidCodeExporter onClose={() => setShowAndroidCode(false)} />
-      )}
-
-      {/* 7. SNAPSHOT TOAST NOTIFICATION */}
-      {snapshotToast.visible && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl bg-emerald-950/95 border-2 border-emerald-400 text-emerald-200 font-bold text-sm shadow-[0_0_30px_rgba(52,211,153,0.5)] flex items-center gap-2.5 animate-in slide-in-from-bottom duration-200">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-          <span>{snapshotToast.text}</span>
-        </div>
-      )}
-
-      {/* 8. FLOATING FROSTED HUD TELEMETRY PILL */}
-      {!fullscreenCamera && (
-        <div className="fixed bottom-6 right-8 flex items-center gap-4 z-30 pointer-events-none select-none">
-          <div className="flex items-center gap-4 bg-black/40 backdrop-blur-2xl border border-white/10 rounded-full px-5 py-2.5 shadow-2xl">
-            <div className="flex flex-col text-right">
-              <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest font-mono">NVR Storage</span>
-              <span className="text-xs font-bold text-white font-mono">{systemHealth.diskFreeGb} GB LIVRES</span>
-            </div>
-            <div className="w-[1px] h-6 bg-white/10" />
-            <div className="flex flex-col text-right">
-              <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest font-mono">Server Uptime</span>
-              <span className="text-xs font-bold text-white font-mono">{systemHealth.uptime}</span>
-            </div>
-          </div>
-        </div>
       )}
 
     </div>

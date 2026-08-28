@@ -193,13 +193,14 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
     }, 4500);
   };
 
-  // 4. Test PiP
+  // 4. Test PiP (Unificado: Nativo exclusivo no Android TV, Web apenas em fallback)
   const handleTestPiP = () => {
-    const cam = cameras.find((c) => c.id === selectedCameraId) || cameras[0];
+    const cam = cameras.find((c) => c.id === selectedCameraId) || cameras[0] || { id: '1', name: 'Câmera Principal' };
     if ((window as any).AndroidNative?.triggerPiP) {
       (window as any).AndroidNative.triggerPiP(cam.id, cam.name);
+    } else {
+      onTriggerPiP(cam);
     }
-    onTriggerPiP(cam);
     addLog('info', 'PIP_ALERT', `Janela flutuante Picture-in-Picture ativada para: ${cam.name}`);
   };
 
