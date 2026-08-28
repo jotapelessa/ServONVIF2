@@ -187,8 +187,13 @@ rm -rf "$WORKSPACE_DIR/mobile/android/app/build/intermediates" 2>/dev/null || tr
 echo "=================================================="
 echo "🎉 Compilação Concluída com Sucesso!"
 echo "=================================================="
-echo "Os APKs gerados estão na pasta 'build-outputs/':"
-ls -lh "$OUTPUT_DIR"
+echo "📁 CAMINHO LOCAL DOS ARQUIVOS NO CODESPACES:"
+echo "   /workspaces/ServONVIF2/build-outputs/ServONVIF_TV_Classic_v${APP_VER}.apk"
+echo "   /workspaces/ServONVIF2/build-outputs/ServONVIF_TV_Netflix_v${APP_VER}.apk"
+echo "   /workspaces/ServONVIF2/build-outputs/ServONVIF_Mobile_v${APP_VER}.apk"
+echo ""
+echo "💡 DICA: No painel esquerdo do Codespaces, clique na pasta 'build-outputs',"
+echo "   clique com o BOTÃO DIREITO no APK desejado e selecione 'Download...' para baixar no seu computador."
 echo "=================================================="
 
 # 4. Publicar / Atualizar Release no GitHub
@@ -215,7 +220,13 @@ if command -v gh &> /dev/null; then
 - 🎬 **ServONVIF_TV_Netflix_v${APP_VER}.apk**: Nova versão com UI/UX cinematográfica **Estilo Netflix** (Hero Billboard, trilhos de câmeras, foco D-pad glow), mantendo 100% das abas, Mosaico e PiP.
 - 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem Metro) com Tailscale Funnel, streaming Zero-Flicker e feed LPR de placas." || true
         fi
-        echo "🌟 GitHub Release $RELEASE_TAG processada com sucesso!"
+        echo "=================================================="
+        echo "🌐 LINKS DIRETOS PARA DOWNLOAD NO GITHUB RELEASES:"
+        echo "   Página Oficial: https://github.com/jotapelessa/ServONVIF2/releases/tag/${RELEASE_TAG}"
+        echo "   • TV Clássico : https://github.com/jotapelessa/ServONVIF2/releases/download/${RELEASE_TAG}/ServONVIF_TV_Classic_v${APP_VER}.apk"
+        echo "   • TV Netflix  : https://github.com/jotapelessa/ServONVIF2/releases/download/${RELEASE_TAG}/ServONVIF_TV_Netflix_v${APP_VER}.apk"
+        echo "   • Mobile App  : https://github.com/jotapelessa/ServONVIF2/releases/download/${RELEASE_TAG}/ServONVIF_Mobile_v${APP_VER}.apk"
+        echo "=================================================="
     else
         echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
     fi
