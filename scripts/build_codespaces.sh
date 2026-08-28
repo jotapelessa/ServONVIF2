@@ -165,17 +165,23 @@ if command -v gh &> /dev/null; then
     echo "📦 Atualizando Release no GitHub..."
     RELEASE_TAG="v${APP_VER}"
     if gh auth status >/dev/null 2>&1; then
-        gh release upload "$RELEASE_TAG" \
-            "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
-            "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
-            --clobber 2>/dev/null || \
-        gh release create "$RELEASE_TAG" \
-            "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
-            "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
-            --title "ServONVIF $RELEASE_TAG - TV & Mobile Apps" \
-            --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
+        if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "🔄 Release $RELEASE_TAG já existe. Enviando novos APKs..."
+            gh release upload "$RELEASE_TAG" \
+                "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
+                --clobber || true
+        else
+            echo "✨ Criando nova Release $RELEASE_TAG no GitHub..."
+            gh release create "$RELEASE_TAG" \
+                "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
+                --title "ServONVIF $RELEASE_TAG - TV & Mobile Apps" \
+                --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
 - 📺 **ServONVIF_TV_v${APP_VER}.apk**: Aplicativo para Smart TV / Android TV Box com interface cinematográfica Netflix-style, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
-- 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release $RELEASE_TAG atualizada com sucesso!" || echo "ℹ️ Release pronta."
+- 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." || true
+        fi
+        echo "🌟 GitHub Release $RELEASE_TAG processada com sucesso!"
     else
         echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
     fi
