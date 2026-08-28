@@ -47,8 +47,25 @@ export default function App() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth>(INITIAL_SYSTEM_HEALTH);
   const [settings, setSettings] = useState<TVSettings>(INITIAL_SETTINGS);
 
-  // Connect to live ServONVIF Backend
+  // Connect to live ServONVIF Backend & Native Bridge Sync
   useEffect(() => {
+    // Read initial native PiP configuration if on Android TV
+    try {
+      if ((window as any).AndroidNative?.getPipConfig) {
+        const nativePip = JSON.parse((window as any).AndroidNative.getPipConfig());
+        if (nativePip.size) {
+          setSettings((prev) => ({
+            ...prev,
+            pipSize: nativePip.size,
+            pipPosition: nativePip.position,
+            pipDurationSeconds: nativePip.durationSeconds || 10,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Native PiP config read failed:', e);
+    }
+
     async function loadLiveData() {
       try {
         const realCams = await TvApiService.fetchCameras();
@@ -94,9 +111,20 @@ export default function App() {
     setFocusedElementId(id);
   }, []);
 
-  // Update Settings
+  // Update Settings (with Instant Native Bridge Synchronization)
   const handleUpdateSettings = (newSettings: Partial<TVSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      if ((window as any).AndroidNative?.updatePipConfig) {
+        (window as any).AndroidNative.updatePipConfig(
+          updated.pipSize || 'mini',
+          updated.pipPosition || 'top_right',
+          updated.pipDurationSeconds || 10
+        );
+      }
+      return updated;
+    });
+
     if (newSettings.pipEnabled !== undefined) {
       if (newSettings.pipEnabled) {
         if ((window as any).AndroidNative?.triggerPiP && selectedCamera) {

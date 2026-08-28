@@ -81,6 +81,9 @@ export interface SystemHealth {
 export interface TVSettings {
   streamQuality: 'auto' | '5mp' | '1080p' | '720p';
   pipEnabled: boolean;
+  pipSize: 'micro' | 'mini' | 'compact' | 'medium' | 'large';
+  pipPosition: 'top_right' | 'top_left' | 'bottom_right' | 'bottom_left' | 'center';
+  pipDurationSeconds: number;
   dpadSensitivity: 'normal' | 'fast' | 'cinematic';
   audioAlerts: boolean;
   autoTourInterval: number; // in seconds

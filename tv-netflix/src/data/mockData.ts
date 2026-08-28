@@ -27,6 +27,9 @@ export const INITIAL_SYSTEM_HEALTH: SystemHealth = {
 export const INITIAL_SETTINGS: TVSettings = {
   streamQuality: '5mp',
   pipEnabled: true,
+  pipSize: 'mini',
+  pipPosition: 'top_right',
+  pipDurationSeconds: 10,
   dpadSensitivity: 'fast',
   audioAlerts: true,
   autoTourInterval: 10,

@@ -273,6 +273,30 @@ class TvMainActivity : AppCompatActivity() {
                 }.toString()
             }
         }
+
+        @JavascriptInterface
+        fun updatePipConfig(size: String, position: String, durationSeconds: Int) {
+            mainHandler.post {
+                try {
+                    configRepo.pipSize = size.uppercase()
+                    configRepo.pipPosition = position.uppercase()
+                    configRepo.pipDurationSeconds = durationSeconds
+                    Log.i("ServOnvifNetflixTV", "PiP Config Updated: size=$size, pos=$position, duration=${durationSeconds}s")
+                } catch (e: Exception) {
+                    Log.e("ServOnvifNetflixTV", "Failed to update PiP config: ${e.message}")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun getPipConfig(): String {
+            val json = JSONObject().apply {
+                put("size", configRepo.pipSize.lowercase())
+                put("position", configRepo.pipPosition.lowercase())
+                put("durationSeconds", configRepo.pipDurationSeconds)
+            }
+            return json.toString()
+        }
     }
 
     private fun triggerNativeNotification(title: String, message: String) {
