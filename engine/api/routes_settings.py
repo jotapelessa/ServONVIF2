@@ -23,6 +23,7 @@ from engine.services.retention_worker import retention_worker
 from engine.services.backup_service import build_full_backup_dict, dispatch_telegram_backup, _json_serial
 from engine.core.log_buffer import log_buffer
 from engine.core.camera_manager import camera_manager
+from engine.core.power_manager import power_manager
 from engine.api.websocket_hub import ws_hub
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -747,8 +748,31 @@ async def shutdown_server():
     """
     def _delayed_shutdown():
         import time, os
-        time.sleep(0.6)
-        logger.info("🛑 ServONVIF Engine shutting down cleanly by user request...")
+        time.sleep(0.4)
+        logger.info("🛑 ServONVIF Engine initiating graceful shutdown sequence...")
+        try:
+            # 1. Stop all video streams, background grabber and processor threads
+            logger.info("Stopping all camera video pipelines & AI threads...")
+            camera_manager.stop_all()
+        except Exception as e:
+            logger.error(f"Error stopping cameras: {e}")
+
+        try:
+            # 2. Stop retention worker
+            logger.info("Stopping RetentionWorker...")
+            retention_worker.stop()
+        except Exception as e:
+            logger.error(f"Error stopping retention worker: {e}")
+
+        try:
+            # 3. Release power management assertion (caffeinate / sleep prevention)
+            logger.info("Releasing power management locks...")
+            power_manager.stop()
+        except Exception as e:
+            logger.error(f"Error stopping power manager: {e}")
+
+        time.sleep(0.3)
+        logger.info("🛑 ServONVIF Engine shutdown complete. Exiting process.")
         os._exit(0)
 
     import threading
@@ -766,8 +790,17 @@ async def restart_server():
     def _delayed_restart():
         import time, os, sys, subprocess
         from pathlib import Path
-        time.sleep(0.8)
-        logger.info("🔄 ServONVIF Engine restarting...")
+        time.sleep(0.5)
+        logger.info("🔄 ServONVIF Engine preparing restart...")
+        try:
+            camera_manager.stop_all()
+            retention_worker.stop()
+            power_manager.stop()
+        except Exception as e:
+            logger.error(f"Error during pre-restart cleanup: {e}")
+
+        time.sleep(0.3)
+        logger.info("🔄 ServONVIF Engine relaunching process...")
         try:
             root_dir = str(Path(__file__).resolve().parent.parent.parent)
             env = os.environ.copy()
