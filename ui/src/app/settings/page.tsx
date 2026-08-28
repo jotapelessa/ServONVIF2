@@ -1416,7 +1416,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
               className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
               title="Versão Oficial do Sistema (Formato 9 dígitos: 000.000.000)"
             >
-              v{serverInfo?.version || "2.2.0"}
+              v{serverInfo?.version || "002.002.122"}
             </span>
           </h1>
         </div>

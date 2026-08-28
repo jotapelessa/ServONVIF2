@@ -9,8 +9,14 @@ WORKSPACE_DIR="$(pwd)"
 OUTPUT_DIR="$WORKSPACE_DIR/build-outputs"
 mkdir -p "$OUTPUT_DIR"
 
-TV_VERSION="v2.2.0"
-MOBILE_VERSION="v2.2.0"
+# 0. Sincronizar Sistema de Versionamento 9 Dígitos (000.000.000)
+python3 "$WORKSPACE_DIR/scripts/sync_version.py"
+if [ -f "$OUTPUT_DIR/version.env" ]; then
+    source "$OUTPUT_DIR/version.env"
+fi
+
+TV_VERSION="v${APP_VERSION:-002.002.058}"
+MOBILE_VERSION="v${APP_VERSION:-002.002.058}"
 export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
@@ -155,18 +161,19 @@ echo "=================================================="
 # 4. Publicar / Atualizar Release no GitHub
 if command -v gh &> /dev/null; then
     echo "📦 Atualizando Release no GitHub..."
+    RELEASE_TAG="v${APP_VERSION}"
     if gh auth status >/dev/null 2>&1; then
-        gh release upload "v2.2.0" \
+        gh release upload "$RELEASE_TAG" \
             "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
             "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
             --clobber 2>/dev/null || \
-        gh release create "v2.2.0" \
+        gh release create "$RELEASE_TAG" \
             "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
             "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
-            --title "ServONVIF v2.2.0 - TV & Mobile Apps" \
-            --notes "🚀 **Lançamento Oficial ServONVIF v2.2.0**
-- 📺 **ServONVIF_TV_v2.2.0.apk**: Aplicativo para Smart TV / Android TV Box com nova interface cinematográfica, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
-- 📱 **ServONVIF_Mobile_v2.2.0.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release atualizada com sucesso!" || echo "ℹ️ Release pronta."
+            --title "ServONVIF $RELEASE_TAG - TV & Mobile Apps" \
+            --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
+- 📺 **ServONVIF_TV_${TV_VERSION}.apk**: Aplicativo para Smart TV / Android TV Box com interface cinematográfica Netflix-style, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
+- 📱 **ServONVIF_Mobile_${MOBILE_VERSION}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release $RELEASE_TAG atualizada com sucesso!" || echo "ℹ️ Release pronta."
     else
         echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
     fi

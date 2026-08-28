@@ -11,8 +11,8 @@ android {
         applicationId = "com.servonvif.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 56
-        versionName = "2.2.0"
+        versionCode = 2002122
+        versionName = "002.002.122"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
