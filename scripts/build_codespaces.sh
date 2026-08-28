@@ -123,10 +123,9 @@ CI=1 npx expo prebuild --platform android --clean --no-install
 # Aplicar patches de compatibilidade (cameraview maven repo + buildConfig + memory guards)
 python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
 
-# Garantir local.properties com sdk.dir e ndk.dir
+# Garantir local.properties com sdk.dir
 cat << EOF > "$WORKSPACE_DIR/mobile/android/local.properties"
 sdk.dir=$ANDROID_HOME
-ndk.dir=$ANDROID_HOME/ndk/26.1.10909125
 EOF
 
 cd "$WORKSPACE_DIR/mobile/android"
@@ -152,14 +151,17 @@ echo "=================================================="
 if command -v gh &> /dev/null; then
     echo "📦 Atualizando Release no GitHub..."
     if gh auth status >/dev/null 2>&1; then
+        gh release upload "v2.1.0" \
+            "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
+            "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
+            --clobber 2>/dev/null || \
         gh release create "v2.1.0" \
             "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
             "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
             --title "ServONVIF v2.1.0 - TV & Mobile Apps" \
             --notes "🚀 **Lançamento Oficial ServONVIF v2.1.0**
 - 📺 **ServONVIF_TV_v2.1.0.apk**: Aplicativo para Smart TV / TV Box com PiP overlay e controle remoto D-pad.
-- 📱 **ServONVIF_Mobile_v1.0.0.apk**: Aplicativo para Smartphone com Tailscale, streaming 5MP ao vivo e feed LPR de placas." \
-            --clobber && echo "🌟 GitHub Release atualizada com sucesso!" || echo "ℹ️ Release já existente ou criada."
+- 📱 **ServONVIF_Mobile_v1.0.0.apk**: Aplicativo para Smartphone com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release atualizada com sucesso!" || echo "ℹ️ Release pronta."
     else
         echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
     fi

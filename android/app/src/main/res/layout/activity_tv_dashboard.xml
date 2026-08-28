@@ -168,7 +168,7 @@
             android:clipChildren="false"
             android:clipToPadding="false"
             android:fillViewport="true"
-            android:visibility="VISIBLE">
+            android:visibility="visible">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -420,7 +420,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:visibility="GONE">
+            android:visibility="gone">
 
             <!-- Mosaic Action Toolbar -->
             <LinearLayout
@@ -502,7 +502,7 @@
                     android:layout_height="match_parent"
                     android:orientation="vertical"
                     android:gravity="center"
-                    android:visibility="GONE">
+                    android:visibility="gone">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -532,7 +532,7 @@
             android:id="@+id/sectionTests"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="GONE"
+            android:visibility="gone"
             android:fillViewport="true">
 
             <LinearLayout
@@ -711,7 +711,7 @@
             android:id="@+id/sectionStatus"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="GONE"
+            android:visibility="gone"
             android:fillViewport="true">
 
             <LinearLayout
