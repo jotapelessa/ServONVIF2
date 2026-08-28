@@ -64,6 +64,9 @@ async def get_connection_info():
         tailscale_url = tailscale_ip_url
 
     funnel_url = ts_status.get("funnel_url")
+    if not funnel_url and magicdns_name:
+        clean_funnel = magicdns_name.replace("http://", "").replace("https://", "").split(":")[0]
+        funnel_url = f"https://{clean_funnel}"
 
     return {
         "lan_ip": local_ip,
@@ -72,7 +75,7 @@ async def get_connection_info():
         "tailscale_ip_url": tailscale_ip_url,
         "tailscale_url": tailscale_url,
         "funnel_url": funnel_url,
-        "is_funnel_active": ts_status.get("is_funnel_active", False),
+        "is_funnel_active": ts_status.get("is_funnel_active", False) or bool(funnel_url),
         "magicdns_hostname": magicdns_name,
         "is_tailscale_running": ts_status.get("is_running", False),
         "timestamp": datetime.utcnow().isoformat(),

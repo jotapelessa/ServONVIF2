@@ -107,15 +107,17 @@ export class ApiService {
   public static sanitizeUrl(rawUrl: string): string {
     if (!rawUrl) return "";
     let clean = rawUrl.trim().replace(/\/+$/, "");
-    // Always convert https to http for port 8080 or Tailscale mesh hostnames
-    if (clean.includes(":8080") || clean.includes(".ts.net") || clean.includes("100.")) {
-      if (clean.startsWith("https://")) {
-        clean = clean.replace("https://", "http://");
-      }
+
+    // If it's explicitly a secure HTTPS URL (like Tailscale Funnel or Cloudflare Tunnel), preserve HTTPS without port
+    if (clean.startsWith("https://")) {
+      return clean;
     }
-    if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+
+    // Direct IP or local port 8080 mesh node
+    if (!clean.startsWith("http://")) {
       clean = `http://${clean}`;
     }
+
     const parts = clean.split("/");
     const hostPort = parts[2] || "";
     if (!hostPort.includes(":")) {
@@ -147,13 +149,14 @@ export class ApiService {
     message: string;
   }> {
     const config = await StorageService.getConnectionConfig();
-    if (!config || (!config.tailscale_url && !config.tailscale_ip_url)) {
-      const msg = "Endereço Tailscale não configurado no smartphone.";
+    if (!config || (!config.funnel_url && !config.tailscale_url && !config.tailscale_ip_url)) {
+      const msg = "Endereço Tailscale / Funnel não configurado no smartphone.";
       MobileLogger.warn("TAILSCALE_TEST", msg);
       return { success: false, latencyMs: -1, url: "N/A", message: msg };
     }
 
     const targets = [
+      config.funnel_url ? this.sanitizeUrl(config.funnel_url) : null,
       config.tailscale_url ? this.sanitizeUrl(config.tailscale_url) : null,
       config.tailscale_ip_url ? this.sanitizeUrl(config.tailscale_ip_url) : null,
     ].filter(Boolean) as string[];
