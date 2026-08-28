@@ -312,7 +312,9 @@ class TvMainActivity : AppCompatActivity() {
                         put("type", event.type)
                         put("camera_id", event.cameraId)
                         put("camera_name", event.cameraName)
-                        put("title", event.title)
+                        put("score", event.score)
+                        put("timestamp", event.timestamp)
+                        put("thumbnail_url", event.thumbnailUrl ?: "")
                     }
                     val jsCode = "if (window.__onNativeWsEvent) { window.__onNativeWsEvent($eventObj); }"
                     webView.evaluateJavascript(jsCode, null)
