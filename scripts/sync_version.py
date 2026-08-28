@@ -6,8 +6,15 @@ from pathlib import Path
 
 VERSION_MAJOR = 2
 VERSION_MINOR = 2
+BASE_BUILD_COUNT = 142
 
 def get_git_count(repo_dir: Path) -> int:
+    try:
+        # Check if shallow and unshallow if possible
+        subprocess.run(["git", "fetch", "--unshallow"], cwd=repo_dir, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=4.0)
+    except Exception:
+        pass
+
     try:
         out = subprocess.check_output(
             ["git", "rev-list", "--count", "HEAD"],
@@ -15,9 +22,10 @@ def get_git_count(repo_dir: Path) -> int:
             stderr=subprocess.DEVNULL,
             timeout=2.0
         )
-        return int(out.decode().strip())
+        count = int(out.decode().strip())
+        return max(count, BASE_BUILD_COUNT)
     except Exception:
-        return 58
+        return BASE_BUILD_COUNT
 
 def sync_all():
     repo_dir = Path(__file__).resolve().parent.parent

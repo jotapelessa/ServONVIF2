@@ -9,16 +9,21 @@ WORKSPACE_DIR="$(pwd)"
 OUTPUT_DIR="$WORKSPACE_DIR/build-outputs"
 mkdir -p "$OUTPUT_DIR"
 
+# 0. Sincronizar Código com o GitHub mais recente no Codespaces
+echo "🔄 Sincronizando repositório com o GitHub..."
+git fetch --unshallow 2>/dev/null || true
+git pull origin main 2>/dev/null || true
+
 # Limpar APKs residuais anteriores para garantir nomes de versões sempre atualizados
 rm -f "$OUTPUT_DIR"/*.apk 2>/dev/null || true
 
-# 0. Sincronizar Sistema de Versionamento Contínuo de 9 Dígitos (000.000.000)
+# Sincronizar Sistema de Versionamento Contínuo de 9 Dígitos (000.000.000)
 python3 "$WORKSPACE_DIR/scripts/sync_version.py"
 if [ -f "$OUTPUT_DIR/version.env" ]; then
     source "$OUTPUT_DIR/version.env"
 fi
 
-APP_VER="${APP_VERSION:-002.002.122}"
+APP_VER="${APP_VERSION:-002.002.142}"
 export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
