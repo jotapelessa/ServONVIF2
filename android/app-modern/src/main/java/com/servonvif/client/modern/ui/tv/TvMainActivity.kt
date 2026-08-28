@@ -102,7 +102,6 @@ class TvMainActivity : AppCompatActivity() {
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     Log.w("ServOnvifNetflixTV", "WebView Error on $url: ${error?.description}")
-                    // Fallback to local asset if remote /tv failed
                     if (request?.isForMainFrame == true && url?.startsWith("http") == true) {
                         Log.i("ServOnvifNetflixTV", "Falling back to local asset bundled Netflix UI...")
                         webView.loadUrl("file:///android_asset/tv-netflix/index.html")
@@ -168,14 +167,23 @@ class TvMainActivity : AppCompatActivity() {
                 Log.i("ServOnvifNetflixTV", "Native bridge triggerPiP: $cameraId - $cameraName")
                 try {
                     val streamUrl = "${configRepo.httpBaseUrl}/api/mjpeg/$cameraId"
+                    val camIdInt = cameraId.toIntOrNull() ?: cameraId.hashCode()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this@TvMainActivity)) {
-                        FloatingOverlayManager.show(this@TvMainActivity, cameraId.hashCode(), cameraName, streamUrl)
+                        val floatingManager = FloatingOverlayManager(this@TvMainActivity)
+                        floatingManager.showFloatingAlert(
+                            cameraId = camIdInt,
+                            cameraName = cameraName,
+                            mjpegUrl = streamUrl,
+                            score = 0.95f,
+                            durationSeconds = configRepo.pipDurationSeconds
+                        )
                     } else {
                         val intent = Intent(this@TvMainActivity, PiPAlertActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            putExtra(PiPAlertActivity.EXTRA_CAMERA_NAME, cameraName)
-                            putExtra(PiPAlertActivity.EXTRA_CAMERA_ID, cameraId)
-                            putExtra(PiPAlertActivity.EXTRA_STREAM_URL, streamUrl)
+                            putExtra("EXTRA_CAMERA_NAME", cameraName)
+                            putExtra("EXTRA_CAMERA_ID", camIdInt)
+                            putExtra("EXTRA_MJPEG_URL", streamUrl)
+                            putExtra("EXTRA_DURATION", configRepo.pipDurationSeconds)
                         }
                         startActivity(intent)
                     }
@@ -297,23 +305,26 @@ class TvMainActivity : AppCompatActivity() {
 
     private fun startLiveWebSocketListener() {
         try {
-            liveWsManager?.disconnect()
-            liveWsManager = WebSocketManager(configRepo).apply {
-                setOnEventReceivedListener { event ->
-                    mainHandler.post {
-                        val jsCode = "if (window.__onNativeWsEvent) { window.__onNativeWsEvent(${JSONObject(mapOf("type" to event.eventType, "camera_id" to event.cameraId, "title" to event.title))}); }"
-                        webView.evaluateJavascript(jsCode, null)
+            liveWsManager?.stop()
+            liveWsManager = WebSocketManager(this) { event ->
+                mainHandler.post {
+                    val eventObj = JSONObject().apply {
+                        put("type", event.type)
+                        put("camera_id", event.cameraId)
+                        put("camera_name", event.cameraName)
+                        put("title", event.title)
                     }
+                    val jsCode = "if (window.__onNativeWsEvent) { window.__onNativeWsEvent($eventObj); }"
+                    webView.evaluateJavascript(jsCode, null)
                 }
-                connect()
             }
+            liveWsManager?.start()
         } catch (e: Exception) {
             Log.e("ServOnvifNetflixTV", "WebSocket setup failed: ${e.message}")
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Allow WebView to process D-pad navigation keys
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP,
             KeyEvent.KEYCODE_DPAD_DOWN,
@@ -337,6 +348,6 @@ class TvMainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        liveWsManager?.disconnect()
+        liveWsManager?.stop()
     }
 }
