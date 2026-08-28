@@ -4,7 +4,7 @@ import time
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Tuple
 import cv2
 import numpy as np
 from loguru import logger
@@ -25,7 +25,7 @@ class StreamIngestor:
     Dedicated Zero-Latency worker for IP Camera streams:
     - Decoupled Ultra-Low-Latency Frame Grabber (always consumes latest RTSP frame, eliminating buffering lag).
     - Asynchronous Motion Detection & Instant WebSocket Alert Dispatch (sub-100ms response time).
-    - Periodic Background LPR Inspection for parked/stationary vehicles and live motion ANPR.
+    - Continuous RAM Ring Buffer with high-compatibility H.264 MP4 export.
     - Asynchronous disk writes & Telegram notifications in background workers.
     """
     def __init__(self, camera: Camera, db_save_event_cb: Callable):
@@ -114,14 +114,13 @@ class StreamIngestor:
         )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
-        # High-stability, zero-delay TCP RTSP capture options
+        # High-stability TCP RTSP capture with sufficient buffer size for 5MP keyframes
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
             "rtsp_transport;tcp|"
-            "buffer_size;102400|"
-            "max_delay;50000|"
-            "flags;low_delay|"
-            "fflags;nobuffer|"
-            "stimeout;2500000"
+            "analyzeduration;2000000|"
+            "probesize;2000000|"
+            "max_delay;500000|"
+            "stimeout;3000000"
         )
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -154,13 +153,18 @@ class StreamIngestor:
 
             reconnect_backoff = 2.0
             frames_since_connect += 1
-            # Skip the first 3 frames on fresh connection to allow HEVC/H.264 I-frame POC sync
-            if frames_since_connect < 4:
+            # Skip the first 4 frames on fresh connection to allow full I-frame POC sync
+            if frames_since_connect < 5:
+                continue
+
+            # Quality check: skip corrupted/gray uninitialized macroblock frames (stddev < 4.0)
+            if np.std(frame) < 4.0:
                 continue
 
             now = time.time()
+            cloned_frame = frame.copy()
             with self._frame_lock:
-                self._latest_frame = frame
+                self._latest_frame = cloned_frame
                 self._latest_frame_time = now
 
             self._new_frame_event.set()
@@ -194,11 +198,11 @@ class StreamIngestor:
             with self._frame_lock:
                 if self._latest_frame is None:
                     continue
-                frame = self._latest_frame
+                frame = self._latest_frame.copy()
                 frame_time = self._latest_frame_time
 
             # 1. Update circular RAM ring buffer & MJPEG broadcast
-            self.ring_buffer.push(frame, is_keyframe=True, timestamp=frame_time)
+            self.ring_buffer.push(frame.copy(), is_keyframe=True, timestamp=frame_time)
             mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
 
             # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
@@ -346,15 +350,37 @@ class StreamIngestor:
         self._last_motion_time = frame_time
         now = datetime.utcnow()
 
+        snap_frame = current_frame.copy()
+        bboxes_copy = list(bboxes)
+
         # Trigger immediate LPR on motion start
-        self._trigger_lpr_scan(current_frame, is_motion=True, motion_bboxes=bboxes)
+        self._trigger_lpr_scan(snap_frame, is_motion=True, motion_bboxes=bboxes_copy)
 
         # Retrieve pre-event window with exact timestamps (if enabled in settings)
         include_pre = getattr(settings, "TELEGRAM_INCLUDE_PREBUFFER", True)
         pre_frames_with_ts = self.ring_buffer.get_window_with_timestamps(pre_seconds=settings.PRE_EVENT_SECONDS) if include_pre else []
         
-        # Initialize event frames with pre-buffer + current frame
-        self._event_frames = list(pre_frames_with_ts) + [(current_frame.copy(), frame_time)]
+        # Standardize pre-buffer frames to ensure no dimension or color corruption
+        normalized_pre = []
+        for p_frame, p_ts in pre_frames_with_ts:
+            if p_frame is not None and p_frame.size > 0 and np.std(p_frame) >= 4.0:
+                h, w = p_frame.shape[:2]
+                if w > 1920:
+                    scale = 1920.0 / w
+                    p_frame_res = cv2.resize(p_frame, (1920, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+                else:
+                    p_frame_res = p_frame.copy()
+                normalized_pre.append((p_frame_res, p_ts))
+
+        # Scale snap_frame for event recording sequence
+        h, w = snap_frame.shape[:2]
+        if w > 1920:
+            scale = 1920.0 / w
+            rec_snap = cv2.resize(snap_frame, (1920, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+        else:
+            rec_snap = snap_frame.copy()
+
+        self._event_frames = list(normalized_pre) + [(rec_snap, frame_time)]
 
         # 1. INSTANT NOTIFICATION TO WEBSOCKET CLIENTS
         time_str = now.strftime("%H-%M-%S")
@@ -380,16 +406,16 @@ class StreamIngestor:
             )
             logger.info(f"⚡ INSTANT WebSocket Alert Broadcasted for [{self.camera.id}] {self.camera.name} (Score: {score:.2f})")
 
-        # 2. ASYNC BACKGROUND WORKER FOR THUMBNAIL & TELEGRAM (Non-blocking)
+        # 2. ASYNC BACKGROUND WORKER FOR THUMBNAIL & TELEGRAM (Guaranteed Clean Frame)
         self._current_thumb_path = ""
 
-        def _save_and_notify_bg():
+        def _save_and_notify_bg(snap=snap_frame, bx=bboxes_copy):
             try:
                 thumb_path = MediaWriter.save_thumbnail(
                     camera_id=self.camera.id,
                     timestamp=now,
-                    frame_bgr=current_frame,
-                    bounding_boxes=bboxes
+                    frame_bgr=snap,
+                    bounding_boxes=bx
                 )
                 self._current_thumb_path = thumb_path
                 if self._loop and self._loop.is_running():

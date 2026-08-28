@@ -11,8 +11,8 @@ from engine.config.settings import settings
 class MediaWriter:
     """
     Handles saving event media:
-    - MP4 clips organized by CameraID/YYYY-MM-DD/HH-MM-SS_event.mp4 with H.264 and +faststart
-    - JPEG thumbnails with timestamp and optional motion bounding boxes
+    - High-compatibility H.264 MP4 clips with strict yuv420p color format and +faststart for Telegram/iOS/Android.
+    - JPEG thumbnails with timestamp and motion bounding boxes.
     """
     @staticmethod
     def get_event_directory(camera_id: int, date_obj: datetime) -> Path:
@@ -33,6 +33,10 @@ class MediaWriter:
         thumb_filename = f"{time_str}_thumb.jpg"
         thumb_path = cam_dir / thumb_filename
 
+        if frame_bgr is None or frame_bgr.size == 0:
+            logger.error(f"Cannot save empty thumbnail for camera {camera_id}")
+            return ""
+
         output_frame = frame_bgr.copy()
 
         # Watermark & Bounding Boxes
@@ -45,32 +49,34 @@ class MediaWriter:
             cv2.putText(
                 output_frame,
                 timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                (10, 25),
+                (14, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
+                0.75,
                 (0, 255, 0),
                 2,
                 cv2.LINE_AA
             )
 
-        # Photo Quality & Scaling: "minima" (640px), "media" (1280px HD), "maxima" (Native 5MP)
+        # Photo Quality & Scaling: "minima" (640px), "media" (1280px HD), "maxima" (Native)
         quality_mode = getattr(settings, "TELEGRAM_PHOTO_QUALITY", "media").lower()
         jpeg_quality = 85
         h, w = output_frame.shape[:2]
 
         if quality_mode == "minima":
-            jpeg_quality = 70
+            jpeg_quality = 75
             if w > 640:
                 scale = 640.0 / w
                 output_frame = cv2.resize(output_frame, (640, int(h * scale)), interpolation=cv2.INTER_AREA)
         elif quality_mode == "media":
-            jpeg_quality = 85
+            jpeg_quality = 88
             if w > 1280:
                 scale = 1280.0 / w
                 output_frame = cv2.resize(output_frame, (1280, int(h * scale)), interpolation=cv2.INTER_AREA)
         elif quality_mode == "maxima":
             jpeg_quality = 95
-            # Preserves full native sensor resolution (e.g., 5MP 2560x1920)
+            if w > 1920:
+                scale = 1920.0 / w
+                output_frame = cv2.resize(output_frame, (1920, int(h * scale)), interpolation=cv2.INTER_AREA)
 
         cv2.imwrite(str(thumb_path), output_frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
         return str(thumb_path)
@@ -85,6 +91,11 @@ class MediaWriter:
         if not frames:
             return None
 
+        # Filter out broken or zero-size frames
+        valid_frames = [f for f in frames if f is not None and f.size > 0]
+        if not valid_frames:
+            return None
+
         # Sanitize FPS (clamped between 5.0 and 60.0, rounded to 2 decimal places)
         if fps <= 0 or np.isnan(fps) or fps > 60:
             fps = 20.0
@@ -95,7 +106,20 @@ class MediaWriter:
         video_filename = f"{time_str}_event.mp4"
         video_path = cam_dir / video_filename
 
-        h, w = frames[0].shape[:2]
+        # Establish strict, uniform target dimensions (even numbers required by H.264)
+        orig_h, orig_w = valid_frames[0].shape[:2]
+        if orig_w > 1920:
+            scale = 1920.0 / orig_w
+            target_w = 1920
+            target_h = int(orig_h * scale)
+        else:
+            target_w = orig_w
+            target_h = orig_h
+
+        # Guarantee dimensions are even
+        target_w = target_w - (target_w % 2)
+        target_h = target_h - (target_h % 2)
+
         ffmpeg_bin = (
             shutil.which("ffmpeg")
             or ("/opt/homebrew/bin/ffmpeg" if Path("/opt/homebrew/bin/ffmpeg").exists() else None)
@@ -108,23 +132,23 @@ class MediaWriter:
         # Adaptive Quality based on TELEGRAM_PHOTO_QUALITY
         quality_mode = getattr(settings, "TELEGRAM_PHOTO_QUALITY", "media").lower()
         if quality_mode == "maxima":
-            crf_val = "17"  # Studio Broadcast / Visually Lossless
+            crf_val = "18"  # Visually Lossless
             preset_val = "fast"
         elif quality_mode == "minima":
             crf_val = "28"  # Ultra Compressed
             preset_val = "veryfast"
         else:
-            crf_val = "21"  # Balanced High Quality
+            crf_val = "22"  # Balanced High Quality
             preset_val = "veryfast"
 
-        # Approach 1: Direct FFmpeg stdin pipe (lossless, zero-lag, instant H.264 +faststart CFR)
+        # Approach 1: Direct FFmpeg stdin pipe (lossless BGR24 -> H.264 YUV420p +faststart)
         if ffmpeg_bin:
             try:
                 cmd = [
                     ffmpeg_bin, "-y",
                     "-f", "rawvideo",
                     "-vcodec", "rawvideo",
-                    "-s", f"{w}x{h}",
+                    "-s", f"{target_w}x{target_h}",
                     "-pix_fmt", "bgr24",
                     "-r", f"{fps:.2f}",
                     "-i", "-",
@@ -136,10 +160,10 @@ class MediaWriter:
                     str(video_path)
                 ]
                 proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                for frame in frames:
-                    if frame.shape[:2] != (h, w):
-                        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
-                    proc.stdin.write(frame.tobytes())
+                for f in valid_frames:
+                    if f.shape[:2] != (target_h, target_w):
+                        f = cv2.resize(f, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                    proc.stdin.write(np.ascontiguousarray(f, dtype=np.uint8).tobytes())
                 proc.stdin.close()
                 proc.wait()
                 if proc.returncode == 0 and video_path.exists() and video_path.stat().st_size > 500:
@@ -153,14 +177,14 @@ class MediaWriter:
             try:
                 temp_path = cam_dir / f"temp_{time_str}.mp4"
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (w, h))
+                writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (target_w, target_h))
                 if not writer.isOpened():
                     fourcc = cv2.VideoWriter_fourcc(*'avc1')
-                    writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (w, h))
-                for frame in frames:
-                    if frame.shape[:2] != (h, w):
-                        frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
-                    writer.write(frame)
+                    writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (target_w, target_h))
+                for f in valid_frames:
+                    if f.shape[:2] != (target_h, target_w):
+                        f = cv2.resize(f, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                    writer.write(np.ascontiguousarray(f, dtype=np.uint8))
                 writer.release()
                 if temp_path.exists():
                     temp_path.rename(video_path)
@@ -169,6 +193,6 @@ class MediaWriter:
                 logger.error(f"OpenCV fallback video writer failed: {e}")
                 return None
 
-        duration_sec = len(frames) / fps if fps > 0 else 0.0
-        logger.info(f"🎥 Saved smooth event clip: {video_path} ({len(frames)} frames @ {fps:.2f}fps = {duration_sec:.1f}s)")
+        duration_sec = len(valid_frames) / fps if fps > 0 else 0.0
+        logger.info(f"🎥 Saved smooth event clip: {video_path} ({len(valid_frames)} frames @ {fps:.2f}fps = {duration_sec:.1f}s)")
         return str(video_path)

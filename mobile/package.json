@@ -1,6 +1,6 @@
 {
   "name": "servonvif-mobile",
-  "version": "2.2.136",
+  "version": "2.2.137",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
