@@ -15,14 +15,31 @@ export class ApiService {
       throw new Error("Servidor não configurado. Realize o emparelhamento ou login.");
     }
 
-    MobileLogger.info("NETWORK", `Determinando rota ativa... LAN=${config.lan_url} | Tailscale=${config.tailscale_url || "N/A"}`);
+    const mode = config.active_mode || "AUTO";
+    MobileLogger.info("NETWORK", `Determinando rota ativa [Modo: ${mode}]... LAN=${config.lan_url} | Tailscale=${config.tailscale_url || "N/A"}`);
 
-    // Probe LAN first (fast timeout)
-    const lanWorks = await this.probeUrl(config.lan_url, 1500);
+    // 1. Force LAN Mode
+    if (mode === "LAN") {
+      this.cachedBaseUrl = config.lan_url;
+      this.activeRouteType = "LAN";
+      MobileLogger.info("NETWORK", `📶 Modo Forçado LAN ativo: ${config.lan_url}`);
+      return config.lan_url;
+    }
+
+    // 2. Force Tailscale Mode
+    if (mode === "TAILSCALE" && config.tailscale_url) {
+      this.cachedBaseUrl = config.tailscale_url;
+      this.activeRouteType = "TAILSCALE";
+      MobileLogger.info("NETWORK", `🌐 Modo Forçado Tailscale Mesh ativo: ${config.tailscale_url}`);
+      return config.tailscale_url;
+    }
+
+    // 3. AUTO Mode: Probe LAN first (fast timeout)
+    const lanWorks = await this.probeUrl(config.lan_url, 1200);
     if (lanWorks) {
       this.cachedBaseUrl = config.lan_url;
       this.activeRouteType = "LAN";
-      MobileLogger.info("NETWORK", `✅ Rota LAN ativa: ${config.lan_url}`);
+      MobileLogger.info("NETWORK", `✅ [AUTO] Rota LAN Wi-Fi conectada: ${config.lan_url}`);
       return config.lan_url;
     }
 
@@ -32,19 +49,29 @@ export class ApiService {
       if (tsWorks) {
         this.cachedBaseUrl = config.tailscale_url;
         this.activeRouteType = "TAILSCALE";
-        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh ativa: ${config.tailscale_url}`);
+        MobileLogger.info("NETWORK", `🌐 [AUTO] Failover para Tailscale Mesh bem-sucedido: ${config.tailscale_url}`);
         return config.tailscale_url;
       }
     }
 
-    // Default to configured base URL
+    // Default fallback
     this.cachedBaseUrl = config.active_base_url || config.lan_url;
-    MobileLogger.warn("NETWORK", `⚠️ Sondagens falharam. Usando URL direta: ${this.cachedBaseUrl}`);
+    MobileLogger.warn("NETWORK", `⚠️ Sondagens falharam. Usando URL fallback: ${this.cachedBaseUrl}`);
     return this.cachedBaseUrl;
   }
 
   public static getActiveRouteType(): "LAN" | "TAILSCALE" {
     return this.activeRouteType;
+  }
+
+  public static async setRouteMode(mode: "AUTO" | "LAN" | "TAILSCALE"): Promise<void> {
+    const config = await StorageService.getConnectionConfig();
+    if (!config) return;
+    config.active_mode = mode;
+    await StorageService.saveConnectionConfig(config);
+    this.cachedBaseUrl = null;
+    MobileLogger.info("NETWORK", `Modo de roteamento alterado pelo usuário para: ${mode}`);
+    await this.getActiveBaseUrl();
   }
 
   public static async refreshRoute(): Promise<string> {
@@ -57,7 +84,6 @@ export class ApiService {
     if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
       clean = `http://${clean}`;
     }
-    // If no port specified and not a standard domain, default to :8080
     const parts = clean.split("/");
     const hostPort = parts[2] || "";
     if (!hostPort.includes(":") && !hostPort.includes(".ts.net")) {
@@ -82,6 +108,89 @@ export class ApiService {
     }
   }
 
+  public static async testTailscaleConnection(): Promise<{
+    success: boolean;
+    latencyMs: number;
+    url: string;
+    message: string;
+  }> {
+    const config = await StorageService.getConnectionConfig();
+    if (!config || !config.tailscale_url) {
+      const msg = "Endereço Tailscale não configurado no smartphone.";
+      MobileLogger.warn("TAILSCALE_TEST", msg);
+      return { success: false, latencyMs: -1, url: "N/A", message: msg };
+    }
+
+    const tsUrl = this.sanitizeUrl(config.tailscale_url);
+    MobileLogger.info("TAILSCALE_TEST", `Iniciando teste de rota Tailscale Mesh: ${tsUrl}`);
+    const start = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${tsUrl}/api/auth/connection-info`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const latency = Date.now() - start;
+
+      if (res.ok) {
+        const msg = `✅ Conexão Tailscale Mesh OK (${latency}ms RTT)`;
+        MobileLogger.info("TAILSCALE_TEST", msg);
+        return { success: true, latencyMs: latency, url: tsUrl, message: msg };
+      } else {
+        const msg = `⚠️ Servidor respondeu com HTTP ${res.status}`;
+        MobileLogger.warn("TAILSCALE_TEST", msg);
+        return { success: false, latencyMs: latency, url: tsUrl, message: msg };
+      }
+    } catch (e: any) {
+      const msg = `❌ Falha ao alcançar nó Tailscale: ${e.message}`;
+      MobileLogger.error("TAILSCALE_TEST", msg, e);
+      return { success: false, latencyMs: -1, url: tsUrl, message: msg };
+    }
+  }
+
+  public static async testLanConnection(): Promise<{
+    success: boolean;
+    latencyMs: number;
+    url: string;
+    message: string;
+  }> {
+    const config = await StorageService.getConnectionConfig();
+    if (!config || !config.lan_url) {
+      const msg = "Endereço LAN não configurado.";
+      return { success: false, latencyMs: -1, url: "N/A", message: msg };
+    }
+
+    const lanUrl = this.sanitizeUrl(config.lan_url);
+    MobileLogger.info("LAN_TEST", `Iniciando teste de rota Wi-Fi LAN: ${lanUrl}`);
+    const start = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${lanUrl}/api/auth/connection-info`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const latency = Date.now() - start;
+
+      if (res.ok) {
+        const msg = `✅ Conexão Wi-Fi Local OK (${latency}ms RTT)`;
+        MobileLogger.info("LAN_TEST", msg);
+        return { success: true, latencyMs: latency, url: lanUrl, message: msg };
+      } else {
+        const msg = `⚠️ Resposta HTTP ${res.status}`;
+        MobileLogger.warn("LAN_TEST", msg);
+        return { success: false, latencyMs: latency, url: lanUrl, message: msg };
+      }
+    } catch (e: any) {
+      const msg = `❌ Falha na rede local Wi-Fi: ${e.message}`;
+      MobileLogger.error("LAN_TEST", msg, e);
+      return { success: false, latencyMs: -1, url: lanUrl, message: msg };
+    }
+  }
+
   public static async pairDeviceWithBundle(
     bundle: PairingBundle,
     deviceName: string = "Meu Smartphone"
@@ -91,7 +200,6 @@ export class ApiService {
 
     MobileLogger.info("AUTH", `Iniciando validação de emparelhamento... LAN=${rawLan} | TS=${rawTs || "N/A"}`);
 
-    // Determine active URL
     let workingBaseUrl = rawLan;
     const lanOk = await this.probeUrl(rawLan, 2000);
     if (!lanOk && rawTs) {
@@ -112,7 +220,7 @@ export class ApiService {
           device_name: deviceName,
           device_type: "Smartphone",
           manufacturer_model: "Smartphone Móvel",
-          app_version: "002.002.131",
+          app_version: "002.002.133",
         }),
       });
 

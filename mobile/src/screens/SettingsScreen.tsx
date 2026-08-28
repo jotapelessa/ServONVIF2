@@ -25,6 +25,9 @@ import {
   Copy,
   Trash2,
   Check,
+  Zap,
+  Globe,
+  RefreshCw,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "../theme/tokens";
@@ -37,9 +40,15 @@ interface SettingsScreenProps {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [streamQuality, setStreamQuality] = useState<"AUTO" | "HIGH_5MP" | "DATA_SAVER">("AUTO");
+  const [routeMode, setRouteMode] = useState<"AUTO" | "LAN" | "TAILSCALE">("AUTO");
   const [routeType, setRouteType] = useState<"LAN" | "TAILSCALE">("LAN");
-  const [isTestingPing, setIsTestingPing] = useState(false);
-  const [pingResult, setPingResult] = useState<string | null>(null);
+
+  // Testing states
+  const [isTestingLan, setIsTestingLan] = useState(false);
+  const [isTestingTs, setIsTestingTs] = useState(false);
+  const [lanTestResult, setLanTestResult] = useState<string | null>(null);
+  const [tsTestResult, setTsTestResult] = useState<string | null>(null);
+
   const [logs, setLogs] = useState<LogEntry[]>(MobileLogger.getLogs());
   const [isCopied, setIsCopied] = useState(false);
 
@@ -56,7 +65,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
     const q = await StorageService.getStreamQuality();
     setConfig(c);
     setStreamQuality(q);
+    setRouteMode(c?.active_mode || "AUTO");
     setRouteType(ApiService.getActiveRouteType());
+  };
+
+  const handleSetRouteMode = async (mode: "AUTO" | "LAN" | "TAILSCALE") => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    setRouteMode(mode);
+    await ApiService.setRouteMode(mode);
+    await loadSettings();
   };
 
   const handleSetQuality = async (q: "AUTO" | "HIGH_5MP" | "DATA_SAVER") => {
@@ -67,22 +86,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
     await StorageService.setStreamQuality(q);
   };
 
-  const handleTestPing = async () => {
+  const handleTestLan = async () => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch {}
-    setIsTestingPing(true);
-    setPingResult(null);
-    const start = Date.now();
+    setIsTestingLan(true);
+    setLanTestResult(null);
+    const res = await ApiService.testLanConnection();
+    setIsTestingLan(false);
+    setLanTestResult(res.message);
+  };
+
+  const handleTestTailscale = async () => {
     try {
-      await ApiService.sendDevicePing();
-      const rtt = Date.now() - start;
-      setPingResult(`${rtt} ms (Excelente)`);
-    } catch {
-      setPingResult("Falha no Ping");
-    } finally {
-      setIsTestingPing(false);
-    }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    setIsTestingTs(true);
+    setTsTestResult(null);
+    const res = await ApiService.testTailscaleConnection();
+    setIsTestingTs(false);
+    setTsTestResult(res.message);
   };
 
   const handleCopyLogs = async () => {
@@ -140,7 +163,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Shield size={16} color={theme.colors.accent} />
-            <Text style={styles.cardTitle}>Conectividade & Rede</Text>
+            <Text style={styles.cardTitle}>Conectividade & Roteamento</Text>
           </View>
 
           <View style={styles.infoRow}>
@@ -149,7 +172,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Rota em Uso:</Text>
+            <Text style={styles.infoLabel}>Rota Ativa Agora:</Text>
             <View style={styles.routeTag}>
               {routeType === "LAN" ? (
                 <Wifi size={12} color={theme.colors.success} />
@@ -174,26 +197,102 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
 
           {config?.tailscale_url && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Tailscale MagicDNS:</Text>
+              <Text style={styles.infoLabel}>Tailscale Mesh:</Text>
               <Text style={styles.monoValue} numberOfLines={1}>
                 {config.tailscale_url}
               </Text>
             </View>
           )}
 
-          {/* Test Ping Button */}
-          <TouchableOpacity
-            style={styles.pingBtn}
-            onPress={handleTestPing}
-            disabled={isTestingPing}
-            activeOpacity={0.7}
-          >
-            <Activity size={14} color={theme.colors.accent} />
-            <Text style={styles.pingBtnText}>
-              {isTestingPing ? "Medindo latência..." : "Testar Latência do Servidor"}
-            </Text>
-            {pingResult && <Text style={styles.pingBadge}>{pingResult}</Text>}
-          </TouchableOpacity>
+          {/* Route Mode Selector */}
+          <Text style={[styles.sectionTitle, { marginTop: 14, marginBottom: 8 }]}>
+            Modo de Conexão:
+          </Text>
+          <View style={styles.routeModeRow}>
+            <TouchableOpacity
+              style={[styles.routeModeBtn, routeMode === "AUTO" && styles.activeRouteModeBtn]}
+              onPress={() => handleSetRouteMode("AUTO")}
+              activeOpacity={0.7}
+            >
+              <Zap size={12} color={routeMode === "AUTO" ? "#ffffff" : theme.colors.textMuted} />
+              <Text style={[styles.routeModeText, routeMode === "AUTO" && styles.activeRouteModeText]}>
+                Auto (Failover)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.routeModeBtn, routeMode === "LAN" && styles.activeRouteModeBtn]}
+              onPress={() => handleSetRouteMode("LAN")}
+              activeOpacity={0.7}
+            >
+              <Wifi size={12} color={routeMode === "LAN" ? "#ffffff" : theme.colors.textMuted} />
+              <Text style={[styles.routeModeText, routeMode === "LAN" && styles.activeRouteModeText]}>
+                Forçar LAN
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.routeModeBtn, routeMode === "TAILSCALE" && styles.activeRouteModeBtn]}
+              onPress={() => handleSetRouteMode("TAILSCALE")}
+              activeOpacity={0.7}
+            >
+              <Globe size={12} color={routeMode === "TAILSCALE" ? "#ffffff" : theme.colors.textMuted} />
+              <Text style={[styles.routeModeText, routeMode === "TAILSCALE" && styles.activeRouteModeText]}>
+                Forçar Tailscale
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Dedicated Diagnostic Route Testing */}
+          <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 8 }]}>
+            🧪 Testes de Rota em Tempo Real:
+          </Text>
+          
+          <View style={styles.testButtonsRow}>
+            <TouchableOpacity
+              style={styles.testActionBtn}
+              onPress={handleTestLan}
+              disabled={isTestingLan}
+              activeOpacity={0.75}
+            >
+              {isTestingLan ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Wifi size={14} color="#ffffff" />
+                  <Text style={styles.testActionBtnText}>Testar Wi-Fi LAN</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.testActionBtn, { backgroundColor: "#0284c7" }]}
+              onPress={handleTestTailscale}
+              disabled={isTestingTs}
+              activeOpacity={0.75}
+            >
+              {isTestingTs ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Radio size={14} color="#ffffff" />
+                  <Text style={styles.testActionBtnText}>Testar Tailscale Mesh</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {lanTestResult && (
+            <View style={styles.testResultBox}>
+              <Text style={styles.testResultText}>{lanTestResult}</Text>
+            </View>
+          )}
+
+          {tsTestResult && (
+            <View style={[styles.testResultBox, { borderColor: "#0284c7" }]}>
+              <Text style={styles.testResultText}>{tsTestResult}</Text>
+            </View>
+          )}
         </View>
 
         {/* Stream Quality Selector Card */}
@@ -248,87 +347,101 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
                   streamQuality === "DATA_SAVER" && styles.activeQualityBtnText,
                 ]}
               >
-                Economia Extrema (720p / 15 FPS)
+                Economia Extrema de Dados (Sub-Stream)
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Console & Diagnostics Log Card */}
+        {/* Real-Time Operational Log Console Card */}
         <View style={styles.card}>
-          <View style={styles.cardHeaderBetween}>
-            <View style={styles.cardHeader}>
-              <Terminal size={16} color={theme.colors.accent} />
-              <Text style={styles.cardTitle}>Logs de Operação & Diagnóstico</Text>
-            </View>
+          <View style={styles.cardHeader}>
+            <Terminal size={16} color={theme.colors.accent} />
+            <Text style={styles.cardTitle}>Console de Logs Operacionais</Text>
+          </View>
+          <Text style={styles.cardSubtitle}>
+            Trilha completa de eventos, reconexões e erros em tempo real.
+          </Text>
+
+          <View style={styles.logActionRow}>
             <TouchableOpacity
-              style={styles.clearLogsBtn}
-              onPress={handleClearLogs}
-              activeOpacity={0.7}
+              style={[styles.actionBtn, styles.copyBtn]}
+              onPress={handleCopyLogs}
+              activeOpacity={0.75}
             >
-              <Trash2 size={12} color={theme.colors.textMuted} />
-              <Text style={styles.clearLogsText}>Limpar</Text>
+              {isCopied ? (
+                <Check size={14} color="#ffffff" />
+              ) : (
+                <Copy size={14} color="#ffffff" />
+              )}
+              <Text style={styles.actionBtnText}>
+                {isCopied ? "Copiado!" : "Copiar Logs Completos"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.clearBtn]}
+              onPress={handleClearLogs}
+              activeOpacity={0.75}
+            >
+              <Trash2 size={14} color={theme.colors.danger} />
+              <Text style={[styles.actionBtnText, { color: theme.colors.danger }]}>
+                Limpar
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.cardSubtitle}>
-            Acompanhe a atividade em tempo real. Copie o relatório para suporte ou depuração.
-          </Text>
-
-          {/* Copy Report Button */}
-          <TouchableOpacity
-            style={[styles.copyReportBtn, isCopied && styles.copyReportBtnSuccess]}
-            onPress={handleCopyLogs}
-            activeOpacity={0.8}
-          >
-            {isCopied ? (
-              <Check size={16} color="#10B981" />
-            ) : (
-              <Copy size={16} color="#FFFFFF" />
-            )}
-            <Text style={[styles.copyReportBtnText, isCopied && styles.copyReportBtnTextSuccess]}>
-              {isCopied ? "Relatório Copiado com Sucesso!" : "📋 Copiar Logs Completos (Clipboard)"}
-            </Text>
-          </TouchableOpacity>
-
           {/* Terminal Box */}
-          <ScrollView
-            style={styles.terminalBox}
-            contentContainerStyle={styles.terminalContent}
-            nestedScrollEnabled
-          >
-            {logs.length === 0 ? (
-              <Text style={styles.terminalEmptyText}>• Nenhum log registrado até o momento.</Text>
-            ) : (
-              logs.map((l, index) => {
-                const isErr = l.level === "ERROR";
-                const isWarn = l.level === "WARN";
-                return (
-                  <View key={index} style={styles.logRow}>
-                    <Text style={styles.logTime}>[{l.timestamp}]</Text>
-                    <Text
-                      style={[
-                        styles.logLevel,
-                        isErr ? styles.logErr : isWarn ? styles.logWarn : styles.logInfo,
-                      ]}
-                    >
-                      [{l.level}]
-                    </Text>
-                    <Text style={styles.logTag}>[{l.tag}]</Text>
-                    <Text style={[styles.logMsg, isErr && styles.logErrMsg]}>
-                      {l.message}
-                    </Text>
-                  </View>
-                );
-              })
-            )}
-          </ScrollView>
+          <View style={styles.terminalContainer}>
+            <ScrollView
+              style={styles.terminalScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {logs.length === 0 ? (
+                <Text style={styles.terminalEmptyText}>
+                  Nenhum log registrado até o momento.
+                </Text>
+              ) : (
+                logs.map((log, index) => {
+                  let levelColor = theme.colors.textSecondary;
+                  if (log.level === "ERROR") levelColor = theme.colors.danger;
+                  if (log.level === "WARN") levelColor = theme.colors.warning;
+                  if (log.level === "INFO") levelColor = theme.colors.accent;
+
+                  return (
+                    <View key={index} style={styles.logRow}>
+                      <Text style={styles.logTime}>[{log.timestamp}]</Text>
+                      <Text style={[styles.logLevel, { color: levelColor }]}>
+                        [{log.level}]
+                      </Text>
+                      <Text style={styles.logTag}>[{log.tag}]</Text>
+                      <Text style={styles.logMessage}>
+                        {log.message}
+                        {log.details
+                          ? ` | ${
+                              typeof log.details === "object"
+                                ? JSON.stringify(log.details)
+                                : log.details
+                            }`
+                          : ""}
+                      </Text>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
         </View>
 
-        {/* Disconnect Button */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+        {/* Disconnect Smartphone Button */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          activeOpacity={0.75}
+        >
           <LogOut size={16} color={theme.colors.danger} />
-          <Text style={styles.logoutBtnText}>Desconectar deste Servidor</Text>
+          <Text style={styles.logoutBtnText}>Desconectar Smartphone</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -343,53 +456,66 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
+    paddingBottom: 40,
   },
   card: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.lg,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    padding: theme.spacing.lg,
-    gap: 12,
-    ...theme.shadows.subtle,
+    ...theme.shadows.card,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginBottom: theme.spacing.sm,
   },
   cardTitle: {
-    ...theme.typography.h2,
+    ...theme.typography.h3,
     color: theme.colors.textPrimary,
   },
   cardSubtitle: {
     ...theme.typography.caption,
     color: theme.colors.textMuted,
+    marginBottom: theme.spacing.md,
     lineHeight: 16,
+  },
+  sectionTitle: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textSecondary,
   },
   infoRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 3,
+    alignItems: "center",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
   },
   infoLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
   },
   infoValue: {
-    ...theme.typography.bodyBold,
+    ...theme.typography.captionBold,
     color: theme.colors.textPrimary,
   },
   monoValue: {
-    ...theme.typography.mono,
+    ...theme.typography.caption,
+    fontFamily: "monospace",
     color: theme.colors.accent,
-    maxWidth: 190,
+    maxWidth: 200,
   },
   routeTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    backgroundColor: theme.colors.surfaceElevated,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radius.xs,
   },
   routeTagText: {
     ...theme.typography.captionBold,
@@ -400,170 +526,178 @@ const styles = StyleSheet.create({
   tsColor: {
     color: theme.colors.tailscale,
   },
-  pingBtn: {
+  routeModeRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  routeModeBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
     backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
-    marginTop: 4,
   },
-  pingBtnText: {
+  activeRouteModeBtn: {
+    backgroundColor: "#2563eb",
+    borderColor: "#3b82f6",
+  },
+  routeModeText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+  },
+  activeRouteModeText: {
+    color: "#ffffff",
+  },
+  testButtonsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  testActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: "#16a34a",
+    borderRadius: theme.radius.md,
+    ...theme.shadows.subtle,
+  },
+  testActionBtnText: {
+    ...theme.typography.captionBold,
+    color: "#ffffff",
+  },
+  testResultBox: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: theme.colors.surfaceElevated,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    borderColor: "#16a34a",
+  },
+  testResultText: {
     ...theme.typography.captionBold,
     color: theme.colors.textPrimary,
-    flex: 1,
-    marginLeft: 8,
-  },
-  pingBadge: {
-    ...theme.typography.mono,
-    color: theme.colors.success,
-    backgroundColor: theme.colors.successMuted,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    fontFamily: "monospace",
   },
   qualityOptions: {
     gap: 8,
-    marginTop: 2,
   },
   qualityBtn: {
     paddingVertical: 12,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: 14,
     backgroundColor: theme.colors.surfaceElevated,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: theme.colors.border,
   },
   activeQualityBtn: {
+    borderColor: theme.colors.accent,
     backgroundColor: theme.colors.accentMuted,
-    borderColor: theme.colors.accentBorder,
   },
   qualityBtnText: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
   },
   activeQualityBtnText: {
     color: theme.colors.accent,
-    fontWeight: "700",
+    fontWeight: "bold",
+  },
+  logActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: theme.radius.sm,
+  },
+  copyBtn: {
+    flex: 1,
+    backgroundColor: "#2563eb",
+  },
+  clearBtn: {
+    backgroundColor: theme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.dangerBorder,
+  },
+  actionBtnText: {
+    ...theme.typography.captionBold,
+    color: "#ffffff",
+  },
+  terminalContainer: {
+    backgroundColor: "#030712",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    height: 220,
+    padding: 8,
+  },
+  terminalScroll: {
+    flex: 1,
+  },
+  terminalEmptyText: {
+    ...theme.typography.caption,
+    color: theme.colors.textDisabled,
+    fontFamily: "monospace",
+    textAlign: "center",
+    marginTop: 80,
+  },
+  logRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 4,
+    alignItems: "center",
+  },
+  logTime: {
+    fontSize: 10,
+    color: "#6b7280",
+    fontFamily: "monospace",
+    marginRight: 4,
+  },
+  logLevel: {
+    fontSize: 10,
+    fontWeight: "bold",
+    fontFamily: "monospace",
+    marginRight: 4,
+  },
+  logTag: {
+    fontSize: 10,
+    color: "#9ca3af",
+    fontFamily: "monospace",
+    marginRight: 4,
+  },
+  logMessage: {
+    fontSize: 11,
+    color: "#e5e7eb",
+    fontFamily: "monospace",
+    flex: 1,
   },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: theme.colors.dangerMuted,
+    paddingVertical: 14,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
     borderColor: theme.colors.dangerBorder,
-    paddingVertical: 13,
-    borderRadius: theme.radius.md,
     marginTop: theme.spacing.sm,
   },
   logoutBtnText: {
-    ...theme.typography.h3,
-    color: theme.colors.danger,
-  },
-  cardHeaderBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  clearLogsBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: theme.colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  clearLogsText: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-    fontSize: 11,
-  },
-  copyReportBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: theme.colors.accent,
-    paddingVertical: 11,
-    borderRadius: theme.radius.md,
-    marginTop: 4,
-  },
-  copyReportBtnSuccess: {
-    backgroundColor: "#064E3B",
-    borderWidth: 1,
-    borderColor: "#10B981",
-  },
-  copyReportBtnText: {
     ...theme.typography.bodyBold,
-    color: "#FFFFFF",
-  },
-  copyReportBtnTextSuccess: {
-    color: "#10B981",
-  },
-  terminalBox: {
-    height: 180,
-    backgroundColor: "#050811",
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    padding: 10,
-    marginTop: 4,
-  },
-  terminalContent: {
-    paddingBottom: 8,
-  },
-  terminalEmptyText: {
-    ...theme.typography.mono,
-    color: theme.colors.textMuted,
-    fontSize: 11,
-  },
-  logRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-    paddingVertical: 2,
-    gap: 4,
-  },
-  logTime: {
-    ...theme.typography.mono,
-    color: "#64748B",
-    fontSize: 10,
-  },
-  logLevel: {
-    ...theme.typography.mono,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  logInfo: {
-    color: "#38BDF8",
-  },
-  logWarn: {
-    color: "#FBBF24",
-  },
-  logErr: {
-    color: "#EF4444",
-  },
-  logTag: {
-    ...theme.typography.mono,
-    color: "#94A3B8",
-    fontSize: 10,
-  },
-  logMsg: {
-    ...theme.typography.mono,
-    color: "#E2E8F0",
-    fontSize: 11,
-    flex: 1,
-  },
-  logErrMsg: {
-    color: "#FCA5A5",
+    color: theme.colors.danger,
   },
 });
