@@ -22,6 +22,13 @@ async_session_factory = sessionmaker(
 
 async def init_db() -> None:
     async with engine.begin() as conn:
+        # High-Performance SQLite Pragmas (WAL mode for concurrent reads/writes without lock contention)
+        await conn.execute(text("PRAGMA journal_mode = WAL;"))
+        await conn.execute(text("PRAGMA synchronous = NORMAL;"))
+        await conn.execute(text("PRAGMA cache_size = -64000;"))  # 64MB memory cache
+        await conn.execute(text("PRAGMA temp_store = MEMORY;"))
+        await conn.execute(text("PRAGMA mmap_size = 268435456;")) # 256MB memory-mapped I/O
+
         await conn.run_sync(SQLModel.metadata.create_all)
         for col_def in [
             "ALTER TABLE devices ADD COLUMN manufacturer_model VARCHAR",

@@ -36,8 +36,9 @@ class StreamIngestor:
         self._grabber_thread: Optional[threading.Thread] = None
         self._processor_thread: Optional[threading.Thread] = None
 
-        max_buf_sec = max(60.0, float(getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 30)) + float(getattr(settings, "DEFAULT_BUFFER_SECONDS", 10)) + 15.0)
-        self.ring_buffer = CircularRingBuffer(max_duration_seconds=max_buf_sec)
+        # Lightweight pre-event ring buffer (capped strictly to pre-event seconds + 1s, ~20MB RAM)
+        pre_buf_sec = float(getattr(settings, "PRE_EVENT_SECONDS", 5.0)) + 1.0
+        self.ring_buffer = CircularRingBuffer(max_duration_seconds=pre_buf_sec)
         self.motion_detector = MotionDetector(
             roi_polygon=camera.roi_polygon,
             ignore_polygons=getattr(camera, "ignore_polygons", None),
@@ -226,6 +227,7 @@ class StreamIngestor:
         - Ring buffer & MJPEG preview streaming at efficient, decoupled rates.
         """
         last_motion_check = 0.0
+        last_ring_push = 0.0
         motion_interval = 1.0 / 8.0  # 8 FPS is optimal for human/vehicle detection
         is_current_motion = False
         current_score = 0.0
@@ -248,9 +250,20 @@ class StreamIngestor:
                 frame = self._latest_frame.copy()
                 frame_time = self._latest_frame_time
 
-            # 1. Update circular RAM ring buffer & MJPEG broadcast
-            self.ring_buffer.push(frame.copy(), is_keyframe=True, timestamp=frame_time)
-            mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
+            # 1. Update lightweight circular RAM ring buffer (~10 FPS, max 1280px)
+            if frame_time - last_ring_push >= 0.10:
+                last_ring_push = frame_time
+                h, w = frame.shape[:2]
+                if w > 1280:
+                    scale = 1280.0 / w
+                    ring_frame = cv2.resize(frame, (1280, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+                else:
+                    ring_frame = frame.copy()
+                self.ring_buffer.push(ring_frame, is_keyframe=True, timestamp=frame_time)
+
+            # 2. Broadcast MJPEG preview to active viewers only
+            if mjpeg_streamer.has_clients(self.camera.id):
+                mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
 
             # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
             if self._is_recording_event:

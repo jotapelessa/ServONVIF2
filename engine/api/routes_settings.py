@@ -801,41 +801,56 @@ async def get_system_version():
     except Exception as e:
         logger.debug(f"Git local version read error: {e}")
 
-    # 2. Remote GitHub metadata
-    remote_commit = local_commit
-    remote_msg = local_msg
-    remote_date = local_date
-    update_available = False
-    github_reachable = False
+    # 2. Remote GitHub metadata (Cached for 5 minutes, non-blocking background thread)
+    global _github_version_cache, _github_cache_time
+    if "_github_version_cache" not in globals():
+        _github_version_cache = None
+        _github_cache_time = 0.0
 
-    try:
-        req = urllib.request.Request(
-            "https://api.github.com/repos/jotapelessa/ServONVIF2/commits/main",
-            headers={"User-Agent": "ServONVIF-Engine-AutoUpdater"}
-        )
-        with urllib.request.urlopen(req, timeout=4) as response:
-            if response.status == 200:
-                data = json.loads(response.read().decode("utf-8"))
-                remote_commit = data["sha"][:7]
-                remote_msg = data.get("commit", {}).get("message", "").split("\n")[0]
-                remote_date = data.get("commit", {}).get("author", {}).get("date", "")
-                github_reachable = True
-                if local_commit != "unknown" and remote_commit != local_commit:
-                    update_available = True
-    except Exception as e:
-        logger.debug(f"GitHub remote check error: {e}")
+    now_t = time.time()
+    if _github_version_cache is not None and (now_t - _github_cache_time) < 300.0:
+        return _github_version_cache
 
-    return {
-        "local_commit": local_commit,
-        "local_commit_message": local_msg,
-        "local_commit_date": local_date,
-        "remote_commit": remote_commit,
-        "remote_commit_message": remote_msg,
-        "remote_commit_date": remote_date,
-        "update_available": update_available,
-        "github_reachable": github_reachable,
-        "repo_url": "https://github.com/jotapelessa/ServONVIF2"
-    }
+    def _fetch_remote():
+        r_commit = local_commit
+        r_msg = local_msg
+        r_date = local_date
+        u_available = False
+        g_reachable = False
+
+        try:
+            req = urllib.request.Request(
+                "https://api.github.com/repos/jotapelessa/ServONVIF2/commits/main",
+                headers={"User-Agent": "ServONVIF-Engine-AutoUpdater"}
+            )
+            with urllib.request.urlopen(req, timeout=3) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode("utf-8"))
+                    r_commit = data["sha"][:7]
+                    r_msg = data.get("commit", {}).get("message", "").split("\n")[0]
+                    r_date = data.get("commit", {}).get("author", {}).get("date", "")
+                    g_reachable = True
+                    if local_commit != "unknown" and r_commit != local_commit:
+                        u_available = True
+        except Exception:
+            pass
+
+        return {
+            "local_commit": local_commit,
+            "local_commit_message": local_msg,
+            "local_commit_date": local_date,
+            "remote_commit": r_commit,
+            "remote_commit_message": r_msg,
+            "remote_commit_date": r_date,
+            "update_available": u_available,
+            "github_reachable": g_reachable,
+            "repo_url": "https://github.com/jotapelessa/ServONVIF2"
+        }
+
+    res_dict = await asyncio.to_thread(_fetch_remote)
+    _github_version_cache = res_dict
+    _github_cache_time = now_t
+    return res_dict
 
 @router.post("/system/update")
 async def apply_system_update():
