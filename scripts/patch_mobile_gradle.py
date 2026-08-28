@@ -15,7 +15,7 @@ def patch():
         
         settings = [
             "android.defaults.buildfeatures.buildconfig=true",
-            "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m",
+            "org.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m",
             "org.gradle.parallel=false",
             "org.gradle.workers.max=2",
             # Restrict to arm64-v8a only: avoids CXX1210 "No compatible library" for armeabi-v7a
@@ -45,11 +45,16 @@ def patch():
                 f.write(content)
             print("✅ Patched root build.gradle with expo-camera maven repo")
 
-    # 3. Patch app/build.gradle for buildFeatures.buildConfig and namespace
+    # 3. Patch app/build.gradle for buildFeatures.buildConfig, namespace, and ndkVersion
     if os.path.exists(app_gradle):
         with open(app_gradle, "r", encoding="utf-8") as f:
             content = f.read()
         
+        # Ensure ndkVersion
+        if "ndkVersion" not in content:
+            content = re.sub(r'(android\s*\{)', r'\1\n    ndkVersion "26.1.10909125"', content, count=1)
+            print("✅ Added ndkVersion 26.1.10909125 in app/build.gradle")
+
         # Ensure buildFeatures { buildConfig = true }
         if "buildConfig = true" not in content and "buildConfig true" not in content:
             if "buildFeatures {" in content:

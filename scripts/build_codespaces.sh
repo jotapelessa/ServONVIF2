@@ -13,9 +13,9 @@ TV_VERSION="v2.1.0"
 MOBILE_VERSION="v1.0.0"
 export CI=1
 
-# Configurar limites de memória JVM para evitar OOM Killer no Codespaces
-export _JAVA_OPTIONS="-Xmx2048m -XX:MaxMetaspaceSize=512m"
-export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false"
+# Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
+unset _JAVA_OPTIONS 2>/dev/null || true
+export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2560m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false"
 
 # Configurar swap adicional para evitar que o CMake seja finalizado por falta de RAM
 if [ ! -f /swapfile ] && command -v swapon &> /dev/null; then
@@ -63,12 +63,23 @@ else
         fi
         rm -f /tmp/cmdtools.zip
     fi
-    export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-    yes | sdkmanager --licenses > /dev/null 2>&1 || true
-    sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
 fi
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/tools/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+# Instalar NDK 26.1 e CMake 3.22 necessários para React Native 0.74 (Fabric)
+if command -v sdkmanager &> /dev/null; then
+    yes | sdkmanager --licenses > /dev/null 2>&1 || true
+    if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ] || [ ! -d "$ANDROID_HOME/cmake/3.22.1" ]; then
+        echo "📦 Instalando Android NDK 26.1 e CMake 3.22..."
+        sdkmanager "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.1.10909125" > /dev/null 2>&1 || true
+    fi
+fi
+
+if [ -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
+    export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+    export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+fi
 
 # 3. Garantir gradle-wrapper.jar presente
 mkdir -p "$WORKSPACE_DIR/android/gradle/wrapper"
@@ -106,10 +117,17 @@ fi
 # Gerar estrutura limpa do Expo Android sem prompt interativo
 echo "📦 Executando expo prebuild..."
 rm -rf "$WORKSPACE_DIR/mobile/android"
+find "$WORKSPACE_DIR/mobile/node_modules" -name ".cxx" -type d -exec rm -rf {} + 2>/dev/null || true
 CI=1 npx expo prebuild --platform android --clean --no-install
 
 # Aplicar patches de compatibilidade (cameraview maven repo + buildConfig + memory guards)
 python3 "$WORKSPACE_DIR/scripts/patch_mobile_gradle.py"
+
+# Garantir local.properties com sdk.dir e ndk.dir
+cat << EOF > "$WORKSPACE_DIR/mobile/android/local.properties"
+sdk.dir=$ANDROID_HOME
+ndk.dir=$ANDROID_HOME/ndk/26.1.10909125
+EOF
 
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
