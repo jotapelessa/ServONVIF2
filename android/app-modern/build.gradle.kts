@@ -64,4 +64,7 @@ dependencies {
 
     // Leanback for Android TV (optional on Mobile)
     implementation("androidx.leanback:leanback:1.0.0")
+
+    // AndroidX WebKit for bulletproof WebViewAssetLoader
+    implementation("androidx.webkit:webkit:1.10.0")
 }

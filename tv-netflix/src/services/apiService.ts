@@ -1,18 +1,37 @@
 import { Camera, LprDetection, SecurityEvent, SystemHealth } from '../types';
 
-const API_BASE = window.location.port === '8080' ? '' : (window.location.protocol + '//' + window.location.hostname + ':8080');
+function getApiBase(): string {
+  try {
+    if ((window as any).AndroidNative?.getServerBaseUrl) {
+      const nativeBase = (window as any).AndroidNative.getServerBaseUrl();
+      if (nativeBase && nativeBase.startsWith('http')) return nativeBase;
+    }
+  } catch (e) {
+    // Ignore
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+      if (window.location.port === '8080') return '';
+      if (window.location.hostname && window.location.hostname !== 'appassets.androidplatform.net') {
+        return `${window.location.protocol}//${window.location.hostname}:8080`;
+      }
+    }
+  }
+  return 'http://192.168.1.96:8080';
+}
 
 export class TvApiService {
   public static async fetchCameras(): Promise<Camera[]> {
+    const apiBase = getApiBase();
     try {
-      const res = await fetch(`${API_BASE}/api/cameras`);
+      const res = await fetch(`${apiBase}/api/cameras`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return data.map((c: any) => ({
         id: String(c.id),
         name: c.name || `Câmera ${c.id}`,
         location: c.location || 'Área Monitorada',
-        streamUrl: `${API_BASE}/api/mjpeg/${c.id}`,
+        streamUrl: `${apiBase}/api/mjpeg/${c.id}`,
         resolution: c.resolution || '1080p Full HD',
         fps: c.fps || 25,
         codec: c.codec || 'RTSP H.264',
@@ -31,8 +50,9 @@ export class TvApiService {
   }
 
   public static async fetchLprDetections(): Promise<LprDetection[]> {
+    const apiBase = getApiBase();
     try {
-      const res = await fetch(`${API_BASE}/api/lpr/detections`);
+      const res = await fetch(`${apiBase}/api/lpr/detections`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return data.map((d: any) => ({
@@ -45,7 +65,7 @@ export class TvApiService {
         color: d.color || 'Prata',
         confidence: d.confidence || 98.0,
         timestamp: d.timestamp || new Date().toISOString(),
-        thumbnailUrl: d.snapshot_path ? `${API_BASE}/${d.snapshot_path}` : '',
+        thumbnailUrl: d.snapshot_path ? `${apiBase}/${d.snapshot_path}` : '',
         ownerName: d.owner_name,
         cameraName: d.camera_name || 'Câmera Garagem',
         accessStatus: d.access_status || 'authorized',
@@ -56,8 +76,9 @@ export class TvApiService {
   }
 
   public static async fetchEvents(): Promise<SecurityEvent[]> {
+    const apiBase = getApiBase();
     try {
-      const res = await fetch(`${API_BASE}/api/events?limit=20`);
+      const res = await fetch(`${apiBase}/api/events?limit=20`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return data.map((e: any) => ({
@@ -69,8 +90,8 @@ export class TvApiService {
         duration: `${e.duration_seconds || 15}s`,
         size: e.file_size_formatted || '12 MB',
         type: e.event_type || 'motion',
-        thumbnailUrl: e.thumbnail_path ? `${API_BASE}/${e.thumbnail_path}` : '',
-        videoUrl: e.video_path ? `${API_BASE}/${e.video_path}` : '',
+        thumbnailUrl: e.thumbnail_path ? `${apiBase}/${e.thumbnail_path}` : '',
+        videoUrl: e.video_path ? `${apiBase}/${e.video_path}` : '',
         importance: e.importance || 'normal',
       }));
     } catch (e) {
@@ -79,8 +100,9 @@ export class TvApiService {
   }
 
   public static async fetchSystemHealth(): Promise<Partial<SystemHealth>> {
+    const apiBase = getApiBase();
     try {
-      const res = await fetch(`${API_BASE}/api/auth/connection-info`);
+      const res = await fetch(`${apiBase}/api/auth/connection-info`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {

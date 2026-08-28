@@ -65,6 +65,10 @@ class TvMainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupHardwareAcceleratedWebView() {
+        val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+
         webView.apply {
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
             isFocusable = true
@@ -95,6 +99,13 @@ class TvMainActivity : AppCompatActivity() {
             }
 
             webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    return request?.url?.let { assetLoader.shouldInterceptRequest(it) }
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     progressBar.visibility = View.GONE
                     Log.i("ServOnvifNetflixTV", "Netflix Smart TV Interface loaded successfully: $url")
@@ -102,10 +113,6 @@ class TvMainActivity : AppCompatActivity() {
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     Log.w("ServOnvifNetflixTV", "WebView Error on $url: ${error?.description}")
-                    if (request?.isForMainFrame == true && url?.startsWith("http") == true) {
-                        Log.i("ServOnvifNetflixTV", "Falling back to local asset bundled Netflix UI...")
-                        webView.loadUrl("file:///android_asset/tv-netflix/index.html")
-                    }
                 }
             }
 
@@ -115,7 +122,7 @@ class TvMainActivity : AppCompatActivity() {
 
     private fun loadNetflixTvInterface() {
         progressBar.visibility = View.VISIBLE
-        val localAssetUrl = "file:///android_asset/tv-netflix/index.html"
+        val localAssetUrl = "https://appassets.androidplatform.net/assets/tv-netflix/index.html"
         
         thread {
             val serverIp = configRepo.serverIp
