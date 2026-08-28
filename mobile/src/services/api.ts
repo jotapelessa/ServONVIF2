@@ -265,8 +265,9 @@ export class ApiService {
 
       return cams.map((cam) => ({
         ...cam,
-        mjpeg_url: `${baseUrl}/api/stream/${cam.id}/live`,
-        sub_stream_url: `${baseUrl}/api/stream/${cam.id}/live?quality=sub`,
+        mjpeg_url: `${baseUrl}/api/mjpeg/${cam.id}`,
+        sub_stream_url: `${baseUrl}/api/mjpeg/${cam.id}`,
+        frame_url: `${baseUrl}/api/cameras/${cam.id}/frame`,
       }));
     } catch (e: any) {
       MobileLogger.error("CAMERAS", `Erro ao listar câmeras: ${e.message}`, e);

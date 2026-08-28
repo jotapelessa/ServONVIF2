@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Camera } from "../types";
-import { Maximize2, Video, AlertCircle, Camera as CameraIcon, Check } from "lucide-react-native";
+import { Maximize2, Video, AlertCircle, Camera as CameraIcon, Check, RefreshCw } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "../theme/tokens";
 
@@ -27,9 +27,21 @@ export const CameraCard: React.FC<CameraCardProps> = ({
 }) => {
   const [hasError, setHasError] = useState(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
+  const [frameKey, setFrameKey] = useState(Date.now());
+  const [fallbackMode, setFallbackMode] = useState(false);
 
-  const streamUrl =
-    quality === "main" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url);
+  useEffect(() => {
+    // Continuously refresh thumbnail preview frames smoothly
+    const timer = setInterval(() => {
+      setFrameKey(Date.now());
+    }, 1500);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Determine stream URI
+  const liveUri = fallbackMode || !camera.mjpeg_url
+    ? `${camera.frame_url || camera.mjpeg_url}?quality=${quality}&t=${frameKey}`
+    : (quality === "main" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url));
 
   const handleCardPress = () => {
     try {
@@ -48,6 +60,16 @@ export const CameraCard: React.FC<CameraCardProps> = ({
     if (onQuickSnapshot) onQuickSnapshot();
   };
 
+  const handleImageError = () => {
+    if (!fallbackMode) {
+      // If native MJPEG fails on Android Fresco, activate frame polling
+      setFallbackMode(true);
+      setHasError(false);
+    } else {
+      setHasError(true);
+    }
+  };
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -56,17 +78,29 @@ export const CameraCard: React.FC<CameraCardProps> = ({
     >
       {/* 16:9 Video Stream Viewport */}
       <View style={styles.videoContainer}>
-        {streamUrl && !hasError ? (
+        {liveUri && !hasError ? (
           <Image
-            source={{ uri: streamUrl }}
+            key={fallbackMode ? frameKey : "live_mjpeg"}
+            source={{ uri: liveUri }}
             style={styles.streamImage}
             resizeMode="cover"
-            onError={() => setHasError(true)}
+            onError={handleImageError}
           />
         ) : (
           <View style={styles.errorContainer}>
             <AlertCircle size={28} color={theme.colors.danger} />
-            <Text style={styles.errorText}>Stream Offline</Text>
+            <Text style={styles.errorText}>Câmera Inativa ou Sem Sinal</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => {
+                setHasError(false);
+                setFallbackMode(true);
+                setFrameKey(Date.now());
+              }}
+            >
+              <RefreshCw size={12} color={theme.colors.accent} />
+              <Text style={styles.retryBtnText}>Reconectar</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -115,7 +149,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({
               {camera.name}
             </Text>
             <Text style={styles.cameraIp} numberOfLines={1}>
-              {camera.ip_address || "192.168.1.200"} • RTSP H.264
+              {camera.ip_address || "192.168.1.93"} • RTSP H.264
             </Text>
           </View>
         </View>
@@ -158,6 +192,21 @@ const styles = StyleSheet.create({
   errorText: {
     ...theme.typography.caption,
     color: theme.colors.textMuted,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.colors.surfaceElevated,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: theme.radius.xs,
+    marginTop: 4,
+  },
+  retryBtnText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.accent,
+    fontSize: 11,
   },
   topBadges: {
     position: "absolute",

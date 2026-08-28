@@ -10,6 +10,7 @@ export interface Camera {
   fps?: number;
   mjpeg_url?: string;
   sub_stream_url?: string;
+  frame_url?: string;
   profile_token?: string;
   created_at?: string;
 }

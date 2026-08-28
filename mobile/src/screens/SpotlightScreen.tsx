@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { Camera } from "../types";
-import { ArrowLeft, Camera as CameraIcon, Sparkles, Radio, Check } from "lucide-react-native";
+import { ArrowLeft, Camera as CameraIcon, Sparkles, Radio, Check, RefreshCw } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "../theme/tokens";
 
@@ -23,9 +23,20 @@ export const SpotlightScreen: React.FC<SpotlightScreenProps> = ({ camera, onClos
   const [qualityMode, setQualityMode] = useState<"5MP_MAIN" | "SUB">("5MP_MAIN");
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
+  const [frameKey, setFrameKey] = useState(Date.now());
+  const [fallbackMode, setFallbackMode] = useState(false);
 
-  const activeStreamUrl =
-    qualityMode === "5MP_MAIN" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url);
+  useEffect(() => {
+    // Refresh live frame at 10 FPS (100ms) when in spotlight for ultra-smooth video
+    const timer = setInterval(() => {
+      setFrameKey(Date.now());
+    }, 250);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeStreamUrl = fallbackMode || !camera.mjpeg_url
+    ? `${camera.frame_url || camera.mjpeg_url}?quality=${qualityMode === "5MP_MAIN" ? "main" : "sub"}&t=${frameKey}`
+    : (qualityMode === "5MP_MAIN" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url));
 
   const handleQualityToggle = () => {
     try {
@@ -91,38 +102,33 @@ export const SpotlightScreen: React.FC<SpotlightScreenProps> = ({ camera, onClos
 
       {/* Main Viewport */}
       <View style={styles.streamWrapper}>
-        {activeStreamUrl && (
+        {activeStreamUrl ? (
           <Image
+            key={fallbackMode ? frameKey : "spotlight_mjpeg"}
             source={{ uri: activeStreamUrl }}
             style={styles.streamImage}
             resizeMode="contain"
+            onError={() => setFallbackMode(true)}
           />
-        )}
+        ) : null}
 
         {flashActive && <View style={styles.flashOverlay} />}
       </View>
 
-      {/* Floating Control Toolbar */}
-      <View style={styles.footer}>
+      {/* Cinema Control Bar */}
+      <View style={styles.controlsBar}>
         <TouchableOpacity
           style={[styles.actionBtn, isSnapshotting && styles.actionBtnSuccess]}
           onPress={handleTakeSnapshot}
           activeOpacity={0.8}
         >
           {isSnapshotting ? (
-            <Check size={18} color="#ffffff" />
+            <Check size={20} color={theme.colors.success} />
           ) : (
-            <CameraIcon size={18} color="#ffffff" />
+            <CameraIcon size={20} color="#ffffff" />
           )}
-          <Text style={styles.actionBtnText}>
-            {isSnapshotting ? "Capturado!" : "Capturar Foto 5MP"}
-          </Text>
+          <Text style={styles.actionBtnText}>Capturar Snapshot 5MP</Text>
         </TouchableOpacity>
-
-        <View style={styles.telemetryPill}>
-          <Radio size={14} color={theme.colors.success} />
-          <Text style={styles.telemetryText}>25 FPS Estável • &lt;120ms Latência</Text>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -139,15 +145,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
-    backgroundColor: "rgba(13, 20, 36, 0.95)",
+    backgroundColor: "#070B14",
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderSubtle,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.surfaceElevated,
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -156,13 +162,13 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
   },
   headerTitle: {
-    ...theme.typography.h2,
+    ...theme.typography.h3,
     color: theme.colors.textPrimary,
   },
   headerSubtitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     marginTop: 2,
   },
   livePulse: {
@@ -189,8 +195,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accentBorder,
   },
   qualitySub: {
-    backgroundColor: theme.colors.surfaceElevated,
-    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderColor: "rgba(255, 255, 255, 0.12)",
   },
   qualityText: {
     ...theme.typography.captionBold,
@@ -203,9 +209,9 @@ const styles = StyleSheet.create({
   },
   streamWrapper: {
     flex: 1,
+    backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000000",
     position: "relative",
   },
   streamImage: {
@@ -215,47 +221,31 @@ const styles = StyleSheet.create({
   flashOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#ffffff",
-    opacity: 0.85,
+    opacity: 0.8,
   },
-  footer: {
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.lg,
-    backgroundColor: "rgba(13, 20, 36, 0.95)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  controlsBar: {
+    padding: theme.spacing.lg,
+    backgroundColor: "#070B14",
     borderTopWidth: 1,
-    borderTopColor: theme.colors.borderSubtle,
+    borderTopColor: "rgba(255, 255, 255, 0.08)",
   },
   actionBtn: {
+    backgroundColor: "#2563eb",
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#2563eb",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 11,
-    borderRadius: theme.radius.md,
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: theme.radius.xl,
+    ...theme.shadows.card,
   },
   actionBtnSuccess: {
-    backgroundColor: theme.colors.success,
-  },
-  actionBtnText: {
-    color: "#ffffff",
-    ...theme.typography.captionBold,
-  },
-  telemetryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     backgroundColor: theme.colors.successMuted,
     borderWidth: 1,
     borderColor: theme.colors.successBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: theme.radius.sm,
   },
-  telemetryText: {
-    ...theme.typography.mono,
-    color: theme.colors.success,
+  actionBtnText: {
+    ...theme.typography.bodyBold,
+    color: "#ffffff",
   },
 });

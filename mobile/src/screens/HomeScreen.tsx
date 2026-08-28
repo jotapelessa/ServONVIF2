@@ -33,8 +33,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectCamera }) => {
       const data = await ApiService.getCameras();
       setCameras(data);
       setRouteType(ApiService.getActiveRouteType());
-    } catch (e) {
-      console.error("Failed to load cameras:", e);
+      MobileLogger.info("CAMERAS", `Carregadas ${data.length} câmeras com sucesso. Rota: ${ApiService.getActiveRouteType()}`);
+    } catch (e: any) {
+      MobileLogger.error("CAMERAS", `Falha ao listar câmeras: ${e.message}`, e);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
