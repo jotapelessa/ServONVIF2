@@ -16,15 +16,29 @@ export class ApiService {
     }
 
     const mode = config.active_mode || "TAILSCALE";
-    MobileLogger.info("NETWORK", `Determinando rota ativa [Modo: ${mode}]... Tailscale=${config.tailscale_url || "N/A"} | LAN=${config.lan_url}`);
+    MobileLogger.info("NETWORK", `Determinando rota ativa [Modo: ${mode}]... Tailscale=${config.tailscale_url || "N/A"} | TailscaleIP=${config.tailscale_ip_url || "N/A"} | LAN=${config.lan_url}`);
+
+    // Helper to test Tailscale endpoints
+    const probeTailscale = async (): Promise<string | null> => {
+      if (config.funnel_url && (await this.probeUrl(config.funnel_url, 3000))) {
+        return this.sanitizeUrl(config.funnel_url);
+      }
+      if (config.tailscale_url && (await this.probeUrl(config.tailscale_url, 3000))) {
+        return this.sanitizeUrl(config.tailscale_url);
+      }
+      if (config.tailscale_ip_url && (await this.probeUrl(config.tailscale_ip_url, 3000))) {
+        return this.sanitizeUrl(config.tailscale_ip_url);
+      }
+      return null;
+    };
 
     // 1. Force Tailscale Mode (Primary Default)
-    if (mode === "TAILSCALE" && config.tailscale_url) {
-      const tsWorks = await this.probeUrl(config.tailscale_url, 3000);
-      if (tsWorks) {
-        this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url);
+    if (mode === "TAILSCALE") {
+      const workingTs = await probeTailscale();
+      if (workingTs) {
+        this.cachedBaseUrl = workingTs;
         this.activeRouteType = "TAILSCALE";
-        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh (Padrão) conectada com sucesso: ${this.cachedBaseUrl}`);
+        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh conectada: ${this.cachedBaseUrl}`);
         return this.cachedBaseUrl;
       }
       // If forced Tailscale is temporarily unreachable, fallback to LAN with log
@@ -47,14 +61,12 @@ export class ApiService {
     }
 
     // 3. AUTO Mode: Probe Tailscale FIRST (Works everywhere seamlessly, on Wi-Fi and 4G/5G)
-    if (config.tailscale_url) {
-      const tsWorks = await this.probeUrl(config.tailscale_url, 3000);
-      if (tsWorks) {
-        this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url);
-        this.activeRouteType = "TAILSCALE";
-        MobileLogger.info("NETWORK", `🌐 [AUTO] Rota Tailscale Mesh ativa: ${this.cachedBaseUrl}`);
-        return this.cachedBaseUrl;
-      }
+    const autoTs = await probeTailscale();
+    if (autoTs) {
+      this.cachedBaseUrl = autoTs;
+      this.activeRouteType = "TAILSCALE";
+      MobileLogger.info("NETWORK", `🌐 [AUTO] Rota Tailscale Mesh ativa: ${this.cachedBaseUrl}`);
+      return this.cachedBaseUrl;
     }
 
     // Fallback to local LAN Wi-Fi
@@ -67,7 +79,7 @@ export class ApiService {
     }
 
     // Default fallback
-    this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url || config.active_base_url || config.lan_url);
+    this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_ip_url || config.tailscale_url || config.active_base_url || config.lan_url);
     this.activeRouteType = (this.cachedBaseUrl && (this.cachedBaseUrl.includes(".ts.net") || this.cachedBaseUrl.includes("100."))) ? "TAILSCALE" : "LAN";
     MobileLogger.warn("NETWORK", `⚠️ Sondagens falharam. Usando URL direta: ${this.cachedBaseUrl}`);
     return this.cachedBaseUrl;
@@ -93,17 +105,20 @@ export class ApiService {
   }
 
   public static sanitizeUrl(rawUrl: string): string {
-    let clean = rawUrl.trim();
-    // Convert https:// to http:// if port 8080 is specified (Uvicorn HTTP)
-    if (clean.includes(":8080") && clean.startsWith("https://")) {
-      clean = clean.replace("https://", "http://");
+    if (!rawUrl) return "";
+    let clean = rawUrl.trim().replace(/\/+$/, "");
+    // Always convert https to http for port 8080 or Tailscale mesh hostnames
+    if (clean.includes(":8080") || clean.includes(".ts.net") || clean.includes("100.")) {
+      if (clean.startsWith("https://")) {
+        clean = clean.replace("https://", "http://");
+      }
     }
     if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
       clean = `http://${clean}`;
     }
     const parts = clean.split("/");
     const hostPort = parts[2] || "";
-    if (!hostPort.includes(":") && !hostPort.includes(".ts.net")) {
+    if (!hostPort.includes(":")) {
       clean = `${parts[0]}//${hostPort}:8080`;
     }
     return clean;
@@ -121,21 +136,6 @@ export class ApiService {
       clearTimeout(timeoutId);
       return res.ok;
     } catch {
-      // Try HTTP alternative if HTTPS was provided
-      if (sanitized.startsWith("https://")) {
-        try {
-          const httpFallback = sanitized.replace("https://", "http://");
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-          const res = await fetch(`${httpFallback}/api/auth/connection-info`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          return res.ok;
-        } catch {
-          return false;
-        }
-      }
       return false;
     }
   }
@@ -147,40 +147,44 @@ export class ApiService {
     message: string;
   }> {
     const config = await StorageService.getConnectionConfig();
-    if (!config || !config.tailscale_url) {
+    if (!config || (!config.tailscale_url && !config.tailscale_ip_url)) {
       const msg = "Endereço Tailscale não configurado no smartphone.";
       MobileLogger.warn("TAILSCALE_TEST", msg);
       return { success: false, latencyMs: -1, url: "N/A", message: msg };
     }
 
-    // Try sanitized HTTP URL first (8080 is HTTP)
-    const tsUrl = this.sanitizeUrl(config.tailscale_url);
-    MobileLogger.info("TAILSCALE_TEST", `Iniciando teste de rota Tailscale Mesh: ${tsUrl}`);
-    const start = Date.now();
+    const targets = [
+      config.tailscale_url ? this.sanitizeUrl(config.tailscale_url) : null,
+      config.tailscale_ip_url ? this.sanitizeUrl(config.tailscale_ip_url) : null,
+    ].filter(Boolean) as string[];
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(`${tsUrl}/api/auth/connection-info`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      const latency = Date.now() - start;
+    for (const tsUrl of targets) {
+      MobileLogger.info("TAILSCALE_TEST", `Iniciando teste de rota Tailscale Mesh: ${tsUrl}`);
+      const start = Date.now();
 
-      if (res.ok) {
-        const msg = `✅ Conexão Tailscale Mesh OK (${latency}ms RTT)`;
-        MobileLogger.info("TAILSCALE_TEST", msg);
-        return { success: true, latencyMs: latency, url: tsUrl, message: msg };
-      } else {
-        const msg = `⚠️ Servidor respondeu com HTTP ${res.status}`;
-        MobileLogger.warn("TAILSCALE_TEST", msg);
-        return { success: false, latencyMs: latency, url: tsUrl, message: msg };
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`${tsUrl}/api/auth/connection-info`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        const latency = Date.now() - start;
+
+        if (res.ok) {
+          const msg = `✅ Conexão Tailscale Mesh OK (${latency}ms RTT - ${tsUrl})`;
+          MobileLogger.info("TAILSCALE_TEST", msg);
+          return { success: true, latencyMs: latency, url: tsUrl, message: msg };
+        }
+      } catch (e: any) {
+        MobileLogger.warn("TAILSCALE_TEST", `Tentativa em ${tsUrl} falhou: ${e.message}`);
       }
-    } catch (e: any) {
-      const msg = `❌ Falha ao alcançar nó Tailscale (${tsUrl}). DICA: Ligue o app Tailscale (VPN Conectada) no Smartphone Android. Detalhes: ${e.message}`;
-      MobileLogger.error("TAILSCALE_TEST", msg, e);
-      return { success: false, latencyMs: -1, url: tsUrl, message: msg };
     }
+
+    const primaryUrl = targets[0] || "N/A";
+    const msg = `❌ Falha ao alcançar nó Tailscale (${primaryUrl}). DICA: Ligue a VPN no app Tailscale no Smartphone Android.`;
+    MobileLogger.error("TAILSCALE_TEST", msg);
+    return { success: false, latencyMs: -1, url: primaryUrl, message: msg };
   }
 
   public static async testLanConnection(): Promise<{
@@ -230,19 +234,21 @@ export class ApiService {
   ): Promise<ConnectionConfig> {
     const rawLan = this.sanitizeUrl(bundle.lan_url || "http://192.168.1.96:8080");
     const rawTs = bundle.tailscale_url ? this.sanitizeUrl(bundle.tailscale_url) : undefined;
+    const rawTsIp = bundle.tailscale_ip_url ? this.sanitizeUrl(bundle.tailscale_ip_url) : undefined;
+    const rawFunnel = bundle.funnel_url ? this.sanitizeUrl(bundle.funnel_url) : undefined;
 
-    MobileLogger.info("AUTH", `Iniciando validação de emparelhamento... TS=${rawTs || "N/A"} | LAN=${rawLan}`);
+    MobileLogger.info("AUTH", `Iniciando validação de emparelhamento... Funnel=${rawFunnel || "N/A"} | TS=${rawTs || "N/A"} | TS_IP=${rawTsIp || "N/A"} | LAN=${rawLan}`);
 
-    // Prioritize Tailscale URL as default
-    let workingBaseUrl = rawTs || rawLan;
-    if (rawTs) {
-      const tsOk = await this.probeUrl(rawTs, 3500);
-      if (tsOk) {
-        workingBaseUrl = rawTs;
-      } else {
-        const lanOk = await this.probeUrl(rawLan, 2000);
-        if (lanOk) workingBaseUrl = rawLan;
-      }
+    // Prioritize Funnel / Tailscale URL as default
+    let workingBaseUrl = rawFunnel || rawTs || rawTsIp || rawLan;
+    if (rawFunnel && (await this.probeUrl(rawFunnel, 3000))) {
+      workingBaseUrl = rawFunnel;
+    } else if (rawTs && (await this.probeUrl(rawTs, 3000))) {
+      workingBaseUrl = rawTs;
+    } else if (rawTsIp && (await this.probeUrl(rawTsIp, 3000))) {
+      workingBaseUrl = rawTsIp;
+    } else if (await this.probeUrl(rawLan, 2000)) {
+      workingBaseUrl = rawLan;
     }
 
     MobileLogger.info("AUTH", `Enviando credenciais para ${workingBaseUrl}/api/auth/mobile-verify`);
@@ -256,7 +262,7 @@ export class ApiService {
           device_name: deviceName,
           device_type: "Smartphone",
           manufacturer_model: "Smartphone Móvel",
-          app_version: "002.002.137",
+          app_version: "002.002.138",
         }),
       });
 
@@ -271,11 +277,13 @@ export class ApiService {
       const connConfig: ConnectionConfig = {
         lan_url: rawLan,
         tailscale_url: rawTs,
+        tailscale_ip_url: rawTsIp,
+        funnel_url: rawFunnel,
         session_token: data.session_token || "session_active",
         server_name: bundle.server_name || "ServONVIF Hub",
         device_id: data.device?.device_id || `DEV-PHONE-${Date.now().toString(16)}`,
         device_name: data.device?.device_name || deviceName,
-        active_mode: rawTs ? "TAILSCALE" : "AUTO",
+        active_mode: (rawFunnel || rawTs || rawTsIp) ? "TAILSCALE" : "AUTO",
         active_base_url: workingBaseUrl,
         last_connected_at: new Date().toISOString(),
       };

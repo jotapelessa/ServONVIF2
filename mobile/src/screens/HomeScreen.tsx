@@ -16,6 +16,7 @@ import { Header } from "../components/Header";
 import { Video, Sparkles, Filter, CheckCircle2 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "../theme/tokens";
+import { MobileLogger } from "../services/mobileLogger";
 
 interface HomeScreenProps {
   onSelectCamera: (camera: Camera) => void;

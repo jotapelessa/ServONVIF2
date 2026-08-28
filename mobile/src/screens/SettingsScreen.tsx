@@ -204,6 +204,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
             </View>
           )}
 
+          {config?.tailscale_ip_url && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Tailscale IP:</Text>
+              <Text style={styles.monoValue} numberOfLines={1}>
+                {config.tailscale_ip_url}
+              </Text>
+            </View>
+          )}
+
           {/* Route Mode Selector */}
           <Text style={[styles.sectionTitle, { marginTop: 14, marginBottom: 8 }]}>
             Modo de Conexão:

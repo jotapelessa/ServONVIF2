@@ -35,19 +35,27 @@ jobs:
         with:
           node-version: 18
 
-      - name: Build ServONVIF TV APK
+      - name: Build ServONVIF TV APKs (Classic & Modern)
         run: |
           mkdir -p build-outputs
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
-          TV_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
-          cp "$TV_APK" ../build-outputs/ServONVIF_TV_v2.1.0.apk
+          
+          # Copy TV Classic APK
+          TV_CLASSIC_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
+          cp "$TV_CLASSIC_APK" ../build-outputs/ServONVIF_TV_Classic_v2.2.apk
+          
+          # Copy TV Modern APK
+          TV_MODERN_APK="$(find app-modern/build/outputs/apk -name '*.apk' | head -n 1)"
+          cp "$TV_MODERN_APK" ../build-outputs/ServONVIF_TV_Modern_v2.2.apk
+          
+          echo "✅ Built TV Classic and TV Modern APKs successfully"
 
-      - name: Build ServONVIF Mobile APK
+      - name: Build ServONVIF Mobile APK (Expo SDK 54)
         run: |
           cd mobile
-          npm install
+          npm install --legacy-peer-deps
           npx expo prebuild --platform android --clean --no-install
           cd ..
           python3 scripts/patch_mobile_gradle.py
@@ -55,7 +63,8 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
           MOBILE_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
-          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile_v1.0.0.apk
+          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile_v2.2.apk
+          echo "✅ Built Mobile APK successfully"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -67,16 +76,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v2.1.0
-          name: "ServONVIF v2.1.0 - TV & Mobile Apps"
+          tag_name: v2.2.138
+          name: "ServONVIF v2.2.138 - TV Classic, TV Modern & Mobile Apps"
           body: |
-            🚀 **Lançamento Oficial ServONVIF v2.1.0**
+            🚀 **Lançamento Oficial ServONVIF v2.2.138**
             
-            ### 📦 Aplicativos Disponíveis:
-            - 📺 **ServONVIF_TV_v2.1.0.apk**: Aplicativo para Smart TV / TV Box com PiP overlay e suporte a controle remoto D-pad.
-            - 📱 **ServONVIF_Mobile_v1.0.0.apk**: Aplicativo para Smartphone com integração Tailscale, visualizador 5MP ao vivo e feed LPR de placas.
+            ### 📦 Aplicativos Disponíveis para Download:
+            - 📺 **ServONVIF_TV_Classic_v2.2.apk**: Versão clássica e estável para Smart TV e TV Box com PiP overlay e navegação por controle remoto.
+            - ✨ **ServONVIF_TV_Modern_v2.2.apk**: Nova versão com UI/UX moderna (Dark Glassmorphism 60/30/10), mantendo 100% das abas, Mosaico e PiP.
+            - 📱 **ServONVIF_Mobile_v2.2.apk**: App standalone para Smartphones (Expo SDK 54 / React Native), com transmissão Zero-Flicker e suporte a Tailscale Funnel.
           files: |
-            build-outputs/ServONVIF_TV_v2.1.0.apk
-            build-outputs/ServONVIF_Mobile_v1.0.0.apk
+            build-outputs/ServONVIF_TV_Classic_v2.2.apk
+            build-outputs/ServONVIF_TV_Modern_v2.2.apk
+            build-outputs/ServONVIF_Mobile_v2.2.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

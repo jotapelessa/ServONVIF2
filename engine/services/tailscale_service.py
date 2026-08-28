@@ -166,13 +166,27 @@ class TailscaleService:
             except Exception as e:
                 logger.debug(f"Tailscale json status check: {e}")
 
-        # Fallback interface inspection if binary was not detected or failed
-        if not tailscale_ip:
-            interface_ip = self._get_tailscale_ip_from_interfaces()
-            if interface_ip:
-                tailscale_ip = interface_ip
-                is_running = True
-                is_installed = True
+            # 3. Check for active Tailscale Funnel / Serve (Zero-VPN Public HTTPS)
+            is_funnel_active = False
+            funnel_url = None
+            try:
+                proc_funnel = subprocess.run(
+                    [binary, "funnel", "status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2.0,
+                )
+                if proc_funnel.returncode == 0 and "https://" in proc_funnel.stdout:
+                    is_funnel_active = True
+                    for line in proc_funnel.stdout.splitlines():
+                        if "https://" in line:
+                            # Extract https URL
+                            for word in line.split():
+                                if word.startswith("https://"):
+                                    funnel_url = word.strip().rstrip("/")
+                                    break
+            except Exception as e:
+                logger.debug(f"Tailscale funnel check: {e}")
 
         return {
             "is_installed": is_installed,
@@ -182,6 +196,8 @@ class TailscaleService:
             "magicdns_hostname": magicdns_hostname,
             "self_node_name": self_node_name,
             "tailnet_name": tailnet_name,
+            "is_funnel_active": is_funnel_active,
+            "funnel_url": funnel_url,
             "peers_count": len(peers),
             "peers": peers,
             "install_guide": self.get_install_guide(),

@@ -47,16 +47,32 @@ async def get_connection_info():
     magicdns_name = ts_status.get("magicdns_hostname") or ts_status.get("self_node_name")
 
     tailscale_url = None
+    tailscale_ip_url = None
+    if tailscale_ip:
+        tailscale_ip_url = f"http://{tailscale_ip}:8080"
+
     if magicdns_name:
-        tailscale_url = f"https://{magicdns_name}:8080" if not magicdns_name.startswith("http") else magicdns_name
-    elif tailscale_ip:
-        tailscale_url = f"http://{tailscale_ip}:8080"
+        clean_name = magicdns_name
+        if clean_name.startswith("https://"):
+            clean_name = clean_name.replace("https://", "http://")
+        elif not clean_name.startswith("http://"):
+            clean_name = f"http://{clean_name}"
+        if not clean_name.endswith(":8080") and ":8080" not in clean_name:
+            clean_name = f"{clean_name}:8080"
+        tailscale_url = clean_name
+    elif tailscale_ip_url:
+        tailscale_url = tailscale_ip_url
+
+    funnel_url = ts_status.get("funnel_url")
 
     return {
         "lan_ip": local_ip,
         "lan_url": f"http://{local_ip}:8080",
         "tailscale_ip": tailscale_ip,
+        "tailscale_ip_url": tailscale_ip_url,
         "tailscale_url": tailscale_url,
+        "funnel_url": funnel_url,
+        "is_funnel_active": ts_status.get("is_funnel_active", False),
         "magicdns_hostname": magicdns_name,
         "is_tailscale_running": ts_status.get("is_running", False),
         "timestamp": datetime.utcnow().isoformat(),
@@ -85,6 +101,8 @@ async def generate_pairing_token():
         "token": token,
         "lan_url": conn_info["lan_url"],
         "tailscale_url": conn_info["tailscale_url"],
+        "tailscale_ip_url": conn_info.get("tailscale_ip_url"),
+        "funnel_url": conn_info.get("funnel_url"),
         "expires_at": int(expires_at),
         "server_name": "ServONVIF Hub",
     }

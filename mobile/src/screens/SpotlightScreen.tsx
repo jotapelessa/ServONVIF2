@@ -23,20 +23,52 @@ export const SpotlightScreen: React.FC<SpotlightScreenProps> = ({ camera, onClos
   const [qualityMode, setQualityMode] = useState<"5MP_MAIN" | "SUB">("5MP_MAIN");
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
-  const [frameKey, setFrameKey] = useState(Date.now());
-  const [fallbackMode, setFallbackMode] = useState(false);
+
+  // Zero-Flicker Dual-Layer State
+  const baseFrameUrl = camera.frame_url || `${camera.mjpeg_url?.replace("/api/mjpeg/", "/api/cameras/")}/frame`;
+  const [uriA, setUriA] = useState<string>(`${baseFrameUrl}?quality=${qualityMode === "5MP_MAIN" ? "main" : "sub"}&t=${Date.now()}`);
+  const [uriB, setUriB] = useState<string>("");
+  const [activeLayer, setActiveLayer] = useState<"A" | "B">("A");
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // Refresh live frame at 10 FPS (100ms) when in spotlight for ultra-smooth video
-    const timer = setInterval(() => {
-      setFrameKey(Date.now());
-    }, 250);
-    return () => clearInterval(timer);
-  }, []);
+    let isMounted = true;
+    const interval = setInterval(() => {
+      if (!isMounted) return;
+      const nextTimestamp = Date.now();
+      const qualityParam = qualityMode === "5MP_MAIN" ? "main" : "sub";
+      const nextUri = `${baseFrameUrl}?quality=${qualityParam}&t=${nextTimestamp}`;
 
-  const activeStreamUrl = fallbackMode || !camera.mjpeg_url
-    ? `${camera.frame_url || camera.mjpeg_url}?quality=${qualityMode === "5MP_MAIN" ? "main" : "sub"}&t=${frameKey}`
-    : (qualityMode === "5MP_MAIN" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url));
+      // Pre-load next frame in the background layer
+      setActiveLayer((current) => {
+        if (current === "A") {
+          setUriB(nextUri);
+        } else {
+          setUriA(nextUri);
+        }
+        return current;
+      });
+    }, 450);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [baseFrameUrl, qualityMode]);
+
+  const handleLayerALoad = () => {
+    setIsLoaded(true);
+    if (activeLayer === "B") {
+      setActiveLayer("A");
+    }
+  };
+
+  const handleLayerBLoad = () => {
+    setIsLoaded(true);
+    if (activeLayer === "A") {
+      setActiveLayer("B");
+    }
+  };
 
   const handleQualityToggle = () => {
     try {
@@ -102,13 +134,31 @@ export const SpotlightScreen: React.FC<SpotlightScreenProps> = ({ camera, onClos
 
       {/* Main Viewport */}
       <View style={styles.streamWrapper}>
-        {activeStreamUrl ? (
+        {/* Layer A */}
+        {uriA ? (
           <Image
-            key={fallbackMode ? frameKey : "spotlight_mjpeg"}
-            source={{ uri: activeStreamUrl }}
-            style={styles.streamImage}
+            source={{ uri: uriA }}
+            style={[
+              styles.streamImage,
+              styles.absoluteStreamImage,
+              { opacity: activeLayer === "A" ? 1 : 0, zIndex: activeLayer === "A" ? 2 : 1 }
+            ]}
             resizeMode="contain"
-            onError={() => setFallbackMode(true)}
+            onLoad={handleLayerALoad}
+          />
+        ) : null}
+
+        {/* Layer B (Background Pre-loader) */}
+        {uriB ? (
+          <Image
+            source={{ uri: uriB }}
+            style={[
+              styles.streamImage,
+              styles.absoluteStreamImage,
+              { opacity: activeLayer === "B" ? 1 : 0, zIndex: activeLayer === "B" ? 2 : 1 }
+            ]}
+            resizeMode="contain"
+            onLoad={handleLayerBLoad}
           />
         ) : null}
 
@@ -217,6 +267,13 @@ const styles = StyleSheet.create({
   streamImage: {
     width: "100%",
     height: "100%",
+  },
+  absoluteStreamImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   flashOverlay: {
     ...StyleSheet.absoluteFillObject,

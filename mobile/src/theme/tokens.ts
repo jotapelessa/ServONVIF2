@@ -60,6 +60,7 @@ export const theme = {
     lg: 18,
     xl: 24,
     pill: 9999,
+    full: 9999,
   },
 
   typography: {

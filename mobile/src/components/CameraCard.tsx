@@ -27,21 +27,53 @@ export const CameraCard: React.FC<CameraCardProps> = ({
 }) => {
   const [hasError, setHasError] = useState(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
-  const [frameKey, setFrameKey] = useState(Date.now());
-  const [fallbackMode, setFallbackMode] = useState(false);
+  
+  // Zero-Flicker Dual-Layer State
+  const baseFrameUrl = camera.frame_url || `${camera.mjpeg_url?.replace("/api/mjpeg/", "/api/cameras/")}/frame`;
+  const [uriA, setUriA] = useState<string>(`${baseFrameUrl}?quality=${quality}&t=${Date.now()}`);
+  const [uriB, setUriB] = useState<string>("");
+  const [activeLayer, setActiveLayer] = useState<"A" | "B">("A");
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // Continuously refresh thumbnail preview frames smoothly
-    const timer = setInterval(() => {
-      setFrameKey(Date.now());
-    }, 1500);
-    return () => clearInterval(timer);
-  }, []);
+    let isMounted = true;
+    const interval = setInterval(() => {
+      if (!isMounted) return;
+      const nextTimestamp = Date.now();
+      const nextUri = `${baseFrameUrl}?quality=${quality}&t=${nextTimestamp}`;
+      
+      // Pre-load next frame in the background layer
+      setActiveLayer((current) => {
+        if (current === "A") {
+          setUriB(nextUri);
+        } else {
+          setUriA(nextUri);
+        }
+        return current;
+      });
+    }, 1200);
 
-  // Determine stream URI
-  const liveUri = fallbackMode || !camera.mjpeg_url
-    ? `${camera.frame_url || camera.mjpeg_url}?quality=${quality}&t=${frameKey}`
-    : (quality === "main" ? camera.mjpeg_url : (camera.sub_stream_url || camera.mjpeg_url));
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [baseFrameUrl, quality]);
+
+  const handleLayerALoad = () => {
+    setIsLoaded(true);
+    setHasError(false);
+    if (activeLayer === "B") {
+      setActiveLayer("A");
+    }
+  };
+
+  const handleLayerBLoad = () => {
+    setIsLoaded(true);
+    setHasError(false);
+    if (activeLayer === "A") {
+      setActiveLayer("B");
+    }
+  };
 
   const handleCardPress = () => {
     try {
@@ -60,12 +92,8 @@ export const CameraCard: React.FC<CameraCardProps> = ({
     if (onQuickSnapshot) onQuickSnapshot();
   };
 
-  const handleImageError = () => {
-    if (!fallbackMode) {
-      // If native MJPEG fails on Android Fresco, activate frame polling
-      setFallbackMode(true);
-      setHasError(false);
-    } else {
+  const handleLayerError = () => {
+    if (!isLoaded) {
       setHasError(true);
     }
   };
@@ -78,14 +106,38 @@ export const CameraCard: React.FC<CameraCardProps> = ({
     >
       {/* 16:9 Video Stream Viewport */}
       <View style={styles.videoContainer}>
-        {liveUri && !hasError ? (
-          <Image
-            key={fallbackMode ? frameKey : "live_mjpeg"}
-            source={{ uri: liveUri }}
-            style={styles.streamImage}
-            resizeMode="cover"
-            onError={handleImageError}
-          />
+        {!hasError ? (
+          <>
+            {/* Layer A */}
+            {uriA ? (
+              <Image
+                source={{ uri: uriA }}
+                style={[
+                  styles.streamImage,
+                  styles.absoluteStreamImage,
+                  { opacity: activeLayer === "A" ? 1 : 0, zIndex: activeLayer === "A" ? 2 : 1 }
+                ]}
+                resizeMode="cover"
+                onLoad={handleLayerALoad}
+                onError={handleLayerError}
+              />
+            ) : null}
+
+            {/* Layer B (Background Pre-loader) */}
+            {uriB ? (
+              <Image
+                source={{ uri: uriB }}
+                style={[
+                  styles.streamImage,
+                  styles.absoluteStreamImage,
+                  { opacity: activeLayer === "B" ? 1 : 0, zIndex: activeLayer === "B" ? 2 : 1 }
+                ]}
+                resizeMode="cover"
+                onLoad={handleLayerBLoad}
+                onError={handleLayerError}
+              />
+            ) : null}
+          </>
         ) : (
           <View style={styles.errorContainer}>
             <AlertCircle size={28} color={theme.colors.danger} />
@@ -94,8 +146,8 @@ export const CameraCard: React.FC<CameraCardProps> = ({
               style={styles.retryBtn}
               onPress={() => {
                 setHasError(false);
-                setFallbackMode(true);
-                setFrameKey(Date.now());
+                setUriA(`${baseFrameUrl}?quality=${quality}&t=${Date.now()}`);
+                setActiveLayer("A");
               }}
             >
               <RefreshCw size={12} color={theme.colors.accent} />
@@ -183,6 +235,13 @@ const styles = StyleSheet.create({
   streamImage: {
     width: "100%",
     height: "100%",
+  },
+  absoluteStreamImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   errorContainer: {
     alignItems: "center",

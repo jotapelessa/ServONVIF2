@@ -43,6 +43,8 @@ export interface PlateLog {
 export interface ConnectionConfig {
   lan_url: string;
   tailscale_url?: string;
+  tailscale_ip_url?: string;
+  funnel_url?: string;
   session_token: string;
   server_name: string;
   device_id: string;
@@ -57,6 +59,8 @@ export interface PairingBundle {
   token: string;
   lan_url: string;
   tailscale_url?: string;
+  tailscale_ip_url?: string;
+  funnel_url?: string;
   expires_at: number;
   server_name?: string;
 }
