@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 from loguru import logger
 
 from engine.database.db import get_db, get_system_setting, set_system_setting
-from engine.database.models import Device
+from engine.database.models import Device, Camera
 from engine.api.websocket_hub import ws_hub
 from engine.services.backup_service import dispatch_telegram_backup
 
@@ -266,16 +266,22 @@ async def send_device_test_notification(device_id_or_pk: str, db: AsyncSession =
     if not dev:
         raise HTTPException(status_code=404, detail="Dispositivo não encontrado")
 
+    # Fetch active camera for real live video feed in PiP overlay
+    cam_res = await db.execute(select(Camera).where(Camera.is_active == True).limit(1))
+    cam = cam_res.scalars().first()
+    active_cam_id = cam.id if cam else 1
+    active_cam_name = cam.name if cam else f"🔔 Teste: {dev.device_name}"
+
     test_payload = {
-        "type": "DEVICE_TEST_NOTIFICATION",
+        "type": "MOTION_ALERT",
         "title": "🔔 Teste de Notificação ServONVIF",
         "message": f"Conexão com {dev.device_name} validada com sucesso!",
-        "camera_id": 1,
+        "camera_id": active_cam_id,
         "camera_name": f"🔔 Teste: {dev.device_name}",
         "device_id": dev.device_id,
         "device_name": dev.device_name,
         "score": 1.0,
-        "mjpeg_url": "/api/mjpeg/1",
+        "mjpeg_url": f"/api/mjpeg/{active_cam_id}",
         "timestamp": datetime.utcnow().isoformat(),
         "sound": True
     }
@@ -291,7 +297,7 @@ async def send_device_test_notification(device_id_or_pk: str, db: AsyncSession =
 
     return {
         "success": True,
-        "message": f"Notificação de teste disparada com sucesso para '{dev.device_name}'!",
+        "message": f"Notificação de teste disparada com sucesso para '{dev.device_name}' (Câmera: {active_cam_name})!",
         "delivered_to_active_socket": sent
     }
 

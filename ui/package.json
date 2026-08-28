@@ -1,6 +1,6 @@
 {
   "name": "servonvif-ui",
-  "version": "2.2.126",
+  "version": "2.2.127",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3005",

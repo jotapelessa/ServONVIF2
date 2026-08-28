@@ -186,11 +186,21 @@ class WebSocketHub:
             return False
         message = json.dumps(event_data)
         sent = False
+        target = str(device_id_or_ip).strip()
         for ws, info in list(self.active_clients.items()):
-            if info.device_id == device_id_or_ip or info.ip == device_id_or_ip:
+            # Robust matching: Exact match, IP match, prefix match, or substring match
+            is_match = (
+                info.device_id == target or
+                info.ip == target or
+                (target and info.device_id and target in info.device_id) or
+                (target and info.device_id and info.device_id in target) or
+                (target and info.ip and target in info.ip)
+            )
+            if is_match:
                 try:
                     await ws.send_text(message)
                     sent = True
+                    logger.info(f"🔔 Targeted test push DELIVERED to WebSocket: {info.device_id} @ {info.ip}")
                 except Exception as e:
                     logger.warning(f"Error sending targeted push to {info.ip}: {e}")
                     self.disconnect(ws)
