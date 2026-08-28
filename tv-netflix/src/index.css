@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Frosted Glass Theme Utilities */
+  .bg-glass-card {
+    background-color: rgba(19, 29, 51, 0.6);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .bg-glass-card-dense {
+    background-color: rgba(13, 20, 36, 0.75);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+  }
+
+  .bg-glass-pill {
+    background-color: rgba(19, 29, 51, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .border-glass {
+    border-color: rgba(30, 45, 74, 0.8);
+  }
+
+  .border-glass-subtle {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Leanback D-pad Focus Effects */
+  .tv-focus-target {
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease-out, border-color 220ms ease-out, background-color 200ms ease;
+  }
+
+  .tv-focused {
+    transform: scale(1.05);
+    border-color: #00D2FF !important;
+    box-shadow: 0 0 28px rgba(0, 210, 255, 0.45), 0 12px 36px rgba(0, 0, 0, 0.8) !important;
+    z-index: 30;
+  }
+
+  .tv-focused-subtle {
+    transform: scale(1.025);
+    border-color: #00D2FF !important;
+    box-shadow: 0 0 18px rgba(0, 210, 255, 0.35) !important;
+  }
+
+  /* Scanlines Overlay */
+  .cctv-scanlines {
+    background: linear-gradient(
+      rgba(18, 16, 16, 0) 50%, 
+      rgba(0, 0, 0, 0.25) 50%
+    ), linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.03),
+      rgba(0, 255, 0, 0.01),
+      rgba(0, 0, 255, 0.03)
+    );
+    background-size: 100% 4px, 6px 100%;
+    pointer-events: none;
+  }
+
+  /* Hide scrollbars for TV UI */
+  .tv-hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .tv-hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes pulse-alarm {
+  0%, 100% {
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 1);
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.8);
+  }
+}
+
+.animate-alarm-pulse {
+  animation: pulse-alarm 1.2s infinite ease-in-out;
+}
+

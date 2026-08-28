@@ -117,6 +117,16 @@ if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s
     wget -q https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradle/wrapper/gradle-wrapper.jar -O "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar"
 fi
 
+# 4. Compilar UI Netflix da Smart TV se presente
+if [ -d "$WORKSPACE_DIR/tv-netflix" ]; then
+    echo "🎬 Compilando Interface Web Netflix Smart TV..."
+    cd "$WORKSPACE_DIR/tv-netflix"
+    npm install --silent 2>/dev/null || true
+    npm run build 2>/dev/null || true
+    mkdir -p "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix"
+    cp -r dist/* "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix/" 2>/dev/null || true
+fi
+
 echo "=================================================="
 echo "📺 Compilando APKs TV (Clássico & Netflix) v$APP_VER..."
 echo "=================================================="

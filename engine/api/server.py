@@ -67,6 +67,14 @@ app.include_router(devices_router)
 app.include_router(vehicles_router)
 app.include_router(auth_router)
 
+# Mount ServONVIF Netflix Smart TV Web UI at /tv
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+tv_dist_dir = Path(__file__).resolve().parent.parent.parent / "tv-netflix" / "dist"
+if tv_dist_dir.exists():
+    app.mount("/tv", StaticFiles(directory=str(tv_dist_dir), html=True), name="tv-netflix")
+
 @app.websocket("/ws/events")
 async def websocket_events_endpoint(
     websocket: WebSocket,

@@ -1,0 +1,6 @@
+{
+  "name": "ServONVIF TV PRO",
+  "description": "Interface cinematográfica 10-Foot Leanback (estilo Netflix) para Smart TV e Android TV do sistema de segurança ServONVIF PRO com navegação D-pad, monitoramento ao vivo, mosaico multitelas, central LPR e telemetria.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
