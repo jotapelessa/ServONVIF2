@@ -22,53 +22,53 @@ export class ApiService {
     if (mode === "TAILSCALE" && config.tailscale_url) {
       const tsWorks = await this.probeUrl(config.tailscale_url, 3000);
       if (tsWorks) {
-        this.cachedBaseUrl = config.tailscale_url;
+        this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url);
         this.activeRouteType = "TAILSCALE";
-        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh (Padrão) conectada com sucesso: ${config.tailscale_url}`);
-        return config.tailscale_url;
+        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh (Padrão) conectada com sucesso: ${this.cachedBaseUrl}`);
+        return this.cachedBaseUrl;
       }
       // If forced Tailscale is temporarily unreachable, fallback to LAN with log
-      MobileLogger.warn("NETWORK", `⚠️ Rota Tailscale inacessível. Tentando failover automático para LAN...`);
+      MobileLogger.warn("NETWORK", `⚠️ Rota Tailscale inacessível (Verifique se o app Tailscale está ATIVO no celular). Failover para LAN...`);
       const lanWorks = await this.probeUrl(config.lan_url, 1500);
       if (lanWorks) {
-        this.cachedBaseUrl = config.lan_url;
+        this.cachedBaseUrl = this.sanitizeUrl(config.lan_url);
         this.activeRouteType = "LAN";
-        MobileLogger.info("NETWORK", `📶 Failover para LAN Wi-Fi ativado: ${config.lan_url}`);
-        return config.lan_url;
+        MobileLogger.info("NETWORK", `📶 Failover para LAN Wi-Fi ativado: ${this.cachedBaseUrl}`);
+        return this.cachedBaseUrl;
       }
     }
 
     // 2. Force LAN Mode
     if (mode === "LAN") {
-      this.cachedBaseUrl = config.lan_url;
+      this.cachedBaseUrl = this.sanitizeUrl(config.lan_url);
       this.activeRouteType = "LAN";
-      MobileLogger.info("NETWORK", `📶 Modo Forçado LAN ativo: ${config.lan_url}`);
-      return config.lan_url;
+      MobileLogger.info("NETWORK", `📶 Modo Forçado LAN ativo: ${this.cachedBaseUrl}`);
+      return this.cachedBaseUrl;
     }
 
     // 3. AUTO Mode: Probe Tailscale FIRST (Works everywhere seamlessly, on Wi-Fi and 4G/5G)
     if (config.tailscale_url) {
       const tsWorks = await this.probeUrl(config.tailscale_url, 3000);
       if (tsWorks) {
-        this.cachedBaseUrl = config.tailscale_url;
+        this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url);
         this.activeRouteType = "TAILSCALE";
-        MobileLogger.info("NETWORK", `🌐 [AUTO] Rota Tailscale Mesh ativa: ${config.tailscale_url}`);
-        return config.tailscale_url;
+        MobileLogger.info("NETWORK", `🌐 [AUTO] Rota Tailscale Mesh ativa: ${this.cachedBaseUrl}`);
+        return this.cachedBaseUrl;
       }
     }
 
     // Fallback to local LAN Wi-Fi
     const lanWorks = await this.probeUrl(config.lan_url, 1500);
     if (lanWorks) {
-      this.cachedBaseUrl = config.lan_url;
+      this.cachedBaseUrl = this.sanitizeUrl(config.lan_url);
       this.activeRouteType = "LAN";
-      MobileLogger.info("NETWORK", `📶 [AUTO] Rota LAN Wi-Fi conectada: ${config.lan_url}`);
-      return config.lan_url;
+      MobileLogger.info("NETWORK", `📶 [AUTO] Rota LAN Wi-Fi conectada: ${this.cachedBaseUrl}`);
+      return this.cachedBaseUrl;
     }
 
     // Default fallback
-    this.cachedBaseUrl = config.tailscale_url || config.active_base_url || config.lan_url;
-    this.activeRouteType = (this.cachedBaseUrl && this.cachedBaseUrl.includes(".ts.net")) ? "TAILSCALE" : "LAN";
+    this.cachedBaseUrl = this.sanitizeUrl(config.tailscale_url || config.active_base_url || config.lan_url);
+    this.activeRouteType = (this.cachedBaseUrl && (this.cachedBaseUrl.includes(".ts.net") || this.cachedBaseUrl.includes("100."))) ? "TAILSCALE" : "LAN";
     MobileLogger.warn("NETWORK", `⚠️ Sondagens falharam. Usando URL direta: ${this.cachedBaseUrl}`);
     return this.cachedBaseUrl;
   }
@@ -92,8 +92,12 @@ export class ApiService {
     return await this.getActiveBaseUrl();
   }
 
-  private static sanitizeUrl(rawUrl: string): string {
+  public static sanitizeUrl(rawUrl: string): string {
     let clean = rawUrl.trim();
+    // Convert https:// to http:// if port 8080 is specified (Uvicorn HTTP)
+    if (clean.includes(":8080") && clean.startsWith("https://")) {
+      clean = clean.replace("https://", "http://");
+    }
     if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
       clean = `http://${clean}`;
     }
@@ -117,6 +121,21 @@ export class ApiService {
       clearTimeout(timeoutId);
       return res.ok;
     } catch {
+      // Try HTTP alternative if HTTPS was provided
+      if (sanitized.startsWith("https://")) {
+        try {
+          const httpFallback = sanitized.replace("https://", "http://");
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          const res = await fetch(`${httpFallback}/api/auth/connection-info`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          return res.ok;
+        } catch {
+          return false;
+        }
+      }
       return false;
     }
   }
@@ -134,6 +153,7 @@ export class ApiService {
       return { success: false, latencyMs: -1, url: "N/A", message: msg };
     }
 
+    // Try sanitized HTTP URL first (8080 is HTTP)
     const tsUrl = this.sanitizeUrl(config.tailscale_url);
     MobileLogger.info("TAILSCALE_TEST", `Iniciando teste de rota Tailscale Mesh: ${tsUrl}`);
     const start = Date.now();
@@ -157,7 +177,7 @@ export class ApiService {
         return { success: false, latencyMs: latency, url: tsUrl, message: msg };
       }
     } catch (e: any) {
-      const msg = `❌ Falha ao alcançar nó Tailscale: ${e.message}`;
+      const msg = `❌ Falha ao alcançar nó Tailscale (${tsUrl}). DICA: Ligue o app Tailscale (VPN Conectada) no Smartphone Android. Detalhes: ${e.message}`;
       MobileLogger.error("TAILSCALE_TEST", msg, e);
       return { success: false, latencyMs: -1, url: tsUrl, message: msg };
     }
@@ -211,7 +231,7 @@ export class ApiService {
     const rawLan = this.sanitizeUrl(bundle.lan_url || "http://192.168.1.96:8080");
     const rawTs = bundle.tailscale_url ? this.sanitizeUrl(bundle.tailscale_url) : undefined;
 
-    MobileLogger.info("AUTH", `Iniciando validação de emparelhamento (Prioridade: Tailscale)... TS=${rawTs || "N/A"} | LAN=${rawLan}`);
+    MobileLogger.info("AUTH", `Iniciando validação de emparelhamento... TS=${rawTs || "N/A"} | LAN=${rawLan}`);
 
     // Prioritize Tailscale URL as default
     let workingBaseUrl = rawTs || rawLan;
@@ -236,7 +256,7 @@ export class ApiService {
           device_name: deviceName,
           device_type: "Smartphone",
           manufacturer_model: "Smartphone Móvel",
-          app_version: "002.002.135",
+          app_version: "002.002.137",
         }),
       });
 
@@ -262,7 +282,7 @@ export class ApiService {
 
       await StorageService.saveConnectionConfig(connConfig);
       this.cachedBaseUrl = workingBaseUrl;
-      this.activeRouteType = (workingBaseUrl.includes(".ts.net") || workingBaseUrl === rawTs) ? "TAILSCALE" : "LAN";
+      this.activeRouteType = (workingBaseUrl.includes(".ts.net") || workingBaseUrl.includes("100.")) ? "TAILSCALE" : "LAN";
 
       MobileLogger.info("AUTH", `✅ Dispositivo registrado com sucesso! Rota Primária: ${this.activeRouteType} (${workingBaseUrl})`);
       return connConfig;
