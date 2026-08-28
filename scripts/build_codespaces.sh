@@ -18,8 +18,18 @@ git reset --hard origin/main 2>/dev/null || true
 git fetch --unshallow 2>/dev/null || true
 git pull origin main 2>/dev/null || true
 
-# Limpar APKs residuais anteriores para garantir nomes de versões sempre atualizados
-rm -f "$OUTPUT_DIR"/*.apk 2>/dev/null || true
+# 1. Limpeza Agressiva de Disco no Codespaces para Evitar 'No space left on device'
+echo "🧹 Liberando espaço em disco no Codespaces..."
+sudo swapoff -a 2>/dev/null || true
+sudo rm -f /swapfile 2>/dev/null || true
+sudo apt-get clean 2>/dev/null || true
+sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+docker system prune -af --volumes 2>/dev/null || true
+rm -rf ~/.npm/_cacache 2>/dev/null || true
+rm -rf "$OUTPUT_DIR"/*.apk 2>/dev/null || true
+
+echo "💽 Espaço em Disco Disponível:"
+df -h /
 
 # Sincronizar Sistema de Versionamento Contínuo de 9 Dígitos (000.000.000)
 python3 "$WORKSPACE_DIR/scripts/sync_version.py"
@@ -27,23 +37,24 @@ if [ -f "$OUTPUT_DIR/version.env" ]; then
     source "$OUTPUT_DIR/version.env"
 fi
 
-APP_VER="${APP_VERSION:-002.002.144}"
+APP_VER="${APP_VERSION:-002.002.145}"
 export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
 unset _JAVA_OPTIONS 2>/dev/null || true
 export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false"
 
-# Configurar swap adicional (4GB) para garantir que C++/CMake/Clang nunca sofram OOM Killer
-if command -v swapon &> /dev/null && ! swapon --show | grep -q "/swapfile"; then
-    echo "💾 Alocando 4GB de memória Swap para estabilidade do build C++/CMake..."
-    (sudo fallocate -l 4G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 2>/dev/null) && \
+# Alocar Swap leve (1GB) apenas se houver mais de 5GB de disco livre
+FREE_KB=$(df --output=avail / | tail -n 1)
+if [ "$FREE_KB" -gt 5000000 ]; then
+    echo "💾 Alocando 1GB de memória Swap leve..."
+    (sudo fallocate -l 1024M /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=1024 2>/dev/null) && \
     sudo chmod 600 /swapfile 2>/dev/null && \
     sudo mkswap /swapfile 2>/dev/null && \
     sudo swapon /swapfile 2>/dev/null || true
 fi
 
-# 1. Configurar Java 17 obrigatório
+# 2. Configurar Java 17 obrigatório
 if ! dpkg -s openjdk-17-jdk >/dev/null 2>&1; then
     echo "📦 Instalando OpenJDK 17..."
     sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-17-jdk
@@ -117,9 +128,6 @@ chmod +x ./gradlew
 TV_CLASSIC_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
 if [ -n "$TV_CLASSIC_APK" ]; then
     cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk"
-    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_Classic.apk"
-    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
-    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV.apk"
     echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk"
 fi
 
@@ -127,9 +135,12 @@ fi
 TV_MODERN_APK="$(find "$WORKSPACE_DIR/android/app-modern/build/outputs/apk" -name "*.apk" | head -n 1)"
 if [ -n "$TV_MODERN_APK" ]; then
     cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk"
-    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Netflix.apk"
     echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk"
 fi
+
+# Liberar espaço de compilação intermediária da TV antes de iniciar o Mobile
+echo "🧹 Liberando arquivos intermediários da TV para economizar disco..."
+rm -rf "$WORKSPACE_DIR/android/app/build/intermediates" "$WORKSPACE_DIR/android/app-modern/build/intermediates" 2>/dev/null || true
 
 echo "=================================================="
 echo "📱 Compilando APK 3: ServONVIF Mobile v$APP_VER..."
@@ -167,9 +178,11 @@ fi
 
 if [ -n "$MOBILE_APK" ]; then
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
-    cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile.apk"
     echo "✅ APK 3 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
 fi
+
+# Limpar intermediários do Mobile
+rm -rf "$WORKSPACE_DIR/mobile/android/app/build/intermediates" 2>/dev/null || true
 
 echo "=================================================="
 echo "🎉 Compilação Concluída com Sucesso!"
