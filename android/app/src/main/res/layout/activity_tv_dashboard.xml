@@ -676,15 +676,34 @@
                         android:textSize="13sp" />
                 </LinearLayout>
 
-                <!-- Test Terminal Console Output -->
-                <TextView
-                    android:layout_width="wrap_content"
+                <!-- Action Bar for Logs & Report -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Terminal de Saída de Diagnósticos:"
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="6dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Terminal de Saída &amp; Logs de Operação:"
+                        android:textColor="#94A3B8"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnCopyFullLogs"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="📋 Copiar Logs Completos (Clipboard)"
+                        android:background="@drawable/bg_tv_hero_btn_selector"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:paddingHorizontal="16dp" />
+                </LinearLayout>
 
                 <ScrollView
                     android:layout_width="match_parent"

@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.servonvif.client.data.model.EventPayload
 import com.servonvif.client.data.model.ServerNode
+import com.servonvif.client.data.repository.AppLogger
 import com.servonvif.client.data.repository.ServerConfigRepository
 import okhttp3.*
 import java.util.concurrent.ConcurrentHashMap
@@ -53,30 +54,31 @@ class WebSocketManager(
 
         val ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "Connected to [${node.name}] WS: ${node.ip}:${node.port}")
+                AppLogger.i("WS", "Conectado com sucesso a [${node.name}] WS: ${node.ip}:${node.port}")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val payload = gson.fromJson(text, EventPayload::class.java)
+                    AppLogger.i("WS", "Mensagem recebida de [${node.name}]: tipo='${payload.type}', camera='${payload.cameraName}', score=${payload.score}")
                     if (payload.type == "MOTION_ALERT" || payload.type == "LPR_ALERT" || payload.type == "DEVICE_TEST_NOTIFICATION" || payload.type == "TEST_PIP_ALERT" || payload.type == "TEST_ALERT") {
                         payload.siteName = node.name
                         payload.serverBaseUrl = node.httpBaseUrl
-                        Log.d(TAG, "Alert/Test Received from [${node.name}] (${payload.type}) for: ${payload.cameraName}")
+                        AppLogger.i("WS", "🚀 Disparando notificação PiP para: ${payload.cameraName}")
                         onEventReceived(payload)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse WS message from [${node.name}]: ${e.message}")
+                    AppLogger.e("WS", "Falha ao processar mensagem JSON: ${e.message} (Texto: $text)", e)
                 }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket Closed for [${node.name}]: $reason")
+                AppLogger.w("WS", "WebSocket fechado para [${node.name}]: code=$code, reason=$reason")
                 reconnectNode(node)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket Failure for [${node.name}]: ${t.message}")
+                AppLogger.e("WS", "Falha de conexão WebSocket para [${node.name}]: ${t.message}", t)
                 reconnectNode(node)
             }
         })

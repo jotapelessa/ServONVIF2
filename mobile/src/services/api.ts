@@ -1,5 +1,6 @@
 import { Camera, MotionEvent, PlateLog, ConnectionConfig, PairingBundle } from "../types";
 import { StorageService } from "./storage";
+import { MobileLogger } from "./mobileLogger";
 
 export class ApiService {
   private static cachedBaseUrl: string | null = null;
@@ -9,13 +10,19 @@ export class ApiService {
     if (this.cachedBaseUrl) return this.cachedBaseUrl;
 
     const config = await StorageService.getConnectionConfig();
-    if (!config) throw new Error("Servidor não configurado. Realize o login ou emparelhamento.");
+    if (!config) {
+      MobileLogger.warn("API", "Nenhuma configuração de conexão encontrada no armazenamento local.");
+      throw new Error("Servidor não configurado. Realize o login ou emparelhamento.");
+    }
+
+    MobileLogger.info("NETWORK", `Determinando rota ativa... LAN=${config.lan_url} | Tailscale=${config.tailscale_url || "N/A"}`);
 
     // Probe LAN first (fast timeout)
     const lanWorks = await this.probeUrl(config.lan_url, 1200);
     if (lanWorks) {
       this.cachedBaseUrl = config.lan_url;
       this.activeRouteType = "LAN";
+      MobileLogger.info("NETWORK", `✅ Rota LAN conectada com sucesso: ${config.lan_url}`);
       return config.lan_url;
     }
 
@@ -25,12 +32,14 @@ export class ApiService {
       if (tsWorks) {
         this.cachedBaseUrl = config.tailscale_url;
         this.activeRouteType = "TAILSCALE";
+        MobileLogger.info("NETWORK", `🌐 Rota Tailscale Mesh conectada: ${config.tailscale_url}`);
         return config.tailscale_url;
       }
     }
 
     // Default to configured base URL
     this.cachedBaseUrl = config.active_base_url || config.lan_url;
+    MobileLogger.warn("NETWORK", `⚠️ Sondagens falharam. Usando URL fallback: ${this.cachedBaseUrl}`);
     return this.cachedBaseUrl;
   }
 

@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.servonvif.client.R
 import com.servonvif.client.data.model.EventPayload
+import com.servonvif.client.data.repository.AppLogger
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.ui.pip.FloatingOverlayManager
 import com.servonvif.client.ui.pip.PiPAlertActivity
@@ -77,6 +78,8 @@ class MonitoringForegroundService : Service() {
     private var lastSoundChimeTimestamp = 0L
 
     private fun handleIncomingAlert(event: EventPayload) {
+        AppLogger.i("SERVICE_ALERT", "Recebido evento de alerta: Tipo='${event.type}', Câmera='${event.cameraName}', Origem='${event.siteName}'")
+        
         // 1. Play audible chime if enabled (throttled to at most once every 5 seconds)
         if (configRepo.isSoundAlertEnabled) {
             val now = System.currentTimeMillis()
@@ -86,8 +89,9 @@ class MonitoringForegroundService : Service() {
                     val notificationUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                     val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
                     ringtone?.play()
+                    AppLogger.d("SERVICE_ALERT", "Som de notificação reproduzido com sucesso.")
                 } catch (e: Exception) {
-                    // Safe ignore audio error
+                    AppLogger.w("SERVICE_ALERT", "Falha ao reproduzir áudio: ${e.message}")
                 }
             }
         }
@@ -103,7 +107,7 @@ class MonitoringForegroundService : Service() {
         // 2. Pure WindowManager Floating Overlay (Non-Invasive, Zero Disruption to Third-Party Apps like SBT)
         val hasOverlayPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
         if (hasOverlayPermission) {
-            Log.d("MonitoringService", "Displaying Non-Invasive Floating Window via WindowManager")
+            AppLogger.i("SERVICE_ALERT", "Exibindo janela flutuante WindowManager (PiP) para câmera [${event.cameraId}] ${event.cameraName}")
             floatingOverlayManager.showFloatingAlert(
                 cameraId = event.cameraId,
                 cameraName = event.cameraName,
@@ -113,6 +117,8 @@ class MonitoringForegroundService : Service() {
                 siteName = event.siteName
             )
             return
+        } else {
+            AppLogger.w("SERVICE_ALERT", "Permissão SYSTEM_ALERT_WINDOW ausente! Recorrendo a Heads-Up Notification.")
         }
 
         // 3. Fallback: High-Priority Heads-Up Notification if overlay permission is not granted

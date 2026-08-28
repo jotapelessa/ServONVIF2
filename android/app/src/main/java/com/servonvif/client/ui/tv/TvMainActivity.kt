@@ -39,6 +39,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.servonvif.client.R
 import com.servonvif.client.data.model.CameraModel
 import com.servonvif.client.data.model.EventPayload
+import com.servonvif.client.data.repository.AppLogger
 import com.servonvif.client.data.repository.HardwareIdHelper
 import com.servonvif.client.data.repository.ServerConfigRepository
 import com.servonvif.client.network.ServOnvifApiClient
@@ -110,6 +111,7 @@ class TvMainActivity : AppCompatActivity() {
     private lateinit var btnTestHeadsUpNotification: Button
     private lateinit var btnTestOverlayPermission: Button
     private lateinit var btnClearConsole: Button
+    private lateinit var btnCopyFullLogs: Button
     private lateinit var tvTestConsoleOutput: TextView
 
     // Status Section Views
@@ -138,6 +140,9 @@ class TvMainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_tv_dashboard)
+
+        AppLogger.init(this)
+        AppLogger.i("TV_MAIN", "Iniciando TvMainActivity na interface Netflix-Style...")
 
         configRepo = ServerConfigRepository(this)
         apiClient = ServOnvifApiClient(configRepo)
@@ -211,6 +216,7 @@ class TvMainActivity : AppCompatActivity() {
         btnTestHeadsUpNotification = findViewById(R.id.btnTestHeadsUpNotification)
         btnTestOverlayPermission = findViewById(R.id.btnTestOverlayPermission)
         btnClearConsole          = findViewById(R.id.btnClearConsole)
+        btnCopyFullLogs          = findViewById(R.id.btnCopyFullLogs)
         tvTestConsoleOutput      = findViewById(R.id.tvTestConsoleOutput)
 
         tvCardServerIp     = findViewById(R.id.tvCardServerIp)
@@ -790,14 +796,21 @@ class TvMainActivity : AppCompatActivity() {
         }
 
         btnClearConsole.setOnClickListener {
-            tvTestConsoleOutput.text = "• Logs limpos. Pronto para novos testes."
+            AppLogger.clear()
+            tvTestConsoleOutput.text = "• Console de logs limpo com sucesso. Pronto para novos testes."
+        }
+
+        btnCopyFullLogs.setOnClickListener {
+            val report = AppLogger.copyReportToClipboard(this)
+            tvTestConsoleOutput.text = report
         }
     }
 
     private fun logTest(msg: String) {
-        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        val current = tvTestConsoleOutput.text.toString()
-        tvTestConsoleOutput.text = "[$time] $msg\n$current"
+        AppLogger.i("TEST_LAB", msg)
+        mainHandler.post {
+            tvTestConsoleOutput.text = AppLogger.getLogsAsString()
+        }
     }
 
     // =========================================================================

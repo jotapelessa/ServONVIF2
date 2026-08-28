@@ -1,6 +1,6 @@
 {
   "name": "servonvif-mobile",
-  "version": "2.2.127",
+  "version": "2.2.128",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -13,6 +13,7 @@
     "@react-native-async-storage/async-storage": "1.23.1",
     "expo": "~51.0.28",
     "expo-camera": "~15.0.16",
+    "expo-clipboard": "~6.0.3",
     "expo-constants": "~16.0.2",
     "expo-haptics": "~13.0.1",
     "expo-status-bar": "~1.12.1",

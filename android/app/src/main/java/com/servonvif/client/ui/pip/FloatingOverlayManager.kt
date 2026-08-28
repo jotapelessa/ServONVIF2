@@ -20,6 +20,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import com.servonvif.client.R
+import com.servonvif.client.data.repository.AppLogger
 import com.servonvif.client.data.repository.ServerConfigRepository
 
 /**
@@ -77,7 +78,7 @@ class FloatingOverlayManager(private val context: Context) {
         mainHandler.post {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                    Log.w("FloatingOverlay", "SYSTEM_ALERT_WINDOW permission not granted")
+                    AppLogger.w("PIP", "⚠️ Permissão SYSTEM_ALERT_WINDOW não concedida! Notificação PiP flutuante bloqueada pelo Android.")
                     return@post
                 }
 
@@ -97,7 +98,7 @@ class FloatingOverlayManager(private val context: Context) {
                         pipProgressBar?.max = totalDurationMillis.toInt()
                         pipProgressBar?.progress = totalDurationMillis.toInt()
                     }
-                    Log.d("FloatingOverlay", "Active overlay extended for +${effectiveDuration}s for Camera: $cameraName")
+                    AppLogger.i("PIP", "🔄 Overlay ativo estendido por +${effectiveDuration}s para Câmera: $cameraName")
                     return@post
                 }
 

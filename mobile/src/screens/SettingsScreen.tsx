@@ -21,9 +21,14 @@ import {
   Activity,
   HardDrive,
   Shield,
+  Terminal,
+  Copy,
+  Trash2,
+  Check,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "../theme/tokens";
+import { MobileLogger, LogEntry } from "../services/mobileLogger";
 
 interface SettingsScreenProps {
   onLogout: () => void;
@@ -35,9 +40,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
   const [routeType, setRouteType] = useState<"LAN" | "TAILSCALE">("LAN");
   const [isTestingPing, setIsTestingPing] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
+  const [logs, setLogs] = useState<LogEntry[]>(MobileLogger.getLogs());
+  const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
     loadSettings();
+    const unsubscribe = MobileLogger.subscribe(() => {
+      setLogs(MobileLogger.getLogs());
+    });
+    return () => unsubscribe();
   }, []);
 
   const loadSettings = async () => {
@@ -72,6 +83,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
     } finally {
       setIsTestingPing(false);
     }
+  };
+
+  const handleCopyLogs = async () => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {}
+    await MobileLogger.copyReportToClipboard();
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 3000);
+    Alert.alert(
+      "📋 Logs Copiados!",
+      "O relatório completo de diagnóstico do Smartphone foi copiado para a área de transferência. Cole-o no chat para análise.",
+      [{ text: "OK" }]
+    );
+  };
+
+  const handleClearLogs = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    MobileLogger.clear();
   };
 
   const handleLogout = () => {
@@ -222,6 +254,77 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
           </View>
         </View>
 
+        {/* Console & Diagnostics Log Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderBetween}>
+            <View style={styles.cardHeader}>
+              <Terminal size={16} color={theme.colors.accent} />
+              <Text style={styles.cardTitle}>Logs de Operação & Diagnóstico</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.clearLogsBtn}
+              onPress={handleClearLogs}
+              activeOpacity={0.7}
+            >
+              <Trash2 size={12} color={theme.colors.textMuted} />
+              <Text style={styles.clearLogsText}>Limpar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.cardSubtitle}>
+            Acompanhe a atividade em tempo real. Copie o relatório para suporte ou depuração.
+          </Text>
+
+          {/* Copy Report Button */}
+          <TouchableOpacity
+            style={[styles.copyReportBtn, isCopied && styles.copyReportBtnSuccess]}
+            onPress={handleCopyLogs}
+            activeOpacity={0.8}
+          >
+            {isCopied ? (
+              <Check size={16} color="#10B981" />
+            ) : (
+              <Copy size={16} color="#FFFFFF" />
+            )}
+            <Text style={[styles.copyReportBtnText, isCopied && styles.copyReportBtnTextSuccess]}>
+              {isCopied ? "Relatório Copiado com Sucesso!" : "📋 Copiar Logs Completos (Clipboard)"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Terminal Box */}
+          <ScrollView
+            style={styles.terminalBox}
+            contentContainerStyle={styles.terminalContent}
+            nestedScrollEnabled
+          >
+            {logs.length === 0 ? (
+              <Text style={styles.terminalEmptyText}>• Nenhum log registrado até o momento.</Text>
+            ) : (
+              logs.map((l, index) => {
+                const isErr = l.level === "ERROR";
+                const isWarn = l.level === "WARN";
+                return (
+                  <View key={index} style={styles.logRow}>
+                    <Text style={styles.logTime}>[{l.timestamp}]</Text>
+                    <Text
+                      style={[
+                        styles.logLevel,
+                        isErr ? styles.logErr : isWarn ? styles.logWarn : styles.logInfo,
+                      ]}
+                    >
+                      [{l.level}]
+                    </Text>
+                    <Text style={styles.logTag}>[{l.tag}]</Text>
+                    <Text style={[styles.logMsg, isErr && styles.logErrMsg]}>
+                      {l.message}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+
         {/* Disconnect Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
           <LogOut size={16} color={theme.colors.danger} />
@@ -362,5 +465,105 @@ const styles = StyleSheet.create({
   logoutBtnText: {
     ...theme.typography.h3,
     color: theme.colors.danger,
+  },
+  cardHeaderBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  clearLogsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  clearLogsText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+  },
+  copyReportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: theme.colors.accent,
+    paddingVertical: 11,
+    borderRadius: theme.radius.md,
+    marginTop: 4,
+  },
+  copyReportBtnSuccess: {
+    backgroundColor: "#064E3B",
+    borderWidth: 1,
+    borderColor: "#10B981",
+  },
+  copyReportBtnText: {
+    ...theme.typography.bodyBold,
+    color: "#FFFFFF",
+  },
+  copyReportBtnTextSuccess: {
+    color: "#10B981",
+  },
+  terminalBox: {
+    height: 180,
+    backgroundColor: "#050811",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    padding: 10,
+    marginTop: 4,
+  },
+  terminalContent: {
+    paddingBottom: 8,
+  },
+  terminalEmptyText: {
+    ...theme.typography.mono,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+  },
+  logRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    paddingVertical: 2,
+    gap: 4,
+  },
+  logTime: {
+    ...theme.typography.mono,
+    color: "#64748B",
+    fontSize: 10,
+  },
+  logLevel: {
+    ...theme.typography.mono,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  logInfo: {
+    color: "#38BDF8",
+  },
+  logWarn: {
+    color: "#FBBF24",
+  },
+  logErr: {
+    color: "#EF4444",
+  },
+  logTag: {
+    ...theme.typography.mono,
+    color: "#94A3B8",
+    fontSize: 10,
+  },
+  logMsg: {
+    ...theme.typography.mono,
+    color: "#E2E8F0",
+    fontSize: 11,
+    flex: 1,
+  },
+  logErrMsg: {
+    color: "#FCA5A5",
   },
 });

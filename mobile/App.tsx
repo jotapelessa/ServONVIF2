@@ -16,6 +16,7 @@ import { PlatesScreen } from "./src/screens/PlatesScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { BottomNavBar, TabType } from "./src/components/BottomNavBar";
 import { theme } from "./src/theme/tokens";
+import { MobileLogger } from "./src/services/mobileLogger";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -23,12 +24,20 @@ export default function App() {
   const [spotlightCamera, setSpotlightCamera] = useState<Camera | null>(null);
 
   useEffect(() => {
+    MobileLogger.init();
+    MobileLogger.info("LIFECYCLE", "App inicializado com sucesso.");
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
-    const config = await StorageService.getConnectionConfig();
-    setIsAuthenticated(!!config);
+    try {
+      const config = await StorageService.getConnectionConfig();
+      MobileLogger.info("AUTH", `Verificação de autenticação: ${config ? "Autenticado (" + config.device_name + ")" : "Não conectado"}`);
+      setIsAuthenticated(!!config);
+    } catch (e: any) {
+      MobileLogger.error("AUTH", `Erro ao carregar configurações de conexão: ${e?.message}`, e);
+      setIsAuthenticated(false);
+    }
   };
 
   if (isAuthenticated === null) {
