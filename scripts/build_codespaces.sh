@@ -11,6 +11,8 @@ mkdir -p "$OUTPUT_DIR"
 
 # 0. Sincronizar Código com o GitHub mais recente no Codespaces
 echo "🔄 Sincronizando repositório com o GitHub..."
+git fetch origin main 2>/dev/null || true
+git reset --hard origin/main 2>/dev/null || true
 git fetch --unshallow 2>/dev/null || true
 git pull origin main 2>/dev/null || true
 
