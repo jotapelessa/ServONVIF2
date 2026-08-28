@@ -752,7 +752,8 @@ class TvMainActivity : AppCompatActivity() {
 
     private fun loadDashboardWebView() {
         try {
-            tvMainWebView.loadUrl(configRepo.httpBaseUrl)
+            val tvUrl = if (configRepo.httpBaseUrl.isNotBlank()) "${configRepo.httpBaseUrl}/tv" else "file:///android_asset/tv-netflix/index.html"
+            tvMainWebView.loadUrl(tvUrl)
         } catch (e: Exception) {
             Log.e("TvMainActivity", "WebView load error: ${e.message}")
         }

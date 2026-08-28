@@ -1,4 +1,4 @@
-export type TabType = 'home' | 'mosaic' | 'lpr' | 'recordings' | 'health' | 'settings';
+export type TabType = 'home' | 'mosaic' | 'lpr' | 'recordings' | 'testlab' | 'health' | 'settings';
 
 export type CameraStatus = 'online' | 'offline' | 'alert';
 

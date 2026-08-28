@@ -11,7 +11,8 @@ import {
   Tv, 
   Radio, 
   Code2,
-  Maximize2
+  Maximize2,
+  FlaskConical
 } from 'lucide-react';
 import { TabType, SystemHealth } from '../types';
 
@@ -62,9 +63,10 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     { id: 'home', label: 'Início', icon: <Tv className="w-4 h-4" />, shortcut: '1' },
     { id: 'mosaic', label: 'Mosaico Multitelas', icon: <Grid className="w-4 h-4" />, shortcut: '2' },
     { id: 'lpr', label: 'Central LPR', icon: <Car className="w-4 h-4" />, shortcut: '3' },
-    { id: 'recordings', label: 'Gravações & Histórico', icon: <History className="w-4 h-4" />, shortcut: '4' },
-    { id: 'health', label: 'Status & Diagnóstico', icon: <Activity className="w-4 h-4" />, shortcut: '5' },
-    { id: 'settings', label: 'Configurações', icon: <Settings className="w-4 h-4" />, shortcut: '6' },
+    { id: 'recordings', label: 'Gravações', icon: <History className="w-4 h-4" />, shortcut: '4' },
+    { id: 'testlab', label: 'Central de Testes', icon: <FlaskConical className="w-4 h-4 text-cyan-400" />, shortcut: '5' },
+    { id: 'health', label: 'Status & Diagnóstico', icon: <Activity className="w-4 h-4" />, shortcut: '6' },
+    { id: 'settings', label: 'Configurações', icon: <Settings className="w-4 h-4" />, shortcut: '7' },
   ];
 
   return (

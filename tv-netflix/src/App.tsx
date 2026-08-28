@@ -19,6 +19,7 @@ import { HomeTab } from './components/HomeTab';
 import { MosaicGridTab } from './components/MosaicGridTab';
 import { LprCentralTab } from './components/LprCentralTab';
 import { PlaybackTimelineTab } from './components/PlaybackTimelineTab';
+import { TestLabTab } from './components/TestLabTab';
 import { SystemHealthTab } from './components/SystemHealthTab';
 import { SettingsTab } from './components/SettingsTab';
 import { SpotlightFullscreenModal } from './components/SpotlightFullscreenModal';
@@ -270,8 +271,10 @@ export default function App() {
       } else if (e.key === '4') {
         setActiveTab('recordings');
       } else if (e.key === '5') {
-        setActiveTab('health');
+        setActiveTab('testlab');
       } else if (e.key === '6') {
+        setActiveTab('health');
+      } else if (e.key === '7') {
         setActiveTab('settings');
       }
     };
@@ -354,6 +357,24 @@ export default function App() {
             focusedElementId={focusedElementId}
             onElementFocus={handleElementFocus}
             onOpenFullscreen={(cam) => setFullscreenCamera(cam)}
+          />
+        )}
+
+        {activeTab === 'testlab' && (
+          <TestLabTab
+            cameras={cameras}
+            systemHealth={systemHealth}
+            onSimulateMotion={(camId) => {
+              const cam = cameras.find((c) => c.id === camId) || selectedCamera;
+              setSnapshotToast({
+                visible: true,
+                text: `🚨 Movimento Simulado: ${cam.name}`,
+              });
+              setTimeout(() => setSnapshotToast({ visible: false, text: '' }), 3500);
+            }}
+            onTriggerPiP={(cam) => setPipCamera(cam)}
+            focusedElementId={focusedElementId}
+            onElementFocus={handleElementFocus}
           />
         )}
 
