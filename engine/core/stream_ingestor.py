@@ -49,6 +49,7 @@ class StreamIngestor:
         self._latest_frame_time: float = 0.0
         self._frame_lock = threading.Lock()
         self._new_frame_event = threading.Event()
+        self.is_online = False
 
         self._is_recording_event = False
         self._event_frames = []
@@ -60,6 +61,42 @@ class StreamIngestor:
         self._last_periodic_lpr_time = 0.0
         self._stationary_plates_seen: dict[str, float] = {}
         self.is_paused = False
+
+    def get_current_frame(self) -> np.ndarray:
+        """Returns the latest active frame, or a dynamic 'SEM SINAL' frame if the camera is offline."""
+        now = time.time()
+        with self._frame_lock:
+            if self.is_online and self._latest_frame is not None and (now - self._latest_frame_time) <= 4.0:
+                return self._latest_frame.copy()
+
+        return self._generate_offline_frame()
+
+    def _generate_offline_frame(self, width: int = 1280, height: int = 720) -> np.ndarray:
+        """Generates a crystal clear dark security slate indicating camera disconnection/offline state."""
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        img[:] = (20, 13, 8)  # Deep obsidian dark blue #080D14
+
+        # Border
+        cv2.rectangle(img, (20, 20), (width - 20, height - 20), (45, 30, 20), 2)
+
+        # Red badge: SEM SINAL
+        badge_w, badge_h = 240, 50
+        bx1, by1 = (width - badge_w) // 2, (height // 2) - 80
+        cv2.rectangle(img, (bx1, by1), (bx1 + badge_w, by1 + badge_h), (25, 25, 200), -1)
+        cv2.putText(img, "SEM SINAL", (bx1 + 35, by1 + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.95, (255, 255, 255), 2, cv2.LINE_AA)
+
+        # Camera Name
+        cam_text = f"{self.camera.name} (DESCONECTADA DA REDE/ENERGIA)"
+        tw = int(len(cam_text) * 11)
+        cv2.putText(img, cam_text, (max(40, (width - tw) // 2), height // 2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (220, 220, 220), 2, cv2.LINE_AA)
+
+        # Timestamp & Status info
+        time_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        sub_text = f"ServONVIF NVR • Tentando Reconexao Automatica... • {time_str}"
+        stw = int(len(sub_text) * 8.5)
+        cv2.putText(img, sub_text, (max(40, (width - stw) // 2), height // 2 + 70), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (140, 140, 140), 1, cv2.LINE_AA)
+
+        return img
 
     def pause(self) -> None:
         """Pauses frame grabbing, MOG2 and LPR processing to drop CPU to 0%."""
@@ -143,10 +180,19 @@ class StreamIngestor:
 
             ret, frame = cap.read()
             if not ret or frame is None:
-                logger.warning(f"RTSP stream dropped for [{self.camera.id}] {self.camera.name}. Reconnecting in {int(reconnect_backoff)}s...")
+                # Camera is offline / unplugged
+                with self._frame_lock:
+                    self.is_online = False
+                    self._latest_frame = None
+
+                # Broadcast offline placeholder to web/mobile clients
+                if mjpeg_streamer.has_clients(self.camera.id):
+                    offline_img = self._generate_offline_frame()
+                    mjpeg_streamer.broadcast_frame(self.camera.id, offline_img, quality=70, max_fps=2.0)
+
                 frames_since_connect = 0
                 time.sleep(reconnect_backoff)
-                reconnect_backoff = min(reconnect_backoff * 1.5, 20.0)
+                reconnect_backoff = min(reconnect_backoff * 1.5, 15.0)
                 cap.release()
                 cap = self._create_capture(rtsp_url)
                 continue
@@ -164,6 +210,7 @@ class StreamIngestor:
             now = time.time()
             cloned_frame = frame.copy()
             with self._frame_lock:
+                self.is_online = True
                 self._latest_frame = cloned_frame
                 self._latest_frame_time = now
 

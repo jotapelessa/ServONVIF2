@@ -75,17 +75,18 @@ class MJPEGStreamer:
         last_yielded_time = 0.0
         try:
             while True:
+                now_t = time.time()
                 with self._lock:
                     frame_bytes = self._latest_jpegs.get(camera_id)
                     frame_time = self._latest_timestamps.get(camera_id, 0.0)
 
-                if frame_bytes is not None and frame_time > last_yielded_time:
-                    last_yielded_time = frame_time
+                if frame_bytes is not None and (frame_time > last_yielded_time or (now_t - frame_time) > 2.5):
+                    last_yielded_time = now_t
                     yield (
                         b'--frame\r\n'
                         b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
                     )
-                
+
                 # Sleep ~33ms (30 FPS polling) to yield cleanly to event loop
                 await asyncio.sleep(0.033)
         except asyncio.CancelledError:

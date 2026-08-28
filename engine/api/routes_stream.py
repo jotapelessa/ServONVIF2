@@ -25,10 +25,7 @@ async def get_live_frame(camera_id: int, quality: str = "main"):
     if not ingestor:
         raise HTTPException(status_code=404, detail="Camera not active")
 
-    with ingestor._frame_lock:
-        if ingestor._latest_frame is None:
-            raise HTTPException(status_code=503, detail="No frame available")
-        frame = ingestor._latest_frame.copy()
+    frame = ingestor.get_current_frame()
 
     # Resize if sub quality requested
     if quality == "sub":

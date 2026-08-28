@@ -181,28 +181,57 @@ class ONVIFDiscovery:
             parts = local_ip.split(".")
             main_subnet = ".".join(parts[:3]) if len(parts) == 4 else "192.168.1"
             subnets_to_scan.append(main_subnet)
-            if main_subnet != "192.168.1":
-                subnets_to_scan.append("192.168.1")
-            if main_subnet != "192.168.0":
-                subnets_to_scan.append("192.168.0")
 
-        def test_port(target_ip: str, port: int) -> Optional[Dict[str, Any]]:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(timeout_per_host)
-                res = s.connect_ex((target_ip, port))
-                s.close()
-                if res == 0:
-                    stream_path = "/live/0/MAIN" if port == 554 else "/stream1"
-                    return {
-                        "name": f"Câmera IP ({target_ip}:{port})",
-                        "ip": target_ip,
-                        "port": port,
-                        "default_rtsp": f"rtsp://{target_ip}:554{stream_path}",
-                        "type": f"Porta {port} Aberta",
-                    }
-            except Exception:
-                pass
+        def test_host(target_ip: str) -> Optional[Dict[str, Any]]:
+            # Ignore self machine
+            if target_ip == local_ip or target_ip == "127.0.0.1":
+                return None
+
+            # Check dedicated video stream ports first (554, 8554, 37777, 34567, 8000)
+            for rtsp_port in [554, 8554, 37777, 34567, 8000]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(timeout_per_host)
+                    res = s.connect_ex((target_ip, rtsp_port))
+                    s.close()
+                    if res == 0:
+                        stream_path = "/live/0/MAIN" if rtsp_port == 554 else "/stream1"
+                        return {
+                            "name": f"Câmera IP ({target_ip})",
+                            "ip": target_ip,
+                            "port": rtsp_port,
+                            "default_rtsp": f"rtsp://{target_ip}:{rtsp_port}{stream_path}",
+                            "type": f"Vídeo RTSP ({rtsp_port})",
+                        }
+                except Exception:
+                    pass
+
+            # Port 80 (HTTP): NEVER assume it is a camera unless it explicitly responds to ONVIF Probe.
+            # Never scan router/gateway (e.g. .1) as camera on port 80.
+            if not target_ip.endswith(".1"):
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(timeout_per_host)
+                    res = s.connect_ex((target_ip, 80))
+                    s.close()
+                    if res == 0:
+                        # Quick HTTP ONVIF check: does it have port 554 open or return ONVIF headers?
+                        # Test if RTSP port 554 also open:
+                        s_rtsp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s_rtsp.settimeout(0.3)
+                        rtsp_res = s_rtsp.connect_ex((target_ip, 554))
+                        s_rtsp.close()
+                        if rtsp_res == 0:
+                            return {
+                                "name": f"Câmera ONVIF ({target_ip})",
+                                "ip": target_ip,
+                                "port": 80,
+                                "default_rtsp": f"rtsp://{target_ip}:554/live/0/MAIN",
+                                "type": "ONVIF Profile S",
+                            }
+                except Exception:
+                    pass
+
             return None
 
         loop = asyncio.get_running_loop()
@@ -210,13 +239,12 @@ class ONVIFDiscovery:
         def run_thread_pool():
             results = []
             targets = [
-                (f"{sub_prefix}.{host_num}", port)
+                f"{sub_prefix}.{host_num}"
                 for sub_prefix in subnets_to_scan
-                for host_num in range(1, 255)
-                for port in [554, 80, 8000, 8554]
+                for host_num in range(2, 255)
             ]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
-                futures = [executor.submit(test_port, ip, port) for ip, port in targets]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+                futures = [executor.submit(test_host, ip) for ip in targets]
                 for future in concurrent.futures.as_completed(futures):
                     res = future.result()
                     if res is not None:
