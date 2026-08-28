@@ -10,6 +10,13 @@ import androidx.recyclerview.widget.RecyclerView
 import com.servonvif.client.R
 import com.servonvif.client.data.model.CameraModel
 
+/**
+ * TV-Optimized Horizontal Camera Discovery Row Adapter.
+ * Features:
+ * - 1.05x smooth scale & 12dp elevation on focus.
+ * - Live and Motion badges with pulse feedback.
+ * - Safe D-pad navigation without thread blocks.
+ */
 class CameraRowAdapter(
     private var cameras: List<CameraModel>,
     private val onCameraFocused: (CameraModel) -> Unit,
@@ -34,15 +41,17 @@ class CameraRowAdapter(
                     .scaleX(scale)
                     .scaleY(scale)
                     .translationZ(elevation)
-                    .setDuration(150)
+                    .setDuration(140)
                     .setInterpolator(DecelerateInterpolator())
                     .start()
-                if (hasFocus && adapterPosition != RecyclerView.NO_POSITION) {
+
+                if (hasFocus && adapterPosition != RecyclerView.NO_POSITION && adapterPosition < cameras.size) {
                     onCameraFocused(cameras[adapterPosition])
                 }
             }
+
             itemView.setOnClickListener {
-                if (adapterPosition != RecyclerView.NO_POSITION) {
+                if (adapterPosition != RecyclerView.NO_POSITION && adapterPosition < cameras.size) {
                     onCameraClicked(cameras[adapterPosition])
                 }
             }
@@ -71,8 +80,14 @@ class CameraRowAdapter(
     }
 
     fun setMotion(cameraId: Int, hasMotion: Boolean) {
-        if (hasMotion) motionCameraIds.add(cameraId) else motionCameraIds.remove(cameraId)
+        if (hasMotion) {
+            motionCameraIds.add(cameraId)
+        } else {
+            motionCameraIds.remove(cameraId)
+        }
         val index = cameras.indexOfFirst { it.id == cameraId }
-        if (index != -1) notifyItemChanged(index)
+        if (index != -1) {
+            notifyItemChanged(index)
+        }
     }
 }

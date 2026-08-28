@@ -63,16 +63,22 @@ class TvMainActivity : AppCompatActivity() {
     private lateinit var btnHeroPip: Button
     private lateinit var btnHeroPatrol: Button
 
-    // Rows
+    // Rows & Empty States
     private lateinit var recyclerCamerasRow: RecyclerView
     private lateinit var recyclerEventsRow: RecyclerView
+    private lateinit var layoutEmptyState: View
+    private lateinit var btnEmptyRetry: Button
+    private lateinit var layoutCamerasRowContainer: View
     private lateinit var cameraRowAdapter: CameraRowAdapter
     private lateinit var eventRowAdapter: EventRowAdapter
 
-    // State
+    // State & Handlers
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clockHandler = Handler(Looper.getMainLooper())
     private val patrolHandler = Handler(Looper.getMainLooper())
+    private val heroDebounceHandler = Handler(Looper.getMainLooper())
+    private var pendingHeroCamera: CameraModel? = null
+
     private var activeCameras = listOf<CameraModel>()
     private var selectedHeroCamera: CameraModel? = null
     private var isPatrolRunning = false
@@ -126,6 +132,13 @@ class TvMainActivity : AppCompatActivity() {
 
         recyclerCamerasRow = findViewById(R.id.recyclerCamerasRow)
         recyclerEventsRow  = findViewById(R.id.recyclerEventsRow)
+        layoutEmptyState   = findViewById(R.id.layoutEmptyState)
+        btnEmptyRetry      = findViewById(R.id.btnEmptyRetry)
+        layoutCamerasRowContainer = findViewById(R.id.layoutCamerasRowContainer)
+
+        btnEmptyRetry.setOnClickListener {
+            refreshServerData()
+        }
     }
 
     private fun setupSidebar() {
@@ -152,9 +165,9 @@ class TvMainActivity : AppCompatActivity() {
             val cam = selectedHeroCamera ?: activeCameras.firstOrNull()
             if (cam != null) {
                 val intent = Intent(this, TvPlayerActivity::class.java).apply {
-                    putExtra("CAMERA_ID", cam.id)
-                    putExtra("CAMERA_NAME", cam.name)
-                    putExtra("CAMERA_URL", cam.rtspUrl)
+                    putExtra("EXTRA_CAMERA_ID", cam.id)
+                    putExtra("EXTRA_CAMERA_NAME", cam.name)
+                    putExtra("EXTRA_CAMERA_URL", cam.rtspUrl)
                 }
                 startActivity(intent)
             } else {
@@ -189,12 +202,12 @@ class TvMainActivity : AppCompatActivity() {
         recyclerCamerasRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         cameraRowAdapter = CameraRowAdapter(
             cameras = emptyList(),
-            onCameraFocused = { camera -> updateHeroSpotlight(camera) },
+            onCameraFocused = { camera -> scheduleDebouncedHeroUpdate(camera) },
             onCameraClicked = { camera ->
                 val intent = Intent(this, TvPlayerActivity::class.java).apply {
-                    putExtra("CAMERA_ID", camera.id)
-                    putExtra("CAMERA_NAME", camera.name)
-                    putExtra("CAMERA_URL", camera.rtspUrl)
+                    putExtra("EXTRA_CAMERA_ID", camera.id)
+                    putExtra("EXTRA_CAMERA_NAME", camera.name)
+                    putExtra("EXTRA_CAMERA_URL", camera.rtspUrl)
                 }
                 startActivity(intent)
             }
@@ -224,6 +237,16 @@ class TvMainActivity : AppCompatActivity() {
             webViewClient = WebViewClient()
             setBackgroundColor(0xFF0A101D.toInt())
         }
+    }
+
+    private fun scheduleDebouncedHeroUpdate(camera: CameraModel) {
+        pendingHeroCamera = camera
+        heroDebounceHandler.removeCallbacksAndMessages(null)
+        heroDebounceHandler.postDelayed({
+            pendingHeroCamera?.let { cam ->
+                updateHeroSpotlight(cam)
+            }
+        }, 350)
     }
 
     private fun updateHeroSpotlight(camera: CameraModel) {
@@ -274,14 +297,23 @@ class TvMainActivity : AppCompatActivity() {
                         tvTvServerStatusPill.text = "● Servidor Offline"
                         tvTvServerStatusPill.setTextColor(0xFFEF4444.toInt())
                     }
+
                     if (cameras.isNotEmpty()) {
                         activeCameras = cameras
+                        layoutEmptyState.visibility = View.GONE
+                        layoutCamerasRowContainer.visibility = View.VISIBLE
                         cameraRowAdapter.updateCameras(cameras)
                         if (selectedHeroCamera == null) updateHeroSpotlight(cameras.first())
+                    } else {
+                        layoutEmptyState.visibility = View.VISIBLE
+                        layoutCamerasRowContainer.visibility = View.GONE
                     }
                 }
             } catch (e: Exception) {
                 Log.e("TvMainActivity", "Erro ao carregar dados: ${e.message}")
+                mainHandler.post {
+                    layoutEmptyState.visibility = View.VISIBLE
+                }
             }
         }
     }
@@ -348,6 +380,7 @@ class TvMainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        heroDebounceHandler.removeCallbacksAndMessages(null)
         patrolHandler.removeCallbacksAndMessages(null)
         clockHandler.removeCallbacksAndMessages(null)
         liveWsManager?.stop()

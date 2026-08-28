@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/cardCameraRoot"
-    android:layout_width="260dp"
-    android:layout_height="160dp"
-    android:layout_marginEnd="16dp"
+    android:layout_width="280dp"
+    android:layout_height="158dp"
+    android:layout_marginEnd="18dp"
     android:focusable="true"
     android:clickable="true"
     android:background="@drawable/bg_tv_card_selector"
     android:padding="3dp">
 
-    <!-- Video Snapshot / Thumbnail Container -->
+    <!-- Inner Card Container with Rounded Corners & Background -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#070B14">
+        android:background="#090E18">
 
+        <!-- Camera Thumbnail / Snapshot -->
         <ImageView
             android:id="@+id/imgCameraThumbnail"
             android:layout_width="match_parent"
@@ -23,20 +23,14 @@
             android:scaleType="centerCrop"
             android:contentDescription="Camera Preview" />
 
-        <WebView
-            android:id="@+id/webCameraStream"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone" />
-
-        <!-- Gradient Overlay for Contrast -->
+        <!-- Cinematic Gradient Overlay for Maximum Text Contrast -->
         <View
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="72dp"
             android:layout_gravity="bottom"
             android:background="@drawable/bg_tv_hero_gradient" />
 
-        <!-- Top Badges (LIVE & Motion Alert) -->
+        <!-- Top Badges Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -53,8 +47,8 @@
                 android:textColor="#FFFFFF"
                 android:textSize="9sp"
                 android:textStyle="bold"
-                android:paddingHorizontal="6dp"
-                android:paddingVertical="2dp" />
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="3dp" />
 
             <View
                 android:layout_width="0dp"
@@ -70,12 +64,12 @@
                 android:textColor="#FFFFFF"
                 android:textSize="9sp"
                 android:textStyle="bold"
-                android:paddingHorizontal="6dp"
-                android:paddingVertical="2dp"
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="3dp"
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Bottom Info Container -->
+        <!-- Bottom Metadata Container (Progressive Reveal on Focus) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -95,6 +89,7 @@
                 android:ellipsize="end" />
 
             <LinearLayout
+                android:id="@+id/layoutCardExtraMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"

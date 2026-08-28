@@ -8,7 +8,6 @@ import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.servonvif.client.R
 import com.servonvif.client.data.repository.ServerConfigRepository
@@ -30,8 +29,8 @@ class TvPlayerActivity : AppCompatActivity() {
         webView = findViewById(R.id.playerWebView)
         tvCameraInfo = findViewById(R.id.tvPlayerCameraInfo)
 
-        cameraId = intent.getIntExtra("EXTRA_CAMERA_ID", 1)
-        cameraName = intent.getStringExtra("EXTRA_CAMERA_NAME") ?: "Câmera ao Vivo"
+        cameraId = intent.getIntExtra("EXTRA_CAMERA_ID", intent.getIntExtra("CAMERA_ID", 1))
+        cameraName = intent.getStringExtra("EXTRA_CAMERA_NAME") ?: intent.getStringExtra("CAMERA_NAME") ?: "Câmera $cameraId"
 
         setupPlayer()
         loadCameraStream(cameraId, cameraName)
@@ -49,7 +48,7 @@ class TvPlayerActivity : AppCompatActivity() {
     private fun loadCameraStream(id: Int, name: String) {
         cameraId = id
         cameraName = name
-        tvCameraInfo.text = "🔴 $name • 1080p Live Stream (Use ▲ ▼ no controle para trocar de câmera)"
+        tvCameraInfo.text = "🔴 $name • Stream Fullscreen ao Vivo (Use ▲ / ▼ para alternar câmeras)"
         tvCameraInfo.visibility = View.VISIBLE
 
         val streamUrl = "${configRepo.httpBaseUrl}/api/mjpeg/$id"
@@ -73,7 +72,7 @@ class TvPlayerActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
-                val nextId = if (cameraId > 1) cameraId - 1 else 4
+                val nextId = if (cameraId > 1) cameraId - 1 else 1
                 loadCameraStream(nextId, "Câmera $nextId")
                 return true
             }
