@@ -33,6 +33,9 @@ yarn-error.log*
 android/.gradle/
 android/app/build/
 android/build/
+mobile/android/
+mobile/.expo/
+build-outputs/
 *.apk
 *.aab
 
