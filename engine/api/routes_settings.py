@@ -152,6 +152,17 @@ def get_system_metrics():
             "system_ram_used_mb": 0.0,
         }
 
+@router.get("/ping")
+async def ping_server():
+    logger.info("📡 Ping HTTP recebido no servidor a partir de cliente TV/Mobile")
+    return {
+        "status": "ok",
+        "pong": True,
+        "server_time": time.time(),
+        "app_name": settings.APP_NAME,
+        "version": settings.VERSION
+    }
+
 @router.get("/metrics")
 async def get_realtime_metrics():
     return get_system_metrics()

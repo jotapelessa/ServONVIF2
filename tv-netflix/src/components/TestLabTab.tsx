@@ -10,6 +10,8 @@ import {
   Terminal, 
   Trash2, 
   Download, 
+  Copy,
+  Check,
   Play, 
   Zap, 
   CheckCircle2, 
@@ -23,6 +25,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { Camera, SystemHealth, SecurityEvent } from '../types';
+import { getApiBase } from '../services/apiService';
 
 interface TestLabTabProps {
   cameras: Camera[];
@@ -51,10 +54,11 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
 }) => {
   // Test States
   const [isPinging, setIsPinging] = useState(false);
-  const [lanPingMs, setLanPingMs] = useState<number | null>(12);
-  const [funnelPingMs, setFunnelPingMs] = useState<number | null>(48);
+  const [lanPingMs, setLanPingMs] = useState<number | null>(null);
+  const [funnelPingMs, setFunnelPingMs] = useState<number | null>(null);
   const [activeRoute, setActiveRoute] = useState<'lan' | 'funnel'>('lan');
-  const [selectedCameraId, setSelectedCameraId] = useState<string>(cameras[0]?.id || 'cam-01');
+  const [selectedCameraId, setSelectedCameraId] = useState<string>(cameras[0]?.id || '1');
+  const [isCopied, setIsCopied] = useState(false);
   const [headsUpNotification, setHeadsUpNotification] = useState<{ visible: boolean; title: string; message: string }>({
     visible: false,
     title: '',
@@ -80,18 +84,26 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
       time: new Date().toLocaleTimeString('pt-BR'),
       type: 'success',
       tag: 'WS_HUB',
-      message: 'Conexão ativa com o Hub de Eventos (ws://192.168.1.96:8080/ws/events).',
-    },
-    {
-      id: 'log-3',
-      time: new Date().toLocaleTimeString('pt-BR'),
-      type: 'info',
-      tag: 'SECURITY',
-      message: 'Câmeras sincronizadas no NVR: ' + cameras.length + ' sensores ativos.',
+      message: 'Monitorando conexões e eventos do ServONVIF em tempo real.',
     },
   ]);
 
-  const logEndRef = useRef<HTMLDivElement | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  // Check Android TV native permissions on mount
+  useEffect(() => {
+    try {
+      if ((window as any).AndroidNative?.checkPermissions) {
+        const permsStr = (window as any).AndroidNative.checkPermissions();
+        const perms = JSON.parse(permsStr);
+        setOverlayPermission(perms.overlay ?? true);
+        setNotificationPermission(perms.notifications ?? true);
+        setWakeLockPermission(perms.wakeLock ?? true);
+      }
+    } catch (e) {
+      console.warn('Native permission check not available:', e);
+    }
+  }, []);
 
   const addLog = (type: TestLog['type'], tag: string, message: string) => {
     const newLog: TestLog = {
@@ -139,38 +151,69 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
           }
         }
       }
-      addLog('success', 'AUDIO_CHIME', `Sinal sonoro de teste disparado com sucesso (${tone.toUpperCase()}).`);
+      addLog('success', 'AUDIO_CHIME', `Sinal sonoro de teste disparado (${tone.toUpperCase()}).`);
     } catch (e) {
       addLog('error', 'AUDIO', `Erro ao sintetizar áudio: ${e}`);
     }
   };
 
-  // 2. Ping Latency Test
+  // 2. Real Ping Latency Test (Native Bridge + HTTP Endpoint)
   const handleTestPing = async () => {
     setIsPinging(true);
-    addLog('info', 'PING', 'Iniciando teste de latência HTTP para rotas LAN e Tailscale Funnel...');
+    const apiBase = getApiBase();
+    addLog('info', 'PING', `Disparando teste de latência HTTP para o servidor: ${apiBase}...`);
 
-    const startLan = performance.now();
     try {
-      const res = await fetch('/api/settings/version', { cache: 'no-store' });
-      const elapsedLan = Math.round(performance.now() - startLan);
-      setLanPingMs(elapsedLan);
-      addLog('success', 'LAN_PING', `Rota LAN respondeu em ${elapsedLan}ms (Status: ${res.status}).`);
+      // 1. Test via Android Native Bridge if available
+      if ((window as any).AndroidNative?.pingServer) {
+        const pingResultStr = (window as any).AndroidNative.pingServer(`${apiBase}/api/settings/ping`);
+        const result = JSON.parse(pingResultStr);
+        if (result.ok) {
+          setLanPingMs(result.latency_ms);
+          addLog('success', 'LAN_PING', `📡 Servidor LAN (${apiBase}) respondeu com sucesso em ${result.latency_ms}ms (HTTP ${result.status}).`);
+        } else {
+          setLanPingMs(999);
+          addLog('error', 'LAN_PING', `Falha ao pingar servidor LAN: ${result.error || 'Timeout'}`);
+        }
+      } else {
+        // Direct browser fetch
+        const startLan = performance.now();
+        const res = await fetch(`${apiBase}/api/settings/ping`, { cache: 'no-store' });
+        const elapsedLan = Math.round(performance.now() - startLan);
+        setLanPingMs(elapsedLan);
+        if (res.ok) {
+          addLog('success', 'LAN_PING', `📡 Servidor LAN (${apiBase}) respondeu em ${elapsedLan}ms (Status: ${res.status}).`);
+        } else {
+          addLog('warn', 'LAN_PING', `Servidor LAN respondeu com status HTTP ${res.status}.`);
+        }
+      }
+
+      // 2. Check Tailscale Funnel if available
+      const infoRes = await fetch(`${apiBase}/api/auth/connection-info`, { cache: 'no-store' });
+      if (infoRes.ok) {
+        const info = await infoRes.json();
+        if (info.is_funnel_active && info.tailscale_url) {
+          const startTs = performance.now();
+          const tsRes = await fetch(`${info.tailscale_url}/api/settings/ping`, { cache: 'no-store' });
+          const elapsedTs = Math.round(performance.now() - startTs);
+          setFunnelPingMs(elapsedTs);
+          addLog('success', 'FUNNEL_PING', `Rota Tailscale (${info.tailscale_url}) respondeu em ${elapsedTs}ms.`);
+        } else {
+          setFunnelPingMs(null);
+          addLog('info', 'FUNNEL_PING', 'Tailscale Funnel não ativado no servidor.');
+        }
+      }
     } catch (e) {
       setLanPingMs(999);
-      addLog('warn', 'LAN_PING', 'Falha ao medir latência LAN direta.');
-    }
-
-    setTimeout(() => {
-      setFunnelPingMs(Math.floor(Math.random() * 25) + 40);
-      addLog('info', 'FUNNEL_PING', 'Rota Tailscale Funnel pública verificada (~45ms).');
+      addLog('error', 'PING', `Falha de rede ao conectar no servidor (${apiBase}): ${e}`);
+    } finally {
       setIsPinging(false);
-    }, 600);
+    }
   };
 
   // 3. Motion Simulation
   const handleSimulateMotion = () => {
-    const cam = cameras.find((c) => c.id === selectedCameraId) || cameras[0];
+    const cam = cameras.find((c) => c.id === selectedCameraId) || cameras[0] || { id: '1', name: 'Câmera Principal' };
     onSimulateMotion(cam.id);
     playSoundChime('alert');
     addLog('warn', 'MOTION_SIM', `🚨 Alerta de movimento simulado na câmera: ${cam.name} (${cam.id})`);
@@ -178,14 +221,14 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
     if ((window as any).AndroidNative?.showHeadsUp) {
       (window as any).AndroidNative.showHeadsUp(
         `🚨 Movimento na ${cam.name}`,
-        `Intrusão detectada às ${new Date().toLocaleTimeString('pt-BR')}`
+        `Intrusão detectada no setor monitorado às ${new Date().toLocaleTimeString('pt-BR')}`
       );
     }
 
     setHeadsUpNotification({
       visible: true,
-      title: `🚨 Alerta de Intrusão Simulado`,
-      message: `Movimento detectado no sensor ${cam.name}. Alerta enviado para a TV.`,
+      title: `🚨 Alerta de Movimento: ${cam.name}`,
+      message: `Intrusão detectada no setor monitorado às ${new Date().toLocaleTimeString('pt-BR')}`,
     });
 
     setTimeout(() => {
@@ -222,275 +265,237 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
 
     setTimeout(() => {
       setHeadsUpNotification({ visible: false, title: '', message: '' });
-    }, 4000);
+    }, 4500);
   };
 
-  // 6. Export Report
+  // 6. Copy All Logs to Clipboard
+  const handleCopyLogs = () => {
+    const plainText = logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n');
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(plainText);
+    }
+    if ((window as any).AndroidNative?.copyToClipboard) {
+      (window as any).AndroidNative.copyToClipboard(plainText);
+    }
+    setIsCopied(true);
+    addLog('success', 'CLIPBOARD', 'Todos os logs foram copiados para a área de transferência!');
+    setTimeout(() => setIsCopied(false), 3000);
+  };
+
+  // 7. Export Log Report
   const handleExportReport = () => {
-    const reportText = `=================================================================
-📱 RELATÓRIO COMPLETO DE DIAGNÓSTICO — SERVONVIF TV PRO (NETFLIX UI)
-=================================================================
-• Aplicação         : ServONVIF TV Pro (Leanback 10-Foot UI)
-• Versão            : v002.002.146
-• Rota Ativa        : ${activeRoute.toUpperCase()} (${activeRoute === 'lan' ? 'http://192.168.1.96:8080' : 'https://macbook...ts.net'})
-• Latência LAN      : ${lanPingMs} ms
-• Latência Funnel   : ${funnelPingMs} ms
-• Câmeras Ativas    : ${cameras.length}
-• Permissão Overlay : ${overlayPermission ? 'CONCEDIDA (SYSTEM_ALERT_WINDOW)' : 'PENDENTE'}
-• Permissão Notif.  : ${notificationPermission ? 'CONCEDIDA' : 'PENDENTE'}
-• Data / Hora       : ${new Date().toISOString()}
-=================================================================
-📜 LOGS RECENTES DO TERMINAL:
-=================================================================
+    const reportText = `=== RELATÓRIO DE TELEMETRIA SERVONVIF TV PRO ===
+Data/Hora: ${new Date().toLocaleString('pt-BR')}
+Servidor: ${getApiBase()}
+Latência LAN: ${lanPingMs !== null ? `${lanPingMs}ms` : 'Não medido'}
+Câmeras Ativas: ${cameras.length}
+Permissões: Overlay=${overlayPermission}, Notificações=${notificationPermission}, WakeLock=${wakeLockPermission}
+
+--- LOGS DE TELEMETRIA ---
 ${logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n')}
-=================================================================`;
+=================================================`;
 
     const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `servonvif_tv_diagnostic_${Date.now()}.txt`;
-    link.click();
-    addLog('success', 'EXPORT', 'Relatório de diagnóstico exportado em arquivo .txt');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `servonvif_tv_telemetry_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('success', 'REPORT', 'Relatório de diagnóstico exportado em arquivo .txt.');
   };
 
   return (
-    <div className="flex flex-col w-full min-h-[calc(100vh-80px)] p-6 md:p-10 gap-8 select-none pb-24 max-w-7xl mx-auto">
+    <div className="flex flex-col w-full min-h-[calc(100vh-80px)] p-4 sm:p-6 md:p-10 gap-6 select-none pb-28">
       
-      {/* Heads-Up Notification Banner */}
+      {/* Heads-Up Notification Banner Simulation */}
       {headsUpNotification.visible && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-4 bg-gradient-to-r from-[#131D33] to-[#1C2942] border-2 border-red-500/80 p-4 rounded-2xl shadow-[0_0_30px_rgba(239,68,68,0.4)] backdrop-blur-2xl animate-bounce">
-          <div className="p-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/40">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-xl p-4 rounded-2xl bg-[#0D1424]/95 border-2 border-amber-500 text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] backdrop-blur-2xl flex items-center gap-3.5 animate-bounce">
+          <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40">
             <Bell className="w-6 h-6 animate-pulse" />
           </div>
-          <div>
-            <h4 className="font-bold text-sm text-white">{headsUpNotification.title}</h4>
-            <p className="text-xs text-slate-300">{headsUpNotification.message}</p>
+          <div className="flex-1">
+            <h4 className="font-bold text-sm text-amber-300">{headsUpNotification.title}</h4>
+            <p className="text-xs text-slate-200">{headsUpNotification.message}</p>
           </div>
         </div>
       )}
 
       {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-glass-card p-5 rounded-2xl border border-glass">
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-glass-card p-4 rounded-2xl border border-glass">
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/30 text-cyan-400 border border-cyan-500/40 shadow-[0_0_15px_rgba(0,210,255,0.3)]">
-            <FlaskConical className="w-6 h-6" />
+          <div className="p-2.5 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,210,255,0.3)]">
+            <FlaskConical className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-wide">Central de Testes, Conexões & Permissões</h1>
-            <p className="text-xs text-slate-400">Ambiente interativo de validação de rede, alertas D-pad e permissões do Android TV</p>
+            <h1 className="text-base sm:text-xl font-bold text-slate-100">Central de Testes, Conexões & Permissões</h1>
+            <p className="text-xs text-slate-400 hidden sm:block">Laboratório interativo para testes de latência, alertas, PiP e permissões do Android TV</p>
           </div>
         </div>
 
-        {/* Global Connection Badge */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold">
-            <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
-            WS HUB: CONECTADO
-          </div>
-        </div>
+        <button
+          id="btn-trigger-ping-top"
+          onClick={handleTestPing}
+          onFocus={() => onElementFocus('btn-trigger-ping-top')}
+          disabled={isPinging}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all cursor-pointer shadow-lg tv-focus-target ${
+            isPinging
+              ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+              : 'bg-[#007AFF] text-white hover:bg-blue-500 shadow-[0_0_15px_rgba(0,122,255,0.4)]'
+          } ${focusedElementId === 'btn-trigger-ping-top' ? 'tv-focused ring-4 ring-cyan-400' : ''}`}
+        >
+          <RefreshCw className={`w-4 h-4 ${isPinging ? 'animate-spin' : ''}`} />
+          <span>{isPinging ? 'Medindo Latência...' : 'Medir Latência & Ping'}</span>
+        </button>
       </div>
 
-      {/* Grid: 3 Main Modules */}
+      {/* Grid: 2 Columns on Desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* ============================================================
-            MODULE 1: Conexões & Roteamento de Rede
+            MODULE 1: Conexões & Rotas de Rede
             ============================================================ */}
-        <div className="p-6 rounded-2xl bg-glass-card border border-glass flex flex-col justify-between gap-5">
+        <div className="lg:col-span-2 p-6 rounded-2xl bg-glass-card border border-glass flex flex-col gap-4">
           <div className="flex items-center justify-between border-b border-[#1E2D4A]/80 pb-3">
             <div className="flex items-center gap-2.5">
-              <Wifi className="w-5 h-5 text-cyan-400" />
-              <h2 className="font-bold text-base text-white">Rotas & Conexões</h2>
+              <Server className="w-5 h-5 text-emerald-400" />
+              <div>
+                <h2 className="font-bold text-base text-white">Status das Conexões com o Servidor</h2>
+                <p className="text-xs text-slate-400">Rotas direta na rede local (LAN) e remota (Tailscale Funnel)</p>
+              </div>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
-              DUAL-ROUTE
+            <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+              DUAL ROUTE
             </span>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
             {/* Route 1: LAN */}
-            <div 
-              onClick={() => setActiveRoute('lan')}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                activeRoute === 'lan' 
-                  ? 'bg-cyan-500/10 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(0,210,255,0.2)]' 
-                  : 'bg-[#0D1424] border-[#1E2D4A] text-slate-300 hover:bg-[#131D33]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Server className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <div className="text-xs font-bold">Rede Local LAN (Wi-Fi 5GHz)</div>
-                  <div className="text-[11px] font-mono text-slate-400">http://192.168.1.96:8080</div>
+            <div className="p-4 rounded-xl bg-[#0D1424] border border-[#1E2D4A] flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-bold text-sm text-slate-200">Rede Local (LAN Direta)</span>
                 </div>
+                <span className="text-xs font-mono font-bold text-emerald-400">
+                  {lanPingMs !== null ? `${lanPingMs}ms` : '---'}
+                </span>
               </div>
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold text-emerald-400">{lanPingMs !== null ? `${lanPingMs} ms` : '--'}</span>
-                <div className="text-[9px] text-slate-400 uppercase font-mono">Direto</div>
+              <p className="text-xs text-slate-400 font-mono">{getApiBase()}</p>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-emerald-500 h-full w-full" />
               </div>
             </div>
 
             {/* Route 2: Tailscale Funnel */}
-            <div 
-              onClick={() => setActiveRoute('funnel')}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                activeRoute === 'funnel' 
-                  ? 'bg-cyan-500/10 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(0,210,255,0.2)]' 
-                  : 'bg-[#0D1424] border-[#1E2D4A] text-slate-300 hover:bg-[#131D33]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Radio className="w-4 h-4 text-blue-400" />
-                <div>
-                  <div className="text-xs font-bold">Tailscale Funnel Remoto</div>
-                  <div className="text-[11px] font-mono text-slate-400">https://macbook...tail47a54f.ts.net</div>
+            <div className="p-4 rounded-xl bg-[#0D1424] border border-[#1E2D4A] flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                  <span className="font-bold text-sm text-slate-200">Tailscale Funnel (HTTPS)</span>
                 </div>
+                <span className="text-xs font-mono font-bold text-cyan-400">
+                  {funnelPingMs !== null ? `${funnelPingMs}ms` : 'Automático'}
+                </span>
               </div>
-              <div className="text-right">
-                <span className="text-xs font-mono font-bold text-blue-400">{funnelPingMs !== null ? `${funnelPingMs} ms` : '--'}</span>
-                <div className="text-[9px] text-slate-400 uppercase font-mono">HTTPS 443</div>
+              <p className="text-xs text-slate-400 font-mono">https://servonvif-iot.ts.net:443</p>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-cyan-500 h-full w-3/4" />
               </div>
             </div>
+
           </div>
 
-          {/* Action Button: Test Ping */}
-          <button
-            id="btn-test-ping"
-            onClick={handleTestPing}
-            onFocus={() => onElementFocus('btn-test-ping')}
-            disabled={isPinging}
-            className={`w-full py-3 px-4 rounded-xl font-bold text-xs tracking-wider uppercase transition-all cursor-pointer flex items-center justify-center gap-2 border tv-focus-target ${
-              isPinging
-                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 animate-pulse'
-                : 'bg-gradient-to-r from-cyan-500 to-blue-600 border-cyan-400 text-white shadow-[0_0_15px_rgba(0,210,255,0.3)] hover:brightness-110'
-            } ${focusedElementId === 'btn-test-ping' ? 'tv-focused' : ''}`}
-          >
-            <RefreshCw className={`w-4 h-4 ${isPinging ? 'animate-spin' : ''}`} />
-            {isPinging ? 'Testando Latência...' : 'Medir Latência & Ping'}
-          </button>
-        </div>
-
-        {/* ============================================================
-            MODULE 2: Laboratório de Testes Interativos
-            ============================================================ */}
-        <div className="p-6 rounded-2xl bg-glass-card border border-glass flex flex-col justify-between gap-4">
-          <div className="flex items-center justify-between border-b border-[#1E2D4A]/80 pb-3">
-            <div className="flex items-center gap-2.5">
-              <Zap className="w-5 h-5 text-amber-400" />
-              <h2 className="font-bold text-base text-white">Laboratório de Testes</h2>
-            </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/30">
-              SIMULAÇÃO
-            </span>
-          </div>
-
-          {/* Camera Selector for Tests */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Câmera Alvo para Testes:</label>
-            <select
-              value={selectedCameraId}
-              onChange={(e) => setSelectedCameraId(e.target.value)}
-              className="w-full bg-[#0D1424] border border-[#1E2D4A] text-slate-200 text-xs rounded-xl p-2.5 outline-none focus:border-cyan-400"
-            >
-              {cameras.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.id})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 4 Interactive Test Buttons */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              id="btn-test-motion"
-              onClick={handleSimulateMotion}
-              onFocus={() => onElementFocus('btn-test-motion')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer tv-focus-target flex flex-col justify-between gap-1 bg-red-950/30 border-red-500/40 text-red-200 hover:bg-red-900/40 ${
-                focusedElementId === 'btn-test-motion' ? 'tv-focused ring-2 ring-red-400' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between">
+          {/* Interactive Test Triggers */}
+          <div className="pt-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Laboratório de Testes Interativos</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              
+              {/* Test 1: Simular Movimento */}
+              <button
+                id="btn-test-motion"
+                onClick={handleSimulateMotion}
+                onFocus={() => onElementFocus('btn-test-motion')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-2 text-center bg-[#0D1424] border-[#1E2D4A] hover:border-amber-400 text-slate-200 tv-focus-target ${
+                  focusedElementId === 'btn-test-motion' ? 'tv-focused ring-2 ring-amber-400' : ''
+                }`}
+              >
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
                 <span className="text-xs font-bold">Simular Movimento</span>
-                <Zap className="w-3.5 h-3.5 text-red-400" />
-              </div>
-              <span className="text-[10px] text-slate-400">Dispara alerta neon</span>
-            </button>
+              </button>
 
-            <button
-              id="btn-test-chime"
-              onClick={() => playSoundChime('alert')}
-              onFocus={() => onElementFocus('btn-test-chime')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer tv-focus-target flex flex-col justify-between gap-1 bg-amber-950/30 border-amber-500/40 text-amber-200 hover:bg-amber-900/40 ${
-                focusedElementId === 'btn-test-chime' ? 'tv-focused ring-2 ring-amber-400' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold">Tocar Chime</span>
-                <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-              </div>
-              <span className="text-[10px] text-slate-400">Som de segurança</span>
-            </button>
+              {/* Test 2: Chime Sonoro */}
+              <button
+                id="btn-test-chime"
+                onClick={() => playSoundChime('alert')}
+                onFocus={() => onElementFocus('btn-test-chime')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-2 text-center bg-[#0D1424] border-[#1E2D4A] hover:border-emerald-400 text-slate-200 tv-focus-target ${
+                  focusedElementId === 'btn-test-chime' ? 'tv-focused ring-2 ring-emerald-400' : ''
+                }`}
+              >
+                <Volume2 className="w-5 h-5 text-emerald-400" />
+                <span className="text-xs font-bold">Tocar Chime Áudio</span>
+              </button>
 
-            <button
-              id="btn-test-pip"
-              onClick={handleTestPiP}
-              onFocus={() => onElementFocus('btn-test-pip')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer tv-focus-target flex flex-col justify-between gap-1 bg-cyan-950/30 border-cyan-500/40 text-cyan-200 hover:bg-cyan-900/40 ${
-                focusedElementId === 'btn-test-pip' ? 'tv-focused ring-2 ring-cyan-400' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between">
+              {/* Test 3: PiP Flutuante */}
+              <button
+                id="btn-test-pip"
+                onClick={handleTestPiP}
+                onFocus={() => onElementFocus('btn-test-pip')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-2 text-center bg-[#0D1424] border-[#1E2D4A] hover:border-cyan-400 text-slate-200 tv-focus-target ${
+                  focusedElementId === 'btn-test-pip' ? 'tv-focused ring-2 ring-cyan-400' : ''
+                }`}
+              >
+                <PictureInPicture className="w-5 h-5 text-cyan-400" />
                 <span className="text-xs font-bold">Testar PiP Flutuante</span>
-                <PictureInPicture className="w-3.5 h-3.5 text-cyan-400" />
-              </div>
-              <span className="text-[10px] text-slate-400">Miniatura sobreposta</span>
-            </button>
+              </button>
 
-            <button
-              id="btn-test-heads-up"
-              onClick={handleTestHeadsUp}
-              onFocus={() => onElementFocus('btn-test-heads-up')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer tv-focus-target flex flex-col justify-between gap-1 bg-purple-950/30 border-purple-500/40 text-purple-200 hover:bg-purple-900/40 ${
-                focusedElementId === 'btn-test-heads-up' ? 'tv-focused ring-2 ring-purple-400' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between">
+              {/* Test 4: Heads-Up Notification */}
+              <button
+                id="btn-test-headsup"
+                onClick={handleTestHeadsUp}
+                onFocus={() => onElementFocus('btn-test-headsup')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center gap-2 text-center bg-[#0D1424] border-[#1E2D4A] hover:border-purple-400 text-slate-200 tv-focus-target ${
+                  focusedElementId === 'btn-test-headsup' ? 'tv-focused ring-2 ring-purple-400' : ''
+                }`}
+              >
+                <Bell className="w-5 h-5 text-purple-400" />
                 <span className="text-xs font-bold">Aviso Heads-Up</span>
-                <Bell className="w-3.5 h-3.5 text-purple-400" />
-              </div>
-              <span className="text-[10px] text-slate-400">Banner superior TV</span>
-            </button>
+              </button>
+
+            </div>
           </div>
         </div>
 
         {/* ============================================================
-            MODULE 3: Painel de Permissões do Android TV
+            MODULE 2: Permissões do Android TV
             ============================================================ */}
         <div className="p-6 rounded-2xl bg-glass-card border border-glass flex flex-col justify-between gap-4">
-          <div className="flex items-center justify-between border-b border-[#1E2D4A]/80 pb-3">
-            <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          <div className="flex items-center gap-2.5 border-b border-[#1E2D4A]/80 pb-3">
+            <Smartphone className="w-5 h-5 text-cyan-400" />
+            <div>
               <h2 className="font-bold text-base text-white">Permissões Android TV</h2>
+              <p className="text-xs text-slate-400">Recursos nativos do sistema operacional</p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-              SISTEMA
-            </span>
           </div>
 
           <div className="flex flex-col gap-2.5">
-            {/* Permission 1: Overlay (SYSTEM_ALERT_WINDOW) */}
+            {/* Permission 1: Overlay */}
             <div className="p-3 rounded-xl bg-[#0D1424] border border-[#1E2D4A] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Layers className="w-4 h-4 text-cyan-400" />
+                <PictureInPicture className="w-4 h-4 text-cyan-400" />
                 <div>
                   <div className="text-xs font-bold text-slate-200">Sobreposição de Tela (PiP)</div>
                   <div className="text-[10px] text-slate-400">SYSTEM_ALERT_WINDOW</div>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> ATIVA
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 ${
+                overlayPermission
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-rose-950 text-rose-400 border border-rose-500/30'
+              }`}>
+                <CheckCircle2 className="w-3 h-3" /> {overlayPermission ? 'CONCEDIDA' : 'PENDENTE'}
               </span>
             </div>
 
@@ -514,7 +519,7 @@ ${logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n')}
                 <Zap className="w-4 h-4 text-amber-400" />
                 <div>
                   <div className="text-xs font-bold text-slate-200">Modo 24/7 sem Suspensão</div>
-                  <div className="text-[10px] text-slate-400">WAKE_LOCK &amp; FOREGROUND</div>
+                  <div className="text-[10px] text-slate-400">WAKE_LOCK & FOREGROUND</div>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
@@ -545,19 +550,38 @@ ${logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n')}
       </div>
 
       {/* ============================================================
-          MODULE 4: Terminal de Logs & Telemetria em Tempo Real
+          MODULE 3: Terminal de Logs & Telemetria em Tempo Real
           ============================================================ */}
       <div className="p-6 rounded-2xl bg-glass-card border border-glass flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1E2D4A]/80 pb-3">
           <div className="flex items-center gap-2.5">
             <Terminal className="w-5 h-5 text-cyan-400" />
             <div>
-              <h2 className="font-bold text-base text-white">Terminal de Logs &amp; Telemetria</h2>
-              <p className="text-xs text-slate-400">Monitoramento em tempo real de requisições e eventos do WebSocket NVR</p>
+              <h2 className="font-bold text-base text-white">Terminal de Logs & Telemetria</h2>
+              <p className="text-xs text-slate-400">Monitoramento em tempo real de requisições, pings e eventos do NVR</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            
+            {/* Copiar Logs Button */}
+            <button
+              id="btn-copy-logs"
+              onClick={handleCopyLogs}
+              onFocus={() => onElementFocus('btn-copy-logs')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                isCopied
+                  ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300'
+                  : 'bg-[#0D1424] border-[#1E2D4A] text-slate-200 hover:bg-[#131D33]'
+              } tv-focus-target ${
+                focusedElementId === 'btn-copy-logs' ? 'tv-focused' : ''
+              }`}
+            >
+              {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+              <span>{isCopied ? 'Logs Copiados!' : 'Copiar Logs'}</span>
+            </button>
+
+            {/* Limpar Logs Button */}
             <button
               id="btn-clear-logs"
               onClick={() => setLogs([])}
@@ -570,6 +594,7 @@ ${logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n')}
               Limpar
             </button>
 
+            {/* Exportar Relatorio .txt Button */}
             <button
               id="btn-export-report"
               onClick={handleExportReport}

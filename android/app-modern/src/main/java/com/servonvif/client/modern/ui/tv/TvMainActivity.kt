@@ -228,6 +228,51 @@ class TvMainActivity : AppCompatActivity() {
             }
             return json.toString()
         }
+
+        @JavascriptInterface
+        fun copyToClipboard(text: String) {
+            mainHandler.post {
+                try {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("ServONVIF_Logs", text)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(this@TvMainActivity, "Logs copiados para a área de transferência!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Log.e("ServOnvifNetflixTV", "Failed to copy to clipboard: ${e.message}")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun pingServer(targetUrl: String): String {
+            val startTime = System.currentTimeMillis()
+            return try {
+                val url = if (targetUrl.startsWith("http")) targetUrl else "${configRepo.httpBaseUrl}$targetUrl"
+                val request = okhttp3.Request.Builder().url(url).build()
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val response = client.newCall(request).execute()
+                val latency = System.currentTimeMillis() - startTime
+                val code = response.code
+                response.close()
+                JSONObject().apply {
+                    put("ok", response.isSuccessful)
+                    put("status", code)
+                    put("latency_ms", latency)
+                    put("url", url)
+                }.toString()
+            } catch (e: Exception) {
+                val latency = System.currentTimeMillis() - startTime
+                JSONObject().apply {
+                    put("ok", false)
+                    put("error", e.message ?: "Network error")
+                    put("latency_ms", latency)
+                    put("url", targetUrl)
+                }.toString()
+            }
+        }
     }
 
     private fun triggerNativeNotification(title: String, message: String) {
