@@ -123,29 +123,8 @@ class TvMainActivity : AppCompatActivity() {
     private fun loadNetflixTvInterface() {
         progressBar.visibility = View.VISIBLE
         val localAssetUrl = "https://appassets.androidplatform.net/assets/tv-netflix/index.html"
-        
-        thread {
-            val serverIp = configRepo.serverIp
-            val serverPort = configRepo.serverPort
-            val remoteUrl = if (serverIp.isNotBlank()) "http://$serverIp:$serverPort/tv" else ""
-            
-            var targetUrl = localAssetUrl
-            if (remoteUrl.isNotBlank()) {
-                try {
-                    val online = apiClient.testConnection()
-                    if (online) {
-                        targetUrl = remoteUrl
-                    }
-                } catch (e: Exception) {
-                    Log.w("ServOnvifNetflixTV", "Could not reach remote /tv directly, using local asset bundle")
-                }
-            }
-
-            mainHandler.post {
-                Log.i("ServOnvifNetflixTV", "Loading Netflix UI from: $targetUrl")
-                webView.loadUrl(targetUrl)
-            }
-        }
+        Log.i("ServOnvifNetflixTV", "Loading bundled Netflix UI directly: $localAssetUrl")
+        webView.loadUrl(localAssetUrl)
     }
 
     // =========================================================================
