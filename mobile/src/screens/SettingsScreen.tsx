@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import { ConnectionConfig } from "../types";
 import { StorageService } from "../services/storage";
@@ -23,6 +24,7 @@ import {
   Shield,
   Terminal,
   Copy,
+  Share2,
   Trash2,
   Check,
   Zap,
@@ -30,6 +32,7 @@ import {
   RefreshCw,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import { theme } from "../theme/tokens";
 import { MobileLogger, LogEntry } from "../services/mobileLogger";
 
@@ -112,14 +115,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
-    await MobileLogger.copyReportToClipboard();
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 3000);
-    Alert.alert(
-      "📋 Logs Copiados!",
-      "O relatório completo de diagnóstico do Smartphone foi copiado para a área de transferência. Cole-o no chat para análise.",
-      [{ text: "OK" }]
-    );
+    try {
+      const report = await MobileLogger.generateFullDiagnosticReport();
+      await Clipboard.setStringAsync(report);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 3000);
+      Alert.alert(
+        "📋 Logs Copiados!",
+        "O relatório completo de diagnóstico do Smartphone foi copiado para a sua área de transferência com sucesso! Cole no chat para análise.",
+        [{ text: "OK" }]
+      );
+    } catch (e: any) {
+      Alert.alert("Aviso", `Não foi possível copiar automaticamente: ${e?.message}`);
+    }
+  };
+
+  const handleShareLogs = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    try {
+      const report = await MobileLogger.generateFullDiagnosticReport();
+      await Share.share({
+        title: "Relatório de Diagnóstico ServONVIF Mobile",
+        message: report,
+      });
+    } catch (e: any) {
+      Alert.alert("Erro ao Compartilhar", e?.message || "Não foi possível abrir o compartilhamento.");
+    }
   };
 
   const handleClearLogs = () => {
@@ -384,8 +407,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
                 <Copy size={14} color="#ffffff" />
               )}
               <Text style={styles.actionBtnText}>
-                {isCopied ? "Copiado!" : "Copiar Logs Completos"}
+                {isCopied ? "Copiado!" : "Copiar Logs"}
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.shareBtn]}
+              onPress={handleShareLogs}
+              activeOpacity={0.75}
+            >
+              <Share2 size={14} color="#ffffff" />
+              <Text style={styles.actionBtnText}>Compartilhar</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -408,7 +440,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
               showsVerticalScrollIndicator
             >
               {logs.length === 0 ? (
-                <Text style={styles.terminalEmptyText}>
+                <Text style={styles.terminalEmptyText} selectable={true}>
                   Nenhum log registrado até o momento.
                 </Text>
               ) : (
@@ -420,12 +452,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {
 
                   return (
                     <View key={index} style={styles.logRow}>
-                      <Text style={styles.logTime}>[{log.timestamp}]</Text>
-                      <Text style={[styles.logLevel, { color: levelColor }]}>
+                      <Text style={styles.logTime} selectable={true}>[{log.timestamp}]</Text>
+                      <Text style={[styles.logLevel, { color: levelColor }]} selectable={true}>
                         [{log.level}]
                       </Text>
-                      <Text style={styles.logTag}>[{log.tag}]</Text>
-                      <Text style={styles.logMessage}>
+                      <Text style={styles.logTag} selectable={true}>[{log.tag}]</Text>
+                      <Text style={styles.logMessage} selectable={true}>
                         {log.message}
                         {log.details
                           ? ` | ${
@@ -635,6 +667,9 @@ const styles = StyleSheet.create({
   copyBtn: {
     flex: 1,
     backgroundColor: "#2563eb",
+  },
+  shareBtn: {
+    backgroundColor: "#059669",
   },
   clearBtn: {
     backgroundColor: theme.colors.surfaceElevated,

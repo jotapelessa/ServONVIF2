@@ -35,7 +35,15 @@ jobs:
         with:
           node-version: 18
 
-      - name: Build ServONVIF TV APKs (Classic & Modern)
+      - name: Sync 9-Digit Versioning System
+        id: versioning
+        run: |
+          python3 scripts/sync_version.py
+          source build-outputs/version.env
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+
+      - name: Build ServONVIF TV APKs (Classic & Netflix Style)
         run: |
           mkdir -p build-outputs
           cd android
@@ -44,13 +52,15 @@ jobs:
           
           # Copy TV Classic APK
           TV_CLASSIC_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
-          cp "$TV_CLASSIC_APK" ../build-outputs/ServONVIF_TV_Classic_v2.2.apk
+          cp "$TV_CLASSIC_APK" ../build-outputs/ServONVIF_TV_Classic_v${{ env.APP_VERSION }}.apk
+          cp "$TV_CLASSIC_APK" ../build-outputs/ServONVIF_TV_Classic.apk
           
-          # Copy TV Modern APK
-          TV_MODERN_APK="$(find app-modern/build/outputs/apk -name '*.apk' | head -n 1)"
-          cp "$TV_MODERN_APK" ../build-outputs/ServONVIF_TV_Modern_v2.2.apk
+          # Copy TV Netflix Style APK
+          TV_NETFLIX_APK="$(find app-modern/build/outputs/apk -name '*.apk' | head -n 1)"
+          cp "$TV_NETFLIX_APK" ../build-outputs/ServONVIF_TV_Netflix_v${{ env.APP_VERSION }}.apk
+          cp "$TV_NETFLIX_APK" ../build-outputs/ServONVIF_TV_Netflix.apk
           
-          echo "✅ Built TV Classic and TV Modern APKs successfully"
+          echo "✅ Built TV Classic and TV Netflix APKs successfully"
 
       - name: Build ServONVIF Mobile APK (Expo SDK 54)
         run: |
@@ -63,7 +73,8 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
           MOBILE_APK="$(find app/build/outputs/apk -name '*.apk' | head -n 1)"
-          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile_v2.2.apk
+          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile_v${{ env.APP_VERSION }}.apk
+          cp "$MOBILE_APK" ../../build-outputs/ServONVIF_Mobile.apk
           echo "✅ Built Mobile APK successfully"
 
       - name: Upload Artifacts
@@ -76,19 +87,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v2.2.138
-          name: "ServONVIF v2.2.138 - TV Classic, TV Modern & Mobile Apps"
+          tag_name: v${{ env.APP_VERSION }}
+          name: "ServONVIF v${{ env.APP_VERSION }} - TV Classic, TV Netflix & Mobile Apps"
           body: |
-            🚀 **Lançamento Oficial ServONVIF v2.2.138**
+            🚀 **Lançamento Oficial ServONVIF v${{ env.APP_VERSION }}**
             
             ### 📦 Aplicativos Disponíveis para Download:
-            - 📺 **ServONVIF_TV_Classic_v2.2.apk**: Versão clássica e estável para Smart TV e TV Box com PiP overlay e navegação por controle remoto.
-            - ✨ **ServONVIF_TV_Modern_v2.2.apk**: Nova versão com UI/UX moderna (Dark Glassmorphism 60/30/10), mantendo 100% das abas, Mosaico e PiP.
-            - 📱 **ServONVIF_Mobile_v2.2.apk**: App standalone para Smartphones (Expo SDK 54 / React Native), com transmissão Zero-Flicker e suporte a Tailscale Funnel.
+            - 📺 **ServONVIF_TV_Classic_v${{ env.APP_VERSION }}.apk**: Versão clássica e estável para Smart TV e TV Box com PiP overlay e navegação por controle remoto.
+            - 🎬 **ServONVIF_TV_Netflix_v${{ env.APP_VERSION }}.apk**: Nova versão com UI/UX cinematográfica **Estilo Netflix** (Hero Billboard, trilhos de câmeras, foco D-pad glow), mantendo 100% das abas, Mosaico e PiP.
+            - 📱 **ServONVIF_Mobile_v${{ env.APP_VERSION }}.apk**: App standalone para Smartphones (Expo SDK 54 / React Native), com transmissão Zero-Flicker, cópia/compartilhamento de logs e suporte a Tailscale Funnel.
           files: |
-            build-outputs/ServONVIF_TV_Classic_v2.2.apk
-            build-outputs/ServONVIF_TV_Modern_v2.2.apk
-            build-outputs/ServONVIF_Mobile_v2.2.apk
+            build-outputs/ServONVIF_TV_Classic_v${{ env.APP_VERSION }}.apk
+            build-outputs/ServONVIF_TV_Netflix_v${{ env.APP_VERSION }}.apk
+            build-outputs/ServONVIF_Mobile_v${{ env.APP_VERSION }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

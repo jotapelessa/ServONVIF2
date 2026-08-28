@@ -114,12 +114,12 @@ if [ -n "$TV_CLASSIC_APK" ]; then
     echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk"
 fi
 
-# 2. Localizar e copiar APK 2 (TV Moderno)
+# 2. Localizar e copiar APK 2 (TV Netflix Style)
 TV_MODERN_APK="$(find "$WORKSPACE_DIR/android/app-modern/build/outputs/apk" -name "*.apk" | head -n 1)"
 if [ -n "$TV_MODERN_APK" ]; then
-    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk"
-    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Modern.apk"
-    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk"
+    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk"
+    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Netflix.apk"
+    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk"
 fi
 
 echo "=================================================="
@@ -178,19 +178,19 @@ if command -v gh &> /dev/null; then
             echo "🔄 Release $RELEASE_TAG já existe. Enviando novos APKs..."
             gh release upload "$RELEASE_TAG" \
                 "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk" \
-                "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk" \
                 "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
                 --clobber || true
         else
             echo "✨ Criando nova Release $RELEASE_TAG no GitHub..."
             gh release create "$RELEASE_TAG" \
                 "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk" \
-                "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Netflix_v${APP_VER}.apk" \
                 "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
-                --title "ServONVIF $RELEASE_TAG - TV Classic, TV Modern & Mobile Apps" \
+                --title "ServONVIF $RELEASE_TAG - TV Classic, TV Netflix & Mobile Apps" \
                 --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
 - 📺 **ServONVIF_TV_Classic_v${APP_VER}.apk**: Aplicativo para Smart TV / Android TV Box com PiP overlay e navegação D-pad tradicional.
-- ✨ **ServONVIF_TV_Modern_v${APP_VER}.apk**: Nova versão com UI/UX moderna (Dark Glassmorphism 60/30/10), Mosaico e controle D-pad iluminado.
+- 🎬 **ServONVIF_TV_Netflix_v${APP_VER}.apk**: Nova versão com UI/UX cinematográfica **Estilo Netflix** (Hero Billboard, trilhos de câmeras, foco D-pad glow), mantendo 100% das abas, Mosaico e PiP.
 - 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem Metro) com Tailscale Funnel, streaming Zero-Flicker e feed LPR de placas." || true
         fi
         echo "🌟 GitHub Release $RELEASE_TAG processada com sucesso!"

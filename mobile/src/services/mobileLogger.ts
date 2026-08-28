@@ -153,15 +153,14 @@ class MobileLoggerService {
   public async copyReportToClipboard(): Promise<string> {
     const report = await this.generateFullDiagnosticReport();
     try {
-      // Dynamic import to prevent bundler failure if package cache was not refreshed
-      const ClipboardModule = require("expo-clipboard");
-      if (ClipboardModule && ClipboardModule.setStringAsync) {
-        await ClipboardModule.setStringAsync(report);
+      const Clipboard = require("expo-clipboard");
+      if (Clipboard && Clipboard.setStringAsync) {
+        await Clipboard.setStringAsync(report);
       }
     } catch (e: any) {
       this.warn("SYSTEM", `Clipboard nativo indisponível: ${e?.message}`);
     }
-    this.info("SYSTEM", "📋 Relatório de diagnóstico pronto e copiado.");
+    this.info("SYSTEM", "📋 Relatório de diagnóstico gerado e copiado para a área de transferência.");
     return report;
   }
 }
