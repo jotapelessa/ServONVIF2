@@ -9,14 +9,16 @@ WORKSPACE_DIR="$(pwd)"
 OUTPUT_DIR="$WORKSPACE_DIR/build-outputs"
 mkdir -p "$OUTPUT_DIR"
 
-# 0. Sincronizar Sistema de Versionamento 9 Dígitos (000.000.000)
+# Limpar APKs residuais anteriores para garantir nomes de versões sempre atualizados
+rm -f "$OUTPUT_DIR"/*.apk 2>/dev/null || true
+
+# 0. Sincronizar Sistema de Versionamento Contínuo de 9 Dígitos (000.000.000)
 python3 "$WORKSPACE_DIR/scripts/sync_version.py"
 if [ -f "$OUTPUT_DIR/version.env" ]; then
     source "$OUTPUT_DIR/version.env"
 fi
 
-TV_VERSION="v${APP_VERSION:-002.002.058}"
-MOBILE_VERSION="v${APP_VERSION:-002.002.058}"
+APP_VER="${APP_VERSION:-002.002.122}"
 export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
@@ -95,7 +97,7 @@ if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s
 fi
 
 echo "=================================================="
-echo "📺 Compilando APK 1: ServONVIF TV $TV_VERSION..."
+echo "📺 Compilando APK 1: ServONVIF TV v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/android"
 chmod +x ./gradlew
@@ -104,13 +106,13 @@ chmod +x ./gradlew
 # Localizar e copiar APK de TV com nome e versão
 TV_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
 if [ -n "$TV_APK" ]; then
-    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk"
+    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
     cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV.apk"
-    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk"
+    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
 fi
 
 echo "=================================================="
-echo "📱 Compilando APK 2: ServONVIF Mobile $MOBILE_VERSION..."
+echo "📱 Compilando APK 2: ServONVIF Mobile v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/mobile"
 
@@ -146,9 +148,9 @@ if [ -z "$MOBILE_APK" ]; then
 fi
 
 if [ -n "$MOBILE_APK" ]; then
-    cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk"
+    cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile.apk"
-    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk"
+    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
 fi
 
 echo "=================================================="
@@ -161,19 +163,19 @@ echo "=================================================="
 # 4. Publicar / Atualizar Release no GitHub
 if command -v gh &> /dev/null; then
     echo "📦 Atualizando Release no GitHub..."
-    RELEASE_TAG="v${APP_VERSION}"
+    RELEASE_TAG="v${APP_VER}"
     if gh auth status >/dev/null 2>&1; then
         gh release upload "$RELEASE_TAG" \
-            "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
-            "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
+            "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+            "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
             --clobber 2>/dev/null || \
         gh release create "$RELEASE_TAG" \
-            "$OUTPUT_DIR/ServONVIF_TV_${TV_VERSION}.apk" \
-            "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk" \
+            "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+            "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
             --title "ServONVIF $RELEASE_TAG - TV & Mobile Apps" \
             --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
-- 📺 **ServONVIF_TV_${TV_VERSION}.apk**: Aplicativo para Smart TV / Android TV Box com interface cinematográfica Netflix-style, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
-- 📱 **ServONVIF_Mobile_${MOBILE_VERSION}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release $RELEASE_TAG atualizada com sucesso!" || echo "ℹ️ Release pronta."
+- 📺 **ServONVIF_TV_v${APP_VER}.apk**: Aplicativo para Smart TV / Android TV Box com interface cinematográfica Netflix-style, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
+- 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." && echo "🌟 GitHub Release $RELEASE_TAG atualizada com sucesso!" || echo "ℹ️ Release pronta."
     else
         echo "ℹ️ GitHub CLI não autenticado. Execute 'gh auth login' se desejar publicar releases automáticas."
     fi
