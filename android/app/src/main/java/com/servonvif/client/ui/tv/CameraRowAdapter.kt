@@ -4,7 +4,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
-import android.widget.ImageView
+import android.webkit.WebSettings
+import android.webkit.WebView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.servonvif.client.R
@@ -13,12 +14,14 @@ import com.servonvif.client.data.model.CameraModel
 /**
  * TV-Optimized Horizontal Camera Discovery Row Adapter.
  * Features:
+ * - Live MJPEG stream inside each 16:9 card.
  * - 1.05x smooth scale & 12dp elevation on focus.
  * - Live and Motion badges with pulse feedback.
  * - Safe D-pad navigation without thread blocks.
  */
 class CameraRowAdapter(
     private var cameras: List<CameraModel>,
+    private var serverBaseUrl: String,
     private val onCameraFocused: (CameraModel) -> Unit,
     private val onCameraClicked: (CameraModel) -> Unit
 ) : RecyclerView.Adapter<CameraRowAdapter.CameraViewHolder>() {
@@ -26,7 +29,7 @@ class CameraRowAdapter(
     private val motionCameraIds = mutableSetOf<Int>()
 
     inner class CameraViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val imgThumbnail: ImageView = itemView.findViewById(R.id.imgCameraThumbnail)
+        val webStream: WebView = itemView.findViewById(R.id.webCameraStream)
         val tvName: TextView = itemView.findViewById(R.id.tvCardCameraName)
         val tvRes: TextView = itemView.findViewById(R.id.tvCardCameraRes)
         val tvFps: TextView = itemView.findViewById(R.id.tvCardCameraFps)
@@ -34,6 +37,14 @@ class CameraRowAdapter(
         val tvMotionBadge: TextView = itemView.findViewById(R.id.tvCardMotionBadge)
 
         init {
+            webStream.settings.apply {
+                javaScriptEnabled = false
+                cacheMode = WebSettings.LOAD_NO_CACHE
+                useWideViewPort = true
+                loadWithOverviewMode = true
+            }
+            webStream.setBackgroundColor(0xFF090E18.toInt())
+
             itemView.setOnFocusChangeListener { v, hasFocus ->
                 val scale = if (hasFocus) 1.05f else 1.0f
                 val elevation = if (hasFocus) 12f else 2f
@@ -69,13 +80,26 @@ class CameraRowAdapter(
         holder.tvRes.text = "5MP • ONVIF RTSP"
         holder.tvFps.text = "25 FPS"
         holder.tvMotionBadge.visibility = if (motionCameraIds.contains(camera.id)) View.VISIBLE else View.GONE
-        holder.imgThumbnail.setImageResource(R.drawable.app_banner)
+
+        val streamUrl = "$serverBaseUrl/api/mjpeg/${camera.id}"
+        val html = """
+            <!DOCTYPE html>
+            <html>
+            <head><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"></head>
+            <body style="margin:0;padding:0;background-color:#070B14;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;">
+                <img src="$streamUrl" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none'" />
+            </body>
+            </html>
+        """.trimIndent()
+
+        holder.webStream.loadDataWithBaseURL(serverBaseUrl, html, "text/html", "UTF-8", null)
     }
 
     override fun getItemCount(): Int = cameras.size
 
-    fun updateCameras(newCameras: List<CameraModel>) {
+    fun updateData(newCameras: List<CameraModel>, newServerBaseUrl: String) {
         cameras = newCameras
+        serverBaseUrl = newServerBaseUrl
         notifyDataSetChanged()
     }
 

@@ -15,13 +15,13 @@
         android:layout_height="match_parent"
         android:background="#090E18">
 
-        <!-- Camera Thumbnail / Snapshot -->
-        <ImageView
-            android:id="@+id/imgCameraThumbnail"
+        <!-- Live Stream Video WebView -->
+        <WebView
+            android:id="@+id/webCameraStream"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="Camera Preview" />
+            android:focusable="false"
+            android:clickable="false" />
 
         <!-- Cinematic Gradient Overlay for Maximum Text Contrast -->
         <View
@@ -81,7 +81,7 @@
                 android:id="@+id/tvCardCameraName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Câmera 5MP Entrada"
+                android:text="Câmera"
                 android:textColor="#F8FAFC"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -100,7 +100,7 @@
                     android:id="@+id/tvCardCameraRes"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="5MP • 2880x1620"
+                    android:text="5MP • ONVIF RTSP"
                     android:textColor="#94A3B8"
                     android:textSize="11sp" />
 

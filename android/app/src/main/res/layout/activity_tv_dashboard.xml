@@ -5,10 +5,10 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:background="#070B14"
-    android:paddingStart="32dp"
-    android:paddingEnd="32dp"
-    android:paddingTop="24dp"
-    android:paddingBottom="24dp"
+    android:paddingStart="28dp"
+    android:paddingEnd="28dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="20dp"
     android:clipChildren="false"
     android:clipToPadding="false">
 
@@ -19,7 +19,7 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:background="#0D131F"
-        android:padding="18dp"
+        android:padding="16dp"
         android:layout_marginEnd="24dp">
 
         <TextView
@@ -35,12 +35,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="STREAMING CENTER"
+            android:text="STREAMING &amp; TV CENTER"
             android:textColor="#64748B"
-            android:textSize="10sp"
+            android:textSize="9sp"
             android:textStyle="bold"
             android:letterSpacing="0.06"
-            android:layout_marginBottom="28dp" />
+            android:layout_marginBottom="24dp" />
 
         <!-- Nav Items -->
         <Button
@@ -64,7 +64,7 @@
             android:id="@+id/btnNavMosaic"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:text="🪟  Mosaico"
+            android:text="🪟  Mosaico 2x2"
             android:gravity="start|center_vertical"
             android:paddingStart="14dp"
             android:background="@drawable/bg_tv_hero_btn_secondary_selector"
@@ -74,14 +74,14 @@
             android:clickable="true"
             android:layout_marginBottom="10dp"
             android:nextFocusUp="@+id/btnNavHome"
-            android:nextFocusDown="@+id/btnNavEvents"
-            android:nextFocusRight="@+id/btnHeroFullscreen" />
+            android:nextFocusDown="@+id/btnNavTests"
+            android:nextFocusRight="@+id/btnMosaicLayout" />
 
         <Button
-            android:id="@+id/btnNavEvents"
+            android:id="@+id/btnNavTests"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:text="🔔  Alertas &amp; LPR"
+            android:text="🧪  Área de Testes"
             android:gravity="start|center_vertical"
             android:paddingStart="14dp"
             android:background="@drawable/bg_tv_hero_btn_secondary_selector"
@@ -91,14 +91,14 @@
             android:clickable="true"
             android:layout_marginBottom="10dp"
             android:nextFocusUp="@+id/btnNavMosaic"
-            android:nextFocusDown="@+id/btnNavTests"
-            android:nextFocusRight="@+id/btnHeroFullscreen" />
+            android:nextFocusDown="@+id/btnNavStatus"
+            android:nextFocusRight="@+id/btnTestPiPAlert" />
 
         <Button
-            android:id="@+id/btnNavTests"
+            android:id="@+id/btnNavStatus"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:text="🧪  Diagnóstico"
+            android:text="📊  Status Servidor"
             android:gravity="start|center_vertical"
             android:paddingStart="14dp"
             android:background="@drawable/bg_tv_hero_btn_secondary_selector"
@@ -107,9 +107,8 @@
             android:focusable="true"
             android:clickable="true"
             android:layout_marginBottom="10dp"
-            android:nextFocusUp="@+id/btnNavEvents"
-            android:nextFocusDown="@+id/btnNavSettings"
-            android:nextFocusRight="@+id/btnHeroFullscreen" />
+            android:nextFocusUp="@+id/btnNavTests"
+            android:nextFocusDown="@+id/btnNavSettings" />
 
         <Button
             android:id="@+id/btnNavSettings"
@@ -123,8 +122,7 @@
             android:textSize="14sp"
             android:focusable="true"
             android:clickable="true"
-            android:nextFocusUp="@+id/btnNavTests"
-            android:nextFocusRight="@+id/btnHeroFullscreen" />
+            android:nextFocusUp="@+id/btnNavStatus" />
 
         <View
             android:layout_width="1dp"
@@ -151,256 +149,688 @@
             android:layout_marginTop="3dp" />
     </LinearLayout>
 
-    <!-- 2. Main Content Area with Smooth Vertical Scroll -->
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/mainScrollView"
+    <!-- 2. Main Content Frame (Switches Sections without losing state) -->
+    <FrameLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
-        android:scrollbars="none"
         android:clipChildren="false"
-        android:clipToPadding="false"
-        android:fillViewport="true">
+        android:clipToPadding="false">
 
-        <LinearLayout
+        <!-- ========================================================================= -->
+        <!-- SECTION 1: STREAMING HOME (Hero Spotlight + Horizontal Discovery Rows)     -->
+        <!-- ========================================================================= -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/sectionStreaming"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_height="match_parent"
+            android:scrollbars="none"
             android:clipChildren="false"
-            android:clipToPadding="false">
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:visibility="VISIBLE">
 
-            <!-- Cinematic Hero Section (Spotlight Active Camera) -->
-            <FrameLayout
-                android:id="@+id/heroContainer"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="320dp"
-                android:background="#0A101D"
-                android:layout_marginBottom="24dp">
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
-                <!-- Live Hero Player / Snapshot Stream -->
-                <WebView
-                    android:id="@+id/webHeroStream"
+                <!-- Cinematic Hero Section (Spotlight Active Camera) -->
+                <FrameLayout
+                    android:id="@+id/heroContainer"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
+                    android:layout_height="320dp"
+                    android:background="#0A101D"
+                    android:layout_marginBottom="24dp">
 
-                <!-- Cinematic Dark Gradient Overlays -->
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="140dp"
-                    android:layout_gravity="bottom"
-                    android:background="@drawable/bg_tv_hero_gradient" />
+                    <!-- Live Hero Player / Snapshot Stream -->
+                    <WebView
+                        android:id="@+id/webHeroStream"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
 
-                <!-- Hero Content Overlay (Text & Primary Quick Actions) -->
+                    <!-- Cinematic Dark Gradient Overlays -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="140dp"
+                        android:layout_gravity="bottom"
+                        android:background="@drawable/bg_tv_hero_gradient" />
+
+                    <!-- Hero Content Overlay (Text & Primary Quick Actions) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+
+                            <TextView
+                                android:id="@+id/tvHeroLiveBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_live_badge"
+                                android:text="● AO VIVO NO SPOTLIGHT"
+                                android:textColor="#FFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="3dp"
+                                android:layout_marginEnd="10dp" />
+
+                            <TextView
+                                android:id="@+id/tvHeroMeta"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Sensor 5MP • 2880x1620 • 25 FPS • ONVIF RTSP"
+                                android:textColor="#38BDF8"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvHeroTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Carregando Câmera..."
+                            android:textColor="#FFFFFF"
+                            android:textSize="26sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvHeroSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Monitoramento contínuo com inteligência artificial e detecção ativa de movimento."
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp"
+                            android:layout_marginBottom="16dp" />
+
+                        <!-- Hero Quick Action Buttons -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnHeroFullscreen"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:text="▶ Assistir em Tela Cheia"
+                                android:background="@drawable/bg_tv_hero_btn_selector"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:focusable="true"
+                                android:clickable="true"
+                                android:paddingHorizontal="20dp"
+                                android:layout_marginEnd="12dp"
+                                android:nextFocusLeft="@+id/btnNavHome"
+                                android:nextFocusRight="@+id/btnHeroPip"
+                                android:nextFocusDown="@+id/recyclerCamerasRow" />
+
+                            <Button
+                                android:id="@+id/btnHeroPip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:text="🗔 Modo PiP"
+                                android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                                android:textColor="#E2E8F0"
+                                android:textSize="14sp"
+                                android:focusable="true"
+                                android:clickable="true"
+                                android:paddingHorizontal="18dp"
+                                android:layout_marginEnd="12dp"
+                                android:nextFocusLeft="@+id/btnHeroFullscreen"
+                                android:nextFocusRight="@+id/btnHeroPatrol"
+                                android:nextFocusDown="@+id/recyclerCamerasRow" />
+
+                            <Button
+                                android:id="@+id/btnHeroPatrol"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:text="🔄 Patrulha Auto"
+                                android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                                android:textColor="#E2E8F0"
+                                android:textSize="14sp"
+                                android:focusable="true"
+                                android:clickable="true"
+                                android:paddingHorizontal="18dp"
+                                android:nextFocusLeft="@+id/btnHeroPip"
+                                android:nextFocusDown="@+id/recyclerCamerasRow" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Loading & Empty State Views -->
                 <LinearLayout
+                    android:id="@+id/layoutEmptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:gravity="center"
+                    android:padding="32dp"
+                    android:visibility="gone"
+                    android:background="#0D1424">
 
-                    <LinearLayout
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="6dp">
-
-                        <TextView
-                            android:id="@+id/tvHeroLiveBadge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_live_badge"
-                            android:text="● AO VIVO NO SPOTLIGHT"
-                            android:textColor="#FFFFFF"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:paddingHorizontal="8dp"
-                            android:paddingVertical="3dp"
-                            android:layout_marginEnd="10dp" />
-
-                        <TextView
-                            android:id="@+id/tvHeroMeta"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Sensor 5MP • 2880x1620 • 25 FPS • ONVIF RTSP"
-                            android:textColor="#38BDF8"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/tvHeroTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Carregando Câmera..."
-                        android:textColor="#FFFFFF"
-                        android:textSize="26sp"
+                        android:text="Nenhuma Câmera Conectada"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
                         android:textStyle="bold"
-                        android:layout_marginBottom="4dp" />
+                        android:layout_marginBottom="8dp" />
 
                     <TextView
-                        android:id="@+id/tvHeroSubtitle"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Monitoramento contínuo com inteligência artificial e detecção ativa de movimento."
+                        android:text="Verifique se o ServONVIF Server está online na rede local ou Tailscale."
                         android:textColor="#94A3B8"
                         android:textSize="13sp"
                         android:layout_marginBottom="16dp" />
 
-                    <!-- Hero Quick Action Buttons -->
-                    <LinearLayout
+                    <Button
+                        android:id="@+id/btnEmptyRetry"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="🔄 Tentar Novamente"
+                        android:background="@drawable/bg_tv_hero_btn_selector"
+                        android:textColor="#FFFFFF"
+                        android:paddingHorizontal="16dp" />
+                </LinearLayout>
+
+                <!-- Horizontal Row: Câmeras ao Vivo (5MP Ultra-HD) -->
+                <LinearLayout
+                    android:id="@+id/layoutCamerasRowContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:layout_marginBottom="24dp">
+
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:text="Câmeras em Tempo Real (5MP Ultra-HD)"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
 
-                        <Button
-                            android:id="@+id/btnHeroFullscreen"
-                            android:layout_width="wrap_content"
-                            android:layout_height="44dp"
-                            android:text="▶ Assistir em Tela Cheia"
-                            android:background="@drawable/bg_tv_hero_btn_selector"
-                            android:textColor="#FFFFFF"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:focusable="true"
-                            android:clickable="true"
-                            android:paddingHorizontal="20dp"
-                            android:layout_marginEnd="12dp"
-                            android:nextFocusLeft="@+id/btnNavHome"
-                            android:nextFocusRight="@+id/btnHeroPip"
-                            android:nextFocusDown="@+id/recyclerCamerasRow" />
-
-                        <Button
-                            android:id="@+id/btnHeroPip"
-                            android:layout_width="wrap_content"
-                            android:layout_height="44dp"
-                            android:text="🗔 Modo PiP"
-                            android:background="@drawable/bg_tv_hero_btn_secondary_selector"
-                            android:textColor="#E2E8F0"
-                            android:textSize="14sp"
-                            android:focusable="true"
-                            android:clickable="true"
-                            android:paddingHorizontal="18dp"
-                            android:layout_marginEnd="12dp"
-                            android:nextFocusLeft="@+id/btnHeroFullscreen"
-                            android:nextFocusRight="@+id/btnHeroPatrol"
-                            android:nextFocusDown="@+id/recyclerCamerasRow" />
-
-                        <Button
-                            android:id="@+id/btnHeroPatrol"
-                            android:layout_width="wrap_content"
-                            android:layout_height="44dp"
-                            android:text="🔄 Patrulha Auto"
-                            android:background="@drawable/bg_tv_hero_btn_secondary_selector"
-                            android:textColor="#E2E8F0"
-                            android:textSize="14sp"
-                            android:focusable="true"
-                            android:clickable="true"
-                            android:paddingHorizontal="18dp"
-                            android:nextFocusLeft="@+id/btnHeroPip"
-                            android:nextFocusDown="@+id/recyclerCamerasRow" />
-                    </LinearLayout>
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerCamerasRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:focusable="true"
+                        android:nextFocusUp="@+id/btnHeroFullscreen"
+                        android:nextFocusDown="@+id/recyclerEventsRow" />
                 </LinearLayout>
-            </FrameLayout>
 
-            <!-- Loading & Empty State Views -->
+                <!-- Horizontal Row: Detecções & Eventos Recentes (LPR / Movimento) -->
+                <LinearLayout
+                    android:id="@+id/layoutEventsRowContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:layout_marginBottom="24dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Detecções &amp; Eventos Recentes (LPR / Veículos)"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerEventsRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:focusable="true"
+                        android:nextFocusUp="@+id/recyclerCamerasRow" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 2: MOSAICO MULTICÂMERA NATIVO (2x2 Quad, 1+3 Destaque, Patrol)     -->
+        <!-- ========================================================================= -->
+        <LinearLayout
+            android:id="@+id/sectionMosaic"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="GONE">
+
+            <!-- Mosaic Action Toolbar -->
             <LinearLayout
-                android:id="@+id/layoutEmptyState"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:padding="32dp"
-                android:visibility="gone"
-                android:background="#0D1424">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Nenhuma Câmera Conectada"
-                    android:textColor="#F8FAFC"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Verifique se o ServONVIF Server está online na rede local ou Tailscale."
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp"
-                    android:layout_marginBottom="16dp" />
+                android:orientation="horizontal"
+                android:paddingBottom="12dp">
 
                 <Button
-                    android:id="@+id/btnEmptyRetry"
+                    android:id="@+id/btnMosaicLayout"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
-                    android:text="🔄 Tentar Novamente"
+                    android:text="🔲 Grade: 2x2 Quad"
                     android:background="@drawable/bg_tv_hero_btn_selector"
                     android:textColor="#FFFFFF"
-                    android:paddingHorizontal="16dp" />
-            </LinearLayout>
-
-            <!-- Horizontal Row: Câmeras ao Vivo (5MP Ultra-HD) -->
-            <LinearLayout
-                android:id="@+id/layoutCamerasRowContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:layout_marginBottom="24dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Câmeras em Tempo Real (5MP Ultra-HD)"
-                    android:textColor="#F8FAFC"
-                    android:textSize="18sp"
+                    android:textSize="13sp"
                     android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:paddingHorizontal="14dp"
+                    android:layout_marginEnd="8dp" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recyclerCamerasRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:focusable="true"
-                    android:nextFocusUp="@+id/btnHeroFullscreen"
-                    android:nextFocusDown="@+id/recyclerEventsRow" />
-            </LinearLayout>
-
-            <!-- Horizontal Row: Detecções & Eventos Recentes (LPR / Movimento) -->
-            <LinearLayout
-                android:id="@+id/layoutEventsRowContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:layout_marginBottom="24dp">
-
-                <TextView
+                <Button
+                    android:id="@+id/btnMosaicPatrol"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Detecções &amp; Eventos Recentes (LPR / Veículos)"
-                    android:textColor="#F8FAFC"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:layout_height="40dp"
+                    android:text="⏱️ Patrulha: 10s"
+                    android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                    android:textColor="#E2E8F0"
+                    android:textSize="13sp"
+                    android:paddingHorizontal="12dp"
+                    android:layout_marginEnd="8dp" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recyclerEventsRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:focusable="true"
-                    android:nextFocusUp="@+id/recyclerCamerasRow" />
+                <Button
+                    android:id="@+id/btnMosaicFit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="📐 Preencher"
+                    android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                    android:textColor="#E2E8F0"
+                    android:textSize="13sp"
+                    android:paddingHorizontal="12dp"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnMosaicOsd"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="👁️ OSD: ON"
+                    android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                    android:textColor="#E2E8F0"
+                    android:textSize="13sp"
+                    android:paddingHorizontal="12dp"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnMosaicReload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="🔄 Recarregar"
+                    android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                    android:textColor="#E2E8F0"
+                    android:textSize="13sp"
+                    android:paddingHorizontal="12dp" />
             </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <FrameLayout
+                    android:id="@+id/mosaicGridContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#070B14" />
+
+                <LinearLayout
+                    android:id="@+id/mosaicEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:visibility="GONE">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nenhuma câmera disponível para o mosaico"
+                        android:textColor="#F8FAFC"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnEmptySync"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="🔄 Sincronizar Câmeras"
+                        android:background="@drawable/bg_tv_hero_btn_selector"
+                        android:textColor="#FFFFFF"
+                        android:layout_marginTop="12dp"
+                        android:paddingHorizontal="16dp" />
+                </LinearLayout>
+            </FrameLayout>
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 3: LABORATÓRIO DE TESTES & DIAGNÓSTICOS (COMPLETO)                 -->
+        <!-- ========================================================================= -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/sectionTests"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="GONE"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🧪 Laboratório de Testes &amp; Diagnósticos"
+                    android:textColor="#38BDF8"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Dispare testes rápidos de hardware, sobreposição de tela PiP, alertas e varredura de servidores."
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="18dp" />
+
+                <!-- Quick Action Test Grid -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <Button
+                        android:id="@+id/btnTestPiPAlert"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🗔 Disparar PiP Teste (10s)"
+                        android:background="@drawable/bg_tv_hero_btn_selector"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestSimulateMotion"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🔴 Simular Alerta Movimento"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestSoundChime"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🔔 Testar Som Chime"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <Button
+                        android:id="@+id/btnTestAutoDiscoverServer"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🔍 Varredura de Rede (Auto-Discover)"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestServerPing"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="📡 Ping &amp; Hardware ID"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestSyncCameras"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🔄 Sincronizar Câmeras"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="18dp">
+
+                    <Button
+                        android:id="@+id/btnTestHeadsUpNotification"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🚨 Notificação Heads-Up"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnTestOverlayPermission"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🔑 Permissão de Sobreposição"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="10dp" />
+
+                    <Button
+                        android:id="@+id/btnClearConsole"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="🧹 Limpar Console"
+                        android:background="@drawable/bg_tv_hero_btn_secondary_selector"
+                        android:textColor="#E2E8F0"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- Test Terminal Console Output -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Terminal de Saída de Diagnósticos:"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:background="#090E18"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/tvTestConsoleOutput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• Pronto para executar testes. Escolha uma opção acima."
+                        android:textColor="#38BDF8"
+                        android:fontFamily="monospace"
+                        android:textSize="12sp" />
+                </ScrollView>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 4: STATUS DO SERVIDOR & DISPOSITIVO                                -->
+        <!-- ========================================================================= -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/sectionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="GONE"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📊 Status da Conexão &amp; Dispositivo"
+                    android:textColor="#38BDF8"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="#0D131F"
+                        android:padding="16dp"
+                        android:layout_marginEnd="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Servidor Configurado"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvCardServerIp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="192.168.1.100:8080"
+                            android:textColor="#F8FAFC"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvCardServerStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Online"
+                            android:textColor="#10B981"
+                            android:textSize="13sp"
+                            android:layout_marginTop="6dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="#0D131F"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="WebSocket em Tempo Real"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvCardWsStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Ativo e Escutando"
+                            android:textColor="#10B981"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:id="@+id/tvCardCameraCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- Câmeras"
+                            android:textColor="#38BDF8"
+                            android:textSize="13sp"
+                            android:layout_marginTop="6dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0D131F"
+                    android:padding="16dp"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Câmeras Conectadas ao Servidor"
+                        android:textColor="#94A3B8"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvCardCameraNames"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Carregando..."
+                        android:textColor="#F8FAFC"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </FrameLayout>
 </LinearLayout>
