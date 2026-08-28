@@ -59,10 +59,10 @@ class WebSocketManager(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val payload = gson.fromJson(text, EventPayload::class.java)
-                    if (payload.type == "MOTION_ALERT" || payload.type == "LPR_ALERT") {
+                    if (payload.type == "MOTION_ALERT" || payload.type == "LPR_ALERT" || payload.type == "DEVICE_TEST_NOTIFICATION" || payload.type == "TEST_PIP_ALERT" || payload.type == "TEST_ALERT") {
                         payload.siteName = node.name
                         payload.serverBaseUrl = node.httpBaseUrl
-                        Log.d(TAG, "Alert Received from [${node.name}] for Camera: ${payload.cameraName}")
+                        Log.d(TAG, "Alert/Test Received from [${node.name}] (${payload.type}) for: ${payload.cameraName}")
                         onEventReceived(payload)
                     }
                 } catch (e: Exception) {

@@ -270,8 +270,12 @@ async def send_device_test_notification(device_id_or_pk: str, db: AsyncSession =
         "type": "DEVICE_TEST_NOTIFICATION",
         "title": "🔔 Teste de Notificação ServONVIF",
         "message": f"Conexão com {dev.device_name} validada com sucesso!",
+        "camera_id": 1,
+        "camera_name": f"🔔 Teste: {dev.device_name}",
         "device_id": dev.device_id,
         "device_name": dev.device_name,
+        "score": 1.0,
+        "mjpeg_url": "/api/mjpeg/1",
         "timestamp": datetime.utcnow().isoformat(),
         "sound": True
     }
@@ -280,12 +284,14 @@ async def send_device_test_notification(device_id_or_pk: str, db: AsyncSession =
     if not sent:
         sent = await ws_hub.send_to_device(dev.ip_address, test_payload)
 
-    # Also broadcast generic ping so any listeners know
+    # Always broadcast so all active monitoring screens (TVs, Tablets, Web UI) receive the test
     await ws_hub.broadcast_event(test_payload)
+    if not sent and len(ws_hub.active_clients) > 0:
+        sent = True
 
     return {
         "success": True,
-        "message": f"Notificação de teste disparada para '{dev.device_name}'!",
+        "message": f"Notificação de teste disparada com sucesso para '{dev.device_name}'!",
         "delivered_to_active_socket": sent
     }
 

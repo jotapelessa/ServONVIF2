@@ -557,6 +557,14 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
           setLastPingedDeviceId(data.device_id);
           setLastPingInfo(data);
           fetchDevices();
+        } else if (data.type === "DEVICE_TEST_NOTIFICATION") {
+          setDeviceActionFeedback({
+            success: true,
+            text: `🔔 Teste recebido no WebSocket: ${data.message || data.device_name || "Alerta entregue!"}`,
+          });
+          setTimeout(() => setDeviceActionFeedback(null), 4000);
+        } else if (data.type === "MOTION_ALERT" && data.camera_name?.includes("Teste")) {
+          setSimulateMotionResult(`✅ Alerta de teste recebido no WebSocket para '${data.camera_name}'!`);
         } else if (data.type === "PROCESSING_STATUS_CHANGED") {
           setIsProcessingPaused(Boolean(data.paused));
         }
@@ -1416,7 +1424,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
               className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
               title="Versão Oficial do Sistema (Formato 9 dígitos: 000.000.000)"
             >
-              v{serverInfo?.version || "002.002.122"}
+              v{serverInfo?.version || "002.002.126"}
             </span>
           </h1>
         </div>
