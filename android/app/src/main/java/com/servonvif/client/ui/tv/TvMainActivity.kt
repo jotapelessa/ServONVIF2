@@ -324,10 +324,12 @@ class TvMainActivity : AppCompatActivity() {
 
     private fun setupHeroWebView() {
         webHeroStream.apply {
-            settings.javaScriptEnabled = false
-            settings.cacheMode = WebSettings.LOAD_NO_CACHE
-            useWideViewPort = true
-            loadWithOverviewMode = true
+            settings.apply {
+                javaScriptEnabled = false
+                cacheMode = WebSettings.LOAD_NO_CACHE
+                useWideViewPort = true
+                loadWithOverviewMode = true
+            }
             webChromeClient = WebChromeClient()
             webViewClient = WebViewClient()
             setBackgroundColor(0xFF0A101D.toInt())
