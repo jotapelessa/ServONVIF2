@@ -98,28 +98,38 @@ if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s
 fi
 
 echo "=================================================="
-echo "📺 Compilando APK 1: ServONVIF TV v$APP_VER..."
+echo "📺 Compilando APKs TV (Clássico & Moderno) v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/android"
 chmod +x ./gradlew
 ./gradlew assembleDebug --no-daemon
 
-# Localizar e copiar APK de TV com nome e versão
-TV_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
-if [ -n "$TV_APK" ]; then
-    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
-    cp "$TV_APK" "$OUTPUT_DIR/ServONVIF_TV.apk"
-    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
+# 1. Localizar e copiar APK 1 (TV Clássico)
+TV_CLASSIC_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
+if [ -n "$TV_CLASSIC_APK" ]; then
+    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk"
+    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_Classic.apk"
+    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk"
+    cp "$TV_CLASSIC_APK" "$OUTPUT_DIR/ServONVIF_TV.apk"
+    echo "✅ APK 1 Gerado: $OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk"
+fi
+
+# 2. Localizar e copiar APK 2 (TV Moderno)
+TV_MODERN_APK="$(find "$WORKSPACE_DIR/android/app-modern/build/outputs/apk" -name "*.apk" | head -n 1)"
+if [ -n "$TV_MODERN_APK" ]; then
+    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk"
+    cp "$TV_MODERN_APK" "$OUTPUT_DIR/ServONVIF_TV_Modern.apk"
+    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk"
 fi
 
 echo "=================================================="
-echo "📱 Compilando APK 2: ServONVIF Mobile v$APP_VER..."
+echo "📱 Compilando APK 3: ServONVIF Mobile v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/mobile"
 
 # Sincronizar e instalar dependências do Mobile
-echo "📦 Instalando / atualizando dependências do Mobile..."
-npm install --silent
+echo "📦 Instalando dependências do Mobile..."
+npm install --legacy-peer-deps --silent
 
 # Gerar estrutura limpa do Expo Android sem prompt interativo
 echo "📦 Executando expo prebuild..."
@@ -149,7 +159,7 @@ fi
 if [ -n "$MOBILE_APK" ]; then
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile.apk"
-    echo "✅ APK 2 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
+    echo "✅ APK 3 Gerado: $OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk"
 fi
 
 echo "=================================================="
@@ -167,18 +177,21 @@ if command -v gh &> /dev/null; then
         if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "🔄 Release $RELEASE_TAG já existe. Enviando novos APKs..."
             gh release upload "$RELEASE_TAG" \
-                "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk" \
                 "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
                 --clobber || true
         else
             echo "✨ Criando nova Release $RELEASE_TAG no GitHub..."
             gh release create "$RELEASE_TAG" \
-                "$OUTPUT_DIR/ServONVIF_TV_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Classic_v${APP_VER}.apk" \
+                "$OUTPUT_DIR/ServONVIF_TV_Modern_v${APP_VER}.apk" \
                 "$OUTPUT_DIR/ServONVIF_Mobile_v${APP_VER}.apk" \
-                --title "ServONVIF $RELEASE_TAG - TV & Mobile Apps" \
+                --title "ServONVIF $RELEASE_TAG - TV Classic, TV Modern & Mobile Apps" \
                 --notes "🚀 **Lançamento Oficial ServONVIF $RELEASE_TAG**
-- 📺 **ServONVIF_TV_v${APP_VER}.apk**: Aplicativo para Smart TV / Android TV Box com interface cinematográfica Netflix-style, Hero Spotlight, Laboratório de Testes completo e Mosaico 2x2 nativo.
-- 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem necessidade de servidor Metro) com Tailscale, streaming 5MP ao vivo e feed LPR de placas." || true
+- 📺 **ServONVIF_TV_Classic_v${APP_VER}.apk**: Aplicativo para Smart TV / Android TV Box com PiP overlay e navegação D-pad tradicional.
+- ✨ **ServONVIF_TV_Modern_v${APP_VER}.apk**: Nova versão com UI/UX moderna (Dark Glassmorphism 60/30/10), Mosaico e controle D-pad iluminado.
+- 📱 **ServONVIF_Mobile_v${APP_VER}.apk**: Aplicativo Mobile Standalone em modo Release (autônomo, sem Metro) com Tailscale Funnel, streaming Zero-Flicker e feed LPR de placas." || true
         fi
         echo "🌟 GitHub Release $RELEASE_TAG processada com sucesso!"
     else
