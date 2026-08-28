@@ -10,7 +10,9 @@ OUTPUT_DIR="$WORKSPACE_DIR/build-outputs"
 mkdir -p "$OUTPUT_DIR"
 
 # 0. Sincronizar Código com o GitHub mais recente no Codespaces
-echo "🔄 Sincronizando repositório com o GitHub..."
+echo "🔄 Ajustando permissões e sincronizando repositório com o GitHub..."
+sudo chown -R $(whoami):$(whoami) "$WORKSPACE_DIR" 2>/dev/null || true
+sudo chmod -R u+rwX "$WORKSPACE_DIR" 2>/dev/null || true
 git fetch origin main 2>/dev/null || true
 git reset --hard origin/main 2>/dev/null || true
 git fetch --unshallow 2>/dev/null || true
@@ -25,7 +27,7 @@ if [ -f "$OUTPUT_DIR/version.env" ]; then
     source "$OUTPUT_DIR/version.env"
 fi
 
-APP_VER="${APP_VERSION:-002.002.142}"
+APP_VER="${APP_VERSION:-002.002.144}"
 export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
@@ -105,11 +107,11 @@ if [ ! -f "$WORKSPACE_DIR/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s
 fi
 
 echo "=================================================="
-echo "📺 Compilando APKs TV (Clássico & Moderno) v$APP_VER..."
+echo "📺 Compilando APKs TV (Clássico & Netflix) v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/android"
 chmod +x ./gradlew
-./gradlew assembleDebug --no-daemon
+./gradlew :app:assembleDebug :app-modern:assembleDebug --no-daemon
 
 # 1. Localizar e copiar APK 1 (TV Clássico)
 TV_CLASSIC_APK="$(find "$WORKSPACE_DIR/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
