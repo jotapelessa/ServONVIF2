@@ -15,9 +15,10 @@ def patch():
         
         settings = [
             "android.defaults.buildfeatures.buildconfig=true",
-            "org.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m",
+            "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m",
             "org.gradle.parallel=false",
-            "org.gradle.workers.max=2",
+            "org.gradle.workers.max=1",
+            "org.gradle.vfs.watch=false",
             # Restrict to arm64-v8a only: avoids CXX1210 "No compatible library" for armeabi-v7a
             # and halves CMake compilation memory, preventing OOM Daemon kill in Codespaces
             "reactNativeArchitectures=arm64-v8a"
@@ -76,6 +77,17 @@ def patch():
             # Replace minifyEnabled with false to prevent proguard missing class errors
             content = re.sub(r'minifyEnabled\s+enableProguardInReleaseBuilds', 'minifyEnabled false', content)
             print("✅ Disabled Proguard minify in release build for maximum build speed & reliability")
+
+        # Disable Lint during build to prevent high memory usage and OOM crash
+        if "lint {" not in content and "lintOptions {" not in content:
+            lint_block = """
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+"""
+            content = re.sub(r'(android\s*\{)', r'\1' + lint_block, content, count=1)
+            print("✅ Disabled checkReleaseBuilds in app/build.gradle")
 
         with open(app_gradle, "w", encoding="utf-8") as f:
             f.write(content)

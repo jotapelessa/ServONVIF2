@@ -23,11 +23,12 @@ export CI=1
 
 # Unset _JAVA_OPTIONS para não corromper subprocessos do CMake/Prefab
 unset _JAVA_OPTIONS 2>/dev/null || true
-export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2560m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false"
+export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false"
 
-# Configurar swap adicional para evitar que o CMake seja finalizado por falta de RAM
-if [ ! -f /swapfile ] && command -v swapon &> /dev/null; then
-    (sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 2>/dev/null) && \
+# Configurar swap adicional (4GB) para garantir que C++/CMake/Clang nunca sofram OOM Killer
+if command -v swapon &> /dev/null && ! swapon --show | grep -q "/swapfile"; then
+    echo "💾 Alocando 4GB de memória Swap para estabilidade do build C++/CMake..."
+    (sudo fallocate -l 4G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 2>/dev/null) && \
     sudo chmod 600 /swapfile 2>/dev/null && \
     sudo mkswap /swapfile 2>/dev/null && \
     sudo swapon /swapfile 2>/dev/null || true
@@ -137,7 +138,7 @@ EOF
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
 echo "⚡ Compilando APK Standalone Release (com bundle JS embutido)..."
-./gradlew assembleRelease --no-daemon
+./gradlew assembleRelease -x lint -x lintVitalAnalyzeRelease -x lintVitalRelease -x test --no-daemon
 
 # Localizar e copiar APK Mobile com nome e versão
 MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk/release" -name "*release*.apk" 2>/dev/null | head -n 1)"
