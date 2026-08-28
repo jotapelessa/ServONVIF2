@@ -130,10 +130,15 @@ EOF
 
 cd "$WORKSPACE_DIR/mobile/android"
 chmod +x ./gradlew
-./gradlew assembleDebug --no-daemon
+echo "⚡ Compilando APK Standalone Release (com bundle JS embutido)..."
+./gradlew assembleRelease --no-daemon
 
 # Localizar e copiar APK Mobile com nome e versão
-MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
+MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk/release" -name "*release*.apk" 2>/dev/null | head -n 1)"
+if [ -z "$MOBILE_APK" ]; then
+    MOBILE_APK="$(find "$WORKSPACE_DIR/mobile/android/app/build/outputs/apk" -name "*.apk" | head -n 1)"
+fi
+
 if [ -n "$MOBILE_APK" ]; then
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile_${MOBILE_VERSION}.apk"
     cp "$MOBILE_APK" "$OUTPUT_DIR/ServONVIF_Mobile.apk"

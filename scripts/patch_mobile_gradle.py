@@ -68,6 +68,15 @@ def patch():
             content = re.sub(r'(android\s*\{)', r'\1\n    namespace "com.servonvif.mobile"', content, count=1)
             print("✅ Added namespace in app/build.gradle")
 
+        # Ensure release signingConfig uses debug keystore for standalone installable APK
+        if "signingConfigs.debug" not in content and "signingConfig signingConfigs.debug" not in content:
+            content = re.sub(r'(release\s*\{)', r'\1\n            signingConfig signingConfigs.debug\n            minifyEnabled false', content, count=1)
+            print("✅ Configured release build to sign with debug keystore and disable minify")
+        else:
+            # Replace minifyEnabled with false to prevent proguard missing class errors
+            content = re.sub(r'minifyEnabled\s+enableProguardInReleaseBuilds', 'minifyEnabled false', content)
+            print("✅ Disabled Proguard minify in release build for maximum build speed & reliability")
+
         with open(app_gradle, "w", encoding="utf-8") as f:
             f.write(content)
 
