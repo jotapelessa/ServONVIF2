@@ -116,11 +116,9 @@ echo "📱 Compilando APK 2: ServONVIF Mobile v$APP_VER..."
 echo "=================================================="
 cd "$WORKSPACE_DIR/mobile"
 
-# Instalar dependências se node_modules não existir
-if [ ! -d "$WORKSPACE_DIR/mobile/node_modules" ]; then
-    echo "📦 Instalando dependências do Mobile..."
-    npm install --silent
-fi
+# Sincronizar e instalar dependências do Mobile
+echo "📦 Instalando / atualizando dependências do Mobile..."
+npm install --silent
 
 # Gerar estrutura limpa do Expo Android sem prompt interativo
 echo "📦 Executando expo prebuild..."
