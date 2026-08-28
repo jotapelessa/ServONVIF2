@@ -108,35 +108,36 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // 1. Play Chime Sound via Web Audio API Synthesis
+  // 1. Play Chime Sound via Web Audio API Synthesis or Android Native Ringtone
   const playSoundChime = (tone: 'alert' | 'success' | 'warn' = 'alert') => {
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      if ((window as any).AndroidNative?.playSoundChime) {
+        (window as any).AndroidNative.playSoundChime(tone);
+      } else {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      if (tone === 'alert') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35); // A4
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.36);
-      } else if (tone === 'success') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.41);
+          if (tone === 'alert') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.36);
+          } else {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.3);
+          }
+        }
       }
       addLog('success', 'AUDIO_CHIME', `Sinal sonoro de teste disparado com sucesso (${tone.toUpperCase()}).`);
     } catch (e) {
@@ -174,6 +175,13 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
     playSoundChime('alert');
     addLog('warn', 'MOTION_SIM', `🚨 Alerta de movimento simulado na câmera: ${cam.name} (${cam.id})`);
     
+    if ((window as any).AndroidNative?.showHeadsUp) {
+      (window as any).AndroidNative.showHeadsUp(
+        `🚨 Movimento na ${cam.name}`,
+        `Intrusão detectada às ${new Date().toLocaleTimeString('pt-BR')}`
+      );
+    }
+
     setHeadsUpNotification({
       visible: true,
       title: `🚨 Alerta de Intrusão Simulado`,
@@ -188,12 +196,21 @@ export const TestLabTab: React.FC<TestLabTabProps> = ({
   // 4. Test PiP
   const handleTestPiP = () => {
     const cam = cameras.find((c) => c.id === selectedCameraId) || cameras[0];
+    if ((window as any).AndroidNative?.triggerPiP) {
+      (window as any).AndroidNative.triggerPiP(cam.id, cam.name);
+    }
     onTriggerPiP(cam);
     addLog('info', 'PIP_ALERT', `Janela flutuante Picture-in-Picture ativada para: ${cam.name}`);
   };
 
   // 5. Test Heads Up Banner
   const handleTestHeadsUp = () => {
+    if ((window as any).AndroidNative?.showHeadsUp) {
+      (window as any).AndroidNative.showHeadsUp(
+        '🔔 Teste Heads-Up ServONVIF',
+        'Notificação nativa no Android TV funcionando 100%!'
+      );
+    }
     setHeadsUpNotification({
       visible: true,
       title: `🔔 Teste de Notificação Heads-Up`,
@@ -508,7 +525,12 @@ ${logs.map((l) => `[${l.time}] [${l.tag}] ${l.message}`).join('\n')}
           {/* Button: Open Android Settings */}
           <button
             id="btn-android-settings"
-            onClick={() => addLog('info', 'ANDROID', 'Abrindo configurações de permissões do sistema Android TV...')}
+            onClick={() => {
+              if ((window as any).AndroidNative?.requestOverlayPermission) {
+                (window as any).AndroidNative.requestOverlayPermission();
+              }
+              addLog('info', 'ANDROID', 'Abrindo configurações de permissões do sistema Android TV...');
+            }}
             onFocus={() => onElementFocus('btn-android-settings')}
             className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wider uppercase transition-all cursor-pointer flex items-center justify-center gap-2 border bg-[#131D33] border-[#1E2D4A] text-slate-200 hover:bg-[#1A2642] tv-focus-target ${
               focusedElementId === 'btn-android-settings' ? 'tv-focused' : ''

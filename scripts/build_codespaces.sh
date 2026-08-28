@@ -122,9 +122,10 @@ if [ -d "$WORKSPACE_DIR/tv-netflix" ]; then
     echo "🎬 Compilando Interface Web Netflix Smart TV..."
     cd "$WORKSPACE_DIR/tv-netflix"
     npm install --silent 2>/dev/null || true
-    npm run build 2>/dev/null || true
+    npm run build
     mkdir -p "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix"
-    cp -r dist/* "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix/" 2>/dev/null || true
+    rm -rf "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix"/* 2>/dev/null || true
+    cp -r dist/* "$WORKSPACE_DIR/android/app-modern/src/main/assets/tv-netflix/"
 fi
 
 echo "=================================================="
