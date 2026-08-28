@@ -3,11 +3,11 @@ package com.servonvif.client.data.repository
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import com.servonvif.client.BuildConfig
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -19,10 +19,13 @@ object AppLogger {
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private var isInitialized = false
+    private var cachedVersion = "002.002.128"
 
     fun init(context: Context) {
         if (isInitialized) return
         isInitialized = true
+
+        cachedVersion = getAppVersion(context)
 
         val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -30,7 +33,27 @@ object AppLogger {
             oldHandler?.uncaughtException(thread, throwable)
         }
 
-        i("SYSTEM", "AppLogger initialized. App Version: ${BuildConfig.VERSION_NAME} (Code: ${BuildConfig.VERSION_CODE})")
+        i("SYSTEM", "AppLogger inicializado com sucesso. Versão: $cachedVersion")
+    }
+
+    private fun getAppVersion(context: Context): String {
+        return try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+            "v${pInfo.versionName} (Code: $vCode)"
+        } catch (e: Exception) {
+            "v002.002.128"
+        }
     }
 
     fun i(tag: String, message: String) {
@@ -88,12 +111,14 @@ object AppLogger {
             "Desconhecido (${e.message})"
         }
 
+        val versionInfo = getAppVersion(context)
+
         return buildString {
             appendLine("=================================================================")
             appendLine("📺 RELATÓRIO COMPLETO DE DIAGNÓSTICO — SERVONVIF ANDROID TV")
             appendLine("=================================================================")
             appendLine("• Origem da Aplicação : ServONVIF Android TV (Native PiP Sentinel)")
-            appendLine("• Versão do APK       : v${BuildConfig.VERSION_NAME} (BuildCode: ${BuildConfig.VERSION_CODE})")
+            appendLine("• Versão do APK       : $versionInfo")
             appendLine("• Pacote Android      : ${context.packageName}")
             appendLine("• Dispositivo / Modelo: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.PRODUCT})")
             appendLine("• Sistema Operacional : Android ${Build.VERSION.RELEASE} (API Level: ${Build.VERSION.SDK_INT})")

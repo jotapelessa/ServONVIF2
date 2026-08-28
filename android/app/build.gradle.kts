@@ -11,11 +11,15 @@ android {
         applicationId = "com.servonvif.client"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2002128
-        versionName = "002.002.128"
+        versionCode = 2002129
+        versionName = "002.002.129"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     applicationVariants.all {
