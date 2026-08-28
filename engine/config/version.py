@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 
-VERSION_MAJOR = 1
-VERSION_MINOR = 6
+VERSION_MAJOR = 2
+VERSION_MINOR = 2
 VERSION_PATCH = 0
 
 def get_git_build_count() -> int:

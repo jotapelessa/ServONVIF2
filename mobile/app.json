@@ -2,7 +2,7 @@
   "expo": {
     "name": "ServONVIF Mobile",
     "slug": "servonvif-mobile",
-    "version": "1.0.0",
+    "version": "2.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#070B14"
       },
-      "package": "com.servonvif.mobile"
+      "package": "com.servonvif.mobile",
+      "versionCode": 220
     },
     "plugins": [
       [

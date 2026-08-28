@@ -38,7 +38,7 @@ export function Header({
     ram_used_mb: number;
     ram_total_mb: number;
   } | null>(null);
-  const [appVersion, setAppVersion] = useState<string>("001.006.053");
+  const [appVersion, setAppVersion] = useState<string>("2.2.0");
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
 
   useEffect(() => {
