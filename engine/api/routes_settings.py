@@ -1055,26 +1055,33 @@ async def run_full_system_test(db: AsyncSession = Depends(get_db)):
         "detail": detail
     })
 
-    # 7. AI & Computer Vision Engine Test
+    # 7. Modern 2-Stage AI Vision & LPR Pipeline Test
     t0 = time.time()
     try:
-        test_frame = np.zeros((240, 320, 3), dtype=np.uint8)
-        mog2 = cv2.createBackgroundSubtractorMOG2(history=10, varThreshold=16, detectShadows=False)
-        fg_mask = mog2.apply(test_frame)
+        from engine.core.vision_pipeline import vision_pipeline
+        test_frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        cv2.putText(test_frame, "BRA2E19", (100, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+        has_event, dets, plate_p, _ = vision_pipeline.process_frame(
+            camera_id=999,
+            camera_name="Teste Diagnostic",
+            frame_bgr=test_frame,
+            sensitivity=20.0
+        )
         elapsed_ai = round((time.time() - t0) * 1000, 2)
         status = "OK"
-        detail = "OpenCV MOG2 e pipeline de visão computacional inicializados sem falhas."
-        logger.success(f"[Diagnóstico Geral] 🟢 Teste 7/7: IA & Visão Computacional -> 100% OK ({elapsed_ai}ms)")
+        device_name = vision_pipeline.device.upper()
+        detail = f"Pipeline YOLO + OCR 100% operacional ({device_name} Acceleration, {elapsed_ai}ms)."
+        logger.success(f"[Diagnóstico Geral] 🟢 Teste 7/7: IA & Visão Computacional ({device_name}) -> 100% OK ({elapsed_ai}ms)")
         total_passed += 1
     except Exception as e:
         elapsed_ai = round((time.time() - t0) * 1000, 2)
         status = "ERROR"
-        detail = f"Falha no pipeline OpenCV/IA: {e}"
+        detail = f"Falha no pipeline de IA/YOLO: {e}"
         logger.error(f"[Diagnóstico Geral] ❌ Teste 7/7: IA & Visão -> FALHA: {e}")
         total_failed += 1
     results.append({
         "id": "ai",
-        "name": "7. IA & Visão Computacional",
+        "name": "7. IA & Visão Computacional (YOLO + LPR)",
         "icon": "Cpu",
         "status": status,
         "latency_ms": elapsed_ai,

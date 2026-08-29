@@ -1,5 +1,6 @@
 import re
 import os
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List
 import cv2
@@ -10,71 +11,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from engine.database.models import Vehicle, PlateDetectionLog
 from engine.api.websocket_hub import ws_hub
 
+# RapidOCR / PaddleOCR high-speed inference engine
 try:
-    import pytesseract
-    from PIL import Image
-    PYTESSERACT_AVAILABLE = True
-
-    # Auto-discover Tesseract binary across Windows, Linux, and macOS
-    import shutil
-    if not shutil.which("tesseract"):
-        if os.name == "nt":
-            windows_paths = [
-                r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-                r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-                os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
-                os.path.expandvars(r"%USERPROFILE%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
-            ]
-            for wp in windows_paths:
-                if os.path.exists(wp):
-                    pytesseract.pytesseract.tesseract_cmd = wp
-                    break
-        elif os.path.exists("/opt/homebrew/bin/tesseract"):
-            pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
-        elif os.path.exists("/usr/local/bin/tesseract"):
-            pytesseract.pytesseract.tesseract_cmd = "/usr/local/bin/tesseract"
-        elif os.path.exists("/usr/bin/tesseract"):
-            pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-except ImportError:
-    PYTESSERACT_AVAILABLE = False
+    from rapidocr_onnxruntime import RapidOCR
+    _ocr_engine = RapidOCR()
+    OCR_AVAILABLE = True
+    logger.info("🧠 RapidOCR (PP-OCRv4 ONNX) inicializado com sucesso!")
+except Exception as e:
+    _ocr_engine = None
+    OCR_AVAILABLE = False
+    logger.warning(f"⚠️ RapidOCR não pôde ser inicializado: {e}")
 
 
 class LPREngine:
     """
-    License Plate Recognition (LPR/ANPR) Processing Engine for ServONVIF.
-    Specialized in Brazilian Mercosul and Standard Gray Plates.
-    Performs real-time frame scanning for both moving and parked/stationary vehicles.
+    License Plate Recognition (LPR/ANPR) 2-Stage Processing Engine for ServONVIF.
+    Specialized in Brazilian Mercosul (ABC1D23) and Standard Gray Plates (ABC1234).
+    Driven by YOLO vehicle bounding boxes and RapidOCR/PP-OCR neural text extraction.
     """
 
     # Brazilian Regex Patterns
     MERCOSUL_REGEX = re.compile(r"^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")
     OLD_PLATE_REGEX = re.compile(r"^[A-Z]{3}[0-9]{4}$")
 
-    # Blacklist of common indoor/garage words and brand textures that OCR extracts
+    # Blacklist of indoor/garage words and brand textures
     BLACKLIST_WORDS = {
         "SAMSUNG", "PORTAO1", "ENTRADA", "GARAGEM", "ESTACIO", "POSITIV",
         "CONTROL", "GRAVADO", "CAMERAS", "INTELBR", "HIKVISI", "SECURITY",
         "FABRICA", "PROIBID", "ATENCAO", "CUIDADO", "ENERGIA", "ELETRIC",
         "PERIGOS", "PLASTIC", "SERVICE", "WINDOWS", "ANDROID", "DEFAULT",
-        "ALARMES", "SISTEMA", "OFICINA", "DESKJET", "PREMIUM", "MOTORLA"
+        "ALARMES", "SISTEMA", "OFICINA", "DESKJET", "PREMIUM", "MOTORLA",
+        "BRUSHED", "PARKING", "VEICULO", "CAMERA0", "CAMERAS"
     }
 
     @classmethod
     def clean_plate_text(cls, raw_text: str) -> str:
-        """
-        Strips spaces, dashes, dots and special characters.
-        Converts to uppercase.
-        """
+        """Strips spaces, dashes, dots and special characters. Converts to uppercase."""
         if not raw_text:
             return ""
-        cleaned = re.sub(r"[^A-Za-z0-9]", "", raw_text).upper()
-        return cleaned
+        return re.sub(r"[^A-Za-z0-9]", "", raw_text).upper()
 
     @classmethod
     def repair_mercosul_ocr(cls, text: str) -> Optional[str]:
         """
         Applies positional heuristics to correct AT MOST ONE ambiguous OCR character.
-        If 2 or more characters deviate from Mercosul (LLLNLNN), it is discarded as non-plate noise.
+        Mercosul pattern: LLLNLNN (Letters at 0,1,2,4; Numbers at 3,5,6).
         """
         if len(text) != 7 or not text.isalnum():
             return None
@@ -99,7 +80,7 @@ class LPREngine:
                     chars[i] = digit_to_letter[chars[i]]
                     violations += 1
                 else:
-                    return None  # Non-repairable character
+                    return None
 
         # Position 3 must be a DIGIT
         if not chars[3].isdigit():
@@ -109,9 +90,12 @@ class LPREngine:
             else:
                 return None
 
-        # Position 4 in Mercosul is alphanumeric [A-Z0-9], so both letter and digit are valid
+        # Position 4 can be LETTER or DIGIT (Mercosul standard uses Letter)
+        if chars[4].isdigit() and chars[4] in digit_to_letter:
+            chars[4] = digit_to_letter[chars[4]]
+            violations += 1
 
-        # Positions 5, 6 must be DIGITS
+        # Positions 5 and 6 must be DIGITS
         for i in (5, 6):
             if not chars[i].isdigit():
                 if chars[i] in letter_to_digit:
@@ -120,38 +104,32 @@ class LPREngine:
                 else:
                     return None
 
-        # STRICT: Only allow repair if there was exactly 1 minor OCR ambiguity
-        if violations == 1:
+        if violations <= 1:
             repaired = "".join(chars)
             if cls.MERCOSUL_REGEX.match(repaired):
                 return repaired
-
         return None
 
     @classmethod
-    def validate_plate(cls, plate: str) -> Tuple[bool, str, str]:
+    def validate_plate(cls, raw_text: str) -> Tuple[bool, str, str]:
         """
-        Validates if the plate is valid Mercosul or Standard Gray format.
-        Returns: (is_valid, plate_type, plate_str)
+        Validates text against Brazilian license plate standards.
+        Returns: (is_valid, plate_type, formatted_plate)
         """
-        cleaned = cls.clean_plate_text(plate)
+        cleaned = cls.clean_plate_text(raw_text)
+
         if len(cleaned) == 7:
-            # Reject blacklisted static words
-            if cleaned in cls.BLACKLIST_WORDS:
+            if cleaned in cls.BLACKLIST_WORDS or len(set(cleaned)) < 3:
                 return False, "INVALID", cleaned
 
-            # Reject uniform repetitive noise (e.g., AAAAAAA, 1111111)
-            if len(set(cleaned)) < 3:
-                return False, "INVALID", cleaned
+            # Direct Old Gray Plate match (LLLNNNN - Position 4 is a Digit)
+            if cls.OLD_PLATE_REGEX.match(cleaned):
+                return True, "ANTIGA", cleaned
 
-            # Direct Mercosul match (LLLNLNN)
+            # Direct Mercosul match (LLLNLNN - Position 4 is a Letter)
             if cls.MERCOSUL_REGEX.match(cleaned):
                 return True, "MERCOSUL", cleaned
 
-            # Direct Old Gray Plate match (LLLNNNN)
-            if cls.OLD_PLATE_REGEX.match(cleaned):
-                return True, "ANTIGA", cleaned
-            
             # Strict Single-character heuristic repair
             repaired = cls.repair_mercosul_ocr(cleaned)
             if repaired and repaired not in cls.BLACKLIST_WORDS and len(set(repaired)) >= 3:
@@ -160,182 +138,71 @@ class LPREngine:
         return False, "INVALID", cleaned
 
     @classmethod
-    def find_plate_candidates(
-        cls,
-        frame_bgr: np.ndarray,
-        roi_polygon: Optional[List[List[float]]] = None,
-        motion_bboxes: Optional[List[Tuple[int, int, int, int]]] = None
-    ) -> List[Dict[str, Any]]:
+    def preprocess_plate_crop(cls, crop_bgr: np.ndarray) -> np.ndarray:
         """
-        Scans a frame for vehicle license plate regions using OpenCV edge morphology & Tesseract OCR.
-        Optimized for:
-        - Brazilian Car Plates (Mercosul & Standard Gray - aspect ratio ~3.08)
-        - Brazilian Motorcycle Plates (Mercosul & Standard - aspect ratio ~1.35, 2 lines)
-        - Fast moving vehicles across sidewalk/street with motion blur & contrast variations.
+        Applies lightweight contrast and clarity preprocessing:
+        1. Grayscale conversion.
+        2. Contrast enhancement via Histogram Equalization.
         """
-        if not PYTESSERACT_AVAILABLE or frame_bgr is None:
-            return []
+        if crop_bgr is None or crop_bgr.size == 0:
+            return crop_bgr
+        gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+        equalized = cv2.equalizeHist(gray)
+        # Convert back to 3-channel for OCR engine compatibility
+        return cv2.cvtColor(equalized, cv2.COLOR_GRAY2BGR)
 
-        h, w = frame_bgr.shape[:2]
-        scan_areas = []
+    @classmethod
+    def scan_vehicle_crop(cls, vehicle_crop_bgr: np.ndarray) -> Optional[Tuple[str, str, float, np.ndarray]]:
+        """
+        Stage 2 LPR:
+        Receives a vehicle ROI crop from YOLO, runs pre-processing + OCR,
+        and extracts any matching Brazilian plate.
+        Returns: (plate_number, plate_type, confidence, plate_patch) or None
+        """
+        if not OCR_AVAILABLE or _ocr_engine is None or vehicle_crop_bgr is None:
+            return None
 
-        # 1. If motion bounding boxes exist, prioritize scanning those specific moving vehicle crops
-        if motion_bboxes:
-            for (bx, by, bw, bh) in motion_bboxes:
-                if bw >= 60 and bh >= 40:
-                    pad_w = int(bw * 0.15)
-                    pad_h = int(bh * 0.15)
-                    cx = max(0, bx - pad_w)
-                    cy = max(0, by - pad_h)
-                    cw = min(w - cx, bw + (pad_w * 2))
-                    ch = min(h - cy, bh + (pad_h * 2))
-                    crop = frame_bgr[cy:cy+ch, cx:cx+cw]
-                    if crop.shape[0] >= 40 and crop.shape[1] >= 60:
-                        scan_areas.append((crop, cx, cy))
+        h, w = vehicle_crop_bgr.shape[:2]
+        if h < 20 or w < 30:
+            return None
 
-        # 2. Also scan ROI or full frame
-        if not scan_areas:
-            scan_area = frame_bgr
-            offset_x, offset_y = 0, 0
-            if roi_polygon and len(roi_polygon) >= 3:
-                pts = []
-                for pt in roi_polygon:
-                    px = int(round(pt[0] * w)) if pt[0] <= 1.0 else int(pt[0])
-                    py = int(round(pt[1] * h)) if pt[1] <= 1.0 else int(pt[1])
-                    pts.append([px, py])
-                pts_arr = np.array(pts)
-                rx, ry, rw, rh = cv2.boundingRect(pts_arr)
-                rx = max(0, rx)
-                ry = max(0, ry)
-                rw = min(w - rx, rw)
-                rh = min(h - ry, rh)
-                if rw > 60 and rh > 40:
-                    scan_area = frame_bgr[ry:ry+rh, rx:rx+rw]
-                    offset_x, offset_y = rx, ry
-            scan_areas.append((scan_area, offset_x, offset_y))
+        # Preprocessing
+        proc_crop = cls.preprocess_plate_crop(vehicle_crop_bgr)
 
-        candidates: List[Dict[str, Any]] = []
-        found_plates = set()
+        try:
+            results, _ = _ocr_engine(proc_crop)
+            if not results:
+                # Fallback to raw crop
+                results, _ = _ocr_engine(vehicle_crop_bgr)
 
-        for (curr_area, off_x, off_y) in scan_areas[:2]:
-            sh, sw = curr_area.shape[:2]
-            if sh < 30 or sw < 50:
-                continue
+            if not results:
+                return None
 
-            # 1. Grayscale & CLAHE contrast enhancement
-            gray = cv2.cvtColor(curr_area, cv2.COLOR_BGR2GRAY)
-            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-            contrast_gray = clahe.apply(gray)
-            blur = cv2.bilateralFilter(contrast_gray, 9, 75, 75)
+            best_candidate = None
+            best_conf = 0.0
 
-            # 2. Blackhat morphology to isolate dark text on light plate background
-            rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
-            blackhat = cv2.morphologyEx(blur, cv2.MORPH_BLACKHAT, rect_kernel)
+            for item in results:
+                box, text, conf = item[0], item[1], float(item[2])
+                cleaned = cls.clean_plate_text(text)
+                is_valid, ptype, final_plate = cls.validate_plate(cleaned)
 
-            # 3. Sobel edge detection
-            grad_x = cv2.Sobel(blackhat, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
-            grad_x = np.absolute(grad_x)
-            min_val, max_val = np.min(grad_x), np.max(grad_x)
-            if max_val > min_val:
-                grad_x = (255 * ((grad_x - min_val) / (max_val - min_val))).astype("uint8")
-            else:
-                grad_x = grad_x.astype("uint8")
+                if is_valid and conf > best_conf:
+                    # Calculate bounding box of the plate within the vehicle crop
+                    pts = np.array(box, dtype=np.int32)
+                    bx, by, bw, bh = cv2.boundingRect(pts)
+                    bx, by = max(0, bx), max(0, by)
+                    bw = min(w - bx, bw)
+                    bh = min(h - by, bh)
+                    plate_patch = vehicle_crop_bgr[by:by+bh, bx:bx+bw] if (bw > 10 and bh > 10) else vehicle_crop_bgr
 
-            # 4. Closing & Otsu Binarization
-            grad_x = cv2.morphologyEx(grad_x, cv2.MORPH_CLOSE, rect_kernel)
-            _, thresh = cv2.threshold(grad_x, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+                    best_candidate = (final_plate, ptype, conf, plate_patch)
+                    best_conf = conf
 
-            # 5. Find contours for candidate plate boxes (Cars & Motorcycles)
-            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            return best_candidate
 
-            matched_boxes = []
-            for cnt in contours:
-                x, y, cw, ch = cv2.boundingRect(cnt)
-                aspect_ratio = cw / float(ch)
-                area = cw * ch
-
-                # A) Car Plate Ratio: ~3.08 (Range 2.0 to 5.2)
-                is_car = (2.0 <= aspect_ratio <= 5.2 and 700 <= area <= 65000 and cw >= 45 and ch >= 14)
-                # B) Motorcycle Plate Ratio: ~1.35 (Range 1.05 to 1.95)
-                is_moto = (1.05 <= aspect_ratio <= 1.95 and 550 <= area <= 45000 and cw >= 32 and ch >= 24)
-
-                if is_car:
-                    score = abs(aspect_ratio - 3.08)
-                    matched_boxes.append((score, x, y, cw, ch, "CAR"))
-                elif is_moto:
-                    score = abs(aspect_ratio - 1.35)
-                    matched_boxes.append((score, x, y, cw, ch, "MOTO"))
-
-            matched_boxes.sort(key=lambda item: item[0])
-
-            # Evaluate top 3 best matching regions
-            for _, x, y, cw, ch, vtype in matched_boxes[:3]:
-                # Add padding
-                pad_x = int(cw * 0.10)
-                pad_y = int(ch * 0.15)
-                px = max(0, x - pad_x)
-                py = max(0, y - pad_y)
-                pw = min(sw - px, cw + (pad_x * 2))
-                ph = min(sh - py, ch + (pad_y * 2))
-
-                plate_patch = curr_area[py:py+ph, px:px+pw]
-                if plate_patch.shape[0] < 12 or plate_patch.shape[1] < 30:
-                    continue
-
-                # Preprocess patch for OCR
-                patch_gray = cv2.cvtColor(plate_patch, cv2.COLOR_BGR2GRAY)
-                scale = 100.0 / patch_gray.shape[0]
-                resized = cv2.resize(patch_gray, (int(patch_gray.shape[1] * scale), 100), interpolation=cv2.INTER_CUBIC)
-                
-                # Try both Adaptive Threshold & Otsu for maximum readability
-                patch_thresh = cv2.adaptiveThreshold(
-                    resized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9
-                )
-
-                # For motorcycles, use PSM 6 (multi-line block) or PSM 11; for cars use PSM 7 & PSM 6
-                psm_modes = ["--psm 6", "--psm 7"] if vtype == "MOTO" else ["--psm 7", "--psm 6"]
-
-                cleaned = ""
-                for psm in psm_modes:
-                    try:
-                        ocr_text = pytesseract.image_to_string(
-                            patch_thresh,
-                            config=f"{psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                        )
-                        cand_cleaned = cls.clean_plate_text(ocr_text)
-                        if len(cand_cleaned) == 7:
-                            cleaned = cand_cleaned
-                            break
-                        
-                        # Fallback to plain resized
-                        ocr_plain = pytesseract.image_to_string(
-                            resized,
-                            config=f"{psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-                        )
-                        cand_plain = cls.clean_plate_text(ocr_plain)
-                        if len(cand_plain) == 7:
-                            cleaned = cand_plain
-                    except Exception:
-                        pass
-
-                # Validate patch brightness & contrast (plates are never pitch black or blown out)
-                mean_val = np.mean(plate_patch)
-                if mean_val < 35 or mean_val > 245:
-                    continue
-
-                is_valid, plate_type, final_plate = cls.validate_plate(cleaned)
-
-                if is_valid and final_plate not in found_plates:
-                    found_plates.add(final_plate)
-                    candidates.append({
-                        "plate_number": final_plate,
-                        "plate_type": f"{plate_type} ({'Moto' if vtype == 'MOTO' else 'Carro'})",
-                        "confidence": 0.95,
-                        "bbox": (off_x + px, off_y + py, pw, ph),
-                        "plate_patch": plate_patch
-                    })
-
-        return candidates
+        except Exception as e:
+            logger.debug(f"[LPR] OCR scan exception: {e}")
+            return None
 
     @classmethod
     async def process_plate_detection(
@@ -349,10 +216,10 @@ class LPREngine:
     ) -> Dict[str, Any]:
         """
         Processes a detected plate:
-        1. Cleans and normalizes plate string with strict validation.
-        2. Queries database for registered vehicle info.
-        3. Records detection in plate_detection_logs.
-        4. Broadcasts real-time WebSocket alert for Android TV PiP & Web Panel.
+        1. Normalizes and validates plate string.
+        2. Queries database for registered vehicle metadata.
+        3. Persists detection in SQLite PlateDetectionLog.
+        4. Broadcasts real-time WebSocket alert for Smart TV & Web UI.
         """
         is_valid, plate_type, cleaned_plate = cls.validate_plate(raw_plate)
         if not is_valid:
@@ -374,86 +241,55 @@ class LPREngine:
             vehicle_model = vehicle.vehicle_model
             is_registered = True
 
-            # Update vehicle stats
             vehicle.last_seen_at = datetime.utcnow()
             vehicle.total_detections += 1
             session.add(vehicle)
 
-        # Log Detection
-        log_entry = PlateDetectionLog(
+        detection_log = PlateDetectionLog(
             camera_id=camera_id,
             camera_name=camera_name,
             plate_number=cleaned_plate,
+            plate_type=plate_type,
             confidence=confidence,
             category=category,
-            owner_name=owner_name if is_registered else None,
-            vehicle_model=vehicle_model if is_registered else None,
+            owner_name=owner_name,
+            vehicle_model=vehicle_model,
+            is_registered=is_registered,
             snapshot_path=snapshot_path,
             detected_at=datetime.utcnow()
         )
-        session.add(log_entry)
+        session.add(detection_log)
         await session.commit()
-        await session.refresh(log_entry)
+        await session.refresh(detection_log)
 
-        # Format Human Title for Alerts
-        if category == "MORADOR":
-            alert_title = f"🟢 Morador: {owner_name} ({cleaned_plate})"
-        elif category == "VISITANTE":
-            alert_title = f"🔵 Visitante Autorizado: {owner_name} ({cleaned_plate})"
-        elif category == "PRESTADOR":
-            alert_title = f"🟡 Prestador de Serviço: {owner_name} ({cleaned_plate})"
-        elif category == "BLOQUEADO":
-            alert_title = f"⛔ VEÍCULO BLOQUEADO: {owner_name} ({cleaned_plate})"
-        else:
-            alert_title = f"🚗 Placa Detectada: {cleaned_plate} ({plate_type})"
-
-        logger.info(f"🚘 [LPR] {alert_title} na câmera {camera_name} (Confiança: {confidence:.0%})")
-
-        # Broadcast WebSocket event to all connected devices
-        event_payload = {
-            "type": "PLATE_DETECTED",
+        payload = {
+            "type": "LPR_DETECTION",
+            "id": detection_log.id,
             "camera_id": camera_id,
             "camera_name": camera_name,
             "plate_number": cleaned_plate,
             "plate_type": plate_type,
+            "confidence": confidence,
             "category": category,
             "owner_name": owner_name,
             "vehicle_model": vehicle_model,
-            "confidence": confidence,
-            "alert_title": alert_title,
-            "timestamp": datetime.utcnow().isoformat(),
-            "mjpeg_url": f"/api/mjpeg/{camera_id}",
-            "score": float(confidence)
+            "is_registered": is_registered,
+            "snapshot_path": snapshot_path,
+            "detected_at": detection_log.detected_at.isoformat()
         }
 
-        # WebSocket Hub Broadcast
-        await ws_hub.broadcast_motion_alert(
-            camera_id=camera_id,
-            camera_name=f"{alert_title}",
-            score=confidence,
-            mjpeg_url=f"/api/mjpeg/{camera_id}"
+        # Real-time WebSocket Broadcast
+        await ws_hub.broadcast_event(payload)
+
+        # Log formatted alert
+        icon = "🟢" if is_registered else "🟡"
+        logger.info(
+            f"[LPR Engine] {icon} Placa Detectada: {cleaned_plate} ({plate_type}) | "
+            f"Categoria: {category} | Proprietário: {owner_name} | Câmera #{camera_id} '{camera_name}' (Conf: {confidence*100:.1f}%)"
         )
 
-        # Telegram Cloud Vault Notification
-        from engine.services.telegram_bot import telegram_service
-        if telegram_service.is_configured:
-            plate_info = {
-                "plate_number": cleaned_plate,
-                "owner_name": owner_name if is_registered else "Desconhecido",
-                "category": category,
-                "vehicle_model": vehicle_model if is_registered else "Veículo"
-            }
-            if snapshot_path:
-                await telegram_service.send_photo_alert(
-                    camera_id=camera_id,
-                    camera_name=camera_name,
-                    timestamp_str=datetime.utcnow().strftime("%d/%m/%Y %H:%M:%S"),
-                    photo_path=snapshot_path,
-                    score=confidence,
-                    plate_info=plate_info,
-                    event_dt=datetime.utcnow()
-                )
+        return payload
 
-        return event_payload
 
 lpr_engine = LPREngine()
+

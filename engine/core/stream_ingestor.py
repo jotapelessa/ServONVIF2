@@ -13,10 +13,11 @@ from engine.database.models import Camera, MotionEvent
 from engine.database.db import async_session_factory
 from engine.core.ring_buffer import CircularRingBuffer
 from engine.core.motion_detector import MotionDetector
+from engine.core.vision_pipeline import vision_pipeline
 from engine.core.media_writer import MediaWriter
 from engine.services.mjpeg_streamer import mjpeg_streamer
 from engine.services.telegram_bot import telegram_service
-from engine.services.lpr_engine import lpr_engine
+from engine.services.lpr_engine import LPREngine
 from engine.api.websocket_hub import ws_hub
 from engine.config.settings import settings
 
@@ -310,22 +311,21 @@ class StreamIngestor:
 
             now_monotonic = time.time()
 
-            # 3. Throttled MOG2 motion detection (8 FPS)
+            # 3. Throttled 2-Stage Vision Pipeline (YOLO + LPR at 6-8 FPS)
             if now_monotonic - last_motion_check >= motion_interval:
                 last_motion_check = now_monotonic
 
-                orig_h, orig_w = frame.shape[:2]
-                scale_ratio = 400.0 / max(orig_w, 1)
-                target_w = 400
-                target_h = int(orig_h * scale_ratio)
-                small_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+                is_current_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
+                    camera_id=self.camera.id,
+                    camera_name=self.camera.name,
+                    frame_bgr=frame,
+                    roi_polygon=getattr(self.camera, "roi_polygon", None),
+                    ignore_polygons=getattr(self.camera, "ignore_polygons", None),
+                    sensitivity=getattr(self.camera, "sensitivity", 20.0)
+                )
 
-                is_current_motion, current_score, bboxes = self.motion_detector.process_frame(small_frame)
-
-                current_bboxes = [
-                    (int(x / scale_ratio), int(y / scale_ratio), int(bw / scale_ratio), int(bh / scale_ratio))
-                    for (x, y, bw, bh) in bboxes
-                ]
+                current_bboxes = [d["bbox"] for d in detections]
+                current_score = max([d["confidence"] for d in detections], default=0.0)
 
                 if is_current_motion:
                     self._last_motion_time = now_monotonic
@@ -334,6 +334,10 @@ class StreamIngestor:
                         if now_monotonic - self._last_alert_time > 3.0:
                             self._last_alert_time = now_monotonic
                             self._handle_motion_start_instant(frame, current_score, current_bboxes, frame_time)
+
+                # Process Stage 2 Plate Identification Event
+                if plate_payload:
+                    self._handle_plate_detection(frame, plate_payload, vehicle_crop)
 
                 # Check if configured video recording duration was reached
                 if self._is_recording_event:
@@ -344,87 +348,49 @@ class StreamIngestor:
                     if total_recording_elapsed >= duration_sec:
                         self._handle_motion_end_async()
 
-            # 4. Periodic LPR scan for parked/stationary vehicles (only if explicitly enabled in settings)
-            if getattr(settings, "LPR_SCAN_STATIC_VEHICLES", False):
-                if now_monotonic - self._last_periodic_lpr_time > 30.0:
-                    self._last_periodic_lpr_time = now_monotonic
-                    self._trigger_lpr_scan(frame, is_motion=False)
-
-    def _trigger_lpr_scan(
+    def _handle_plate_detection(
         self,
         frame: np.ndarray,
-        is_motion: bool = False,
-        motion_bboxes: Optional[List[Tuple[int, int, int, int]]] = None
+        plate_payload: dict,
+        vehicle_crop: Optional[np.ndarray] = None
     ) -> None:
         """
-        Runs non-blocking license plate OCR candidate search in a background thread.
-        Uses single-flight worker lock and strict motion gating to eliminate garage/indoor false positives.
+        Processes plate identification event from Stage 2 OCR:
+        Saves snapshot, persists to SQLite and broadcasts to TV/Web and Telegram.
         """
-        if not getattr(settings, "LPR_ENABLED", True):
+        plate_num = plate_payload["plate_number"]
+        now_t = time.time()
+        last_seen = self._stationary_plates_seen.get(plate_num, 0.0)
+
+        # Anti-spam cooldown per plate (20 seconds)
+        if now_t - last_seen < 20.0:
             return
+        self._stationary_plates_seen[plate_num] = now_t
 
-        # If motion is required, ignore frames without active motion (e.g. closed garage)
-        if getattr(settings, "LPR_REQUIRE_MOTION", True) and not is_motion:
-            return
+        now_dt = datetime.utcnow()
+        snap_to_save = vehicle_crop if vehicle_crop is not None else frame
+        thumb_path = MediaWriter.save_thumbnail(
+            camera_id=self.camera.id,
+            timestamp=now_dt,
+            frame_bgr=snap_to_save
+        )
 
-        if self._is_lpr_busy:
-            return  # Skip frame if background OCR worker is already actively processing
+        if self._loop and self._loop.is_running():
+            async def _run_plate_detection():
+                try:
+                    async with async_session_factory() as session:
+                        await LPREngine.process_plate_detection(
+                            session=session,
+                            camera_id=self.camera.id,
+                            camera_name=self.camera.name,
+                            raw_plate=plate_num,
+                            confidence=plate_payload.get("confidence", 0.95),
+                            snapshot_path=thumb_path
+                        )
+                except Exception as db_err:
+                    logger.error(f"Error in LPR detection database commit: {db_err}")
 
-        self._is_lpr_busy = True
-        frame_copy = frame.copy()
-
-        def _lpr_worker():
-            try:
-                candidates = lpr_engine.find_plate_candidates(
-                    frame_bgr=frame_copy,
-                    roi_polygon=getattr(self.camera, "roi_polygon", None),
-                    motion_bboxes=motion_bboxes
-                )
-                if not candidates:
-                    return
-
-                now_t = time.time()
-                for cand in candidates:
-                    plate = cand["plate_number"]
-                    last_seen = self._stationary_plates_seen.get(plate, 0.0)
-
-                    # Anti-spam for parked car (10 min) or moving vehicle pass (15 seconds)
-                    cooldown = 15.0 if is_motion else 600.0
-                    if (now_t - last_seen < cooldown):
-                        continue
-
-                    self._stationary_plates_seen[plate] = now_t
-
-                    now_dt = datetime.utcnow()
-                    thumb_path = MediaWriter.save_thumbnail(
-                        camera_id=self.camera.id,
-                        timestamp=now_dt,
-                        frame_bgr=frame_copy,
-                        bounding_boxes=[cand["bbox"]]
-                    )
-
-                    if self._loop and self._loop.is_running():
-                        async def _run_plate_detection(p=plate, conf=cand["confidence"], path=thumb_path):
-                            try:
-                                async with async_session_factory() as session:
-                                    await lpr_engine.process_plate_detection(
-                                        session=session,
-                                        camera_id=self.camera.id,
-                                        camera_name=self.camera.name,
-                                        raw_plate=p,
-                                        confidence=conf,
-                                        snapshot_path=path
-                                    )
-                            except Exception as db_err:
-                                logger.error(f"Error in LPR detection database commit: {db_err}")
-
-                        asyncio.run_coroutine_threadsafe(_run_plate_detection(), self._loop)
-            except Exception as e:
-                logger.error(f"LPR Worker Error: {e}")
-            finally:
-                self._is_lpr_busy = False
-
-        threading.Thread(target=_lpr_worker, daemon=True).start()
+            asyncio.run_coroutine_threadsafe(_run_plate_detection(), self._loop)
 
     def _handle_motion_start_instant(self, current_frame: np.ndarray, score: float, bboxes: list, frame_time: float) -> None:
         """
