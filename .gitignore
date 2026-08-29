@@ -14,7 +14,10 @@ build/
 
 # SQLite & Data
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
+*.pt
 engine/data/media/*
 !engine/data/media/.gitkeep
 engine/data/db/*
@@ -32,6 +35,7 @@ yarn-error.log*
 # Android build outputs
 android/.gradle/
 android/app/build/
+android/app-modern/build/
 android/build/
 mobile/android/
 mobile/.expo/
