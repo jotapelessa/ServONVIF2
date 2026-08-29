@@ -101,45 +101,46 @@ export CI=1
 unset _JAVA_OPTIONS 2>/dev/null || true
 export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true"
 
-# 3. Configurar Java 17
+# 3. Configurar Java 17 (Obrigatório para Gradle 8.6 / Android)
 echo "☕ Configurando Java 17..."
-if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
-    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-elif [ -d "/usr/lib/jvm/java-1.17.0-openjdk-amd64" ]; then
-    export JAVA_HOME="/usr/lib/jvm/java-1.17.0-openjdk-amd64"
-elif [ -n "$SDKMAN_DIR" ] && [ -d "$SDKMAN_DIR/candidates/java" ]; then
-    JAVA_17_PATH=$(find "$SDKMAN_DIR/candidates/java" -maxdepth 1 -name "17.*" | head -n 1)
-    if [ -n "$JAVA_17_PATH" ]; then
-        export JAVA_HOME="$JAVA_17_PATH"
+JAVA_17_FOUND=""
+
+# Procurar Java 17 em caminhos conhecidos (SDKMAN, /usr/lib/jvm, /opt)
+for candidate in \
+    /usr/lib/jvm/java-17-openjdk-amd64 \
+    /usr/lib/jvm/java-1.17.0-openjdk-amd64 \
+    /usr/local/sdkman/candidates/java/17* \
+    $HOME/.sdkman/candidates/java/17* \
+    /opt/java/17* \
+    /opt/hostedtoolcache/Java_temurin-bin/17*
+do
+    if [ -d "$candidate" ] && [ -f "$candidate/bin/javac" ]; then
+        JAVA_17_FOUND="$candidate"
+        break
     fi
-else
-    if [ -d "/usr/lib/jvm" ]; then
-        JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" 2>/dev/null | head -n 1)
-        if [ -n "$JAVA_17_PATH" ]; then
-            export JAVA_HOME="$JAVA_17_PATH"
+done
+
+# Se não encontrou instalado, instalar OpenJDK 17 via apt-get
+if [ -z "$JAVA_17_FOUND" ]; then
+    echo "📥 Instalando OpenJDK 17..."
+    sudo apt-get update -qq >/dev/null 2>&1 || true
+    sudo apt-get install -y -qq openjdk-17-jdk-headless >/dev/null 2>&1 || true
+    for candidate in /usr/lib/jvm/java-17-openjdk* /usr/lib/jvm/*17*; do
+        if [ -d "$candidate" ] && [ -f "$candidate/bin/javac" ]; then
+            JAVA_17_FOUND="$candidate"
+            break
         fi
-    fi
+    done
 fi
 
-if [ -z "$JAVA_HOME" ]; then
-    echo "⚠️ Java 17 não encontrado em caminhos padrões. Instalando openjdk-17-jdk-headless..."
-    sudo apt-get update -y >/dev/null 2>&1 || true
-    sudo apt-get install -y openjdk-17-jdk-headless >/dev/null 2>&1 || true
-    if [ -d "/usr/lib/jvm" ]; then
-        JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" 2>/dev/null | head -n 1)
-        if [ -n "$JAVA_17_PATH" ]; then
-            export JAVA_HOME="$JAVA_17_PATH"
-        fi
-    fi
-fi
-
-if [ -n "$JAVA_HOME" ]; then
+if [ -n "$JAVA_17_FOUND" ]; then
+    export JAVA_HOME="$JAVA_17_FOUND"
     export PATH="$JAVA_HOME/bin:$PATH"
-    echo "✅ JAVA_HOME definido para: $JAVA_HOME"
+    echo "✅ JAVA_HOME configurado com sucesso para Java 17: $JAVA_HOME"
 else
-    echo "⚠️ Não foi possível definir JAVA_HOME. Usando java do sistema."
+    echo "⚠️ Java 17 não encontrado. Tentando usar o java disponível."
 fi
-java -version
+"$JAVA_HOME/bin/java" -version 2>&1 | head -n 2 || java -version 2>&1 | head -n 2
 
 # 4. Configurar Android SDK
 if [ -d "/usr/local/lib/android/sdk" ]; then
