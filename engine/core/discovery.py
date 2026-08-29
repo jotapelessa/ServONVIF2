@@ -84,14 +84,46 @@ class ONVIFDiscovery:
         loop = asyncio.get_running_loop()
 
         def do_probe():
-            # 1. Test Smartphone IP Webcam ports (8080, 8081, 4747)
+            # 1. Test dedicated RTSP / ONVIF ports FIRST (8554, 554, 1935, 8000, 37777, 34567, 80)
+            for port in [8554, 554, 1935, 8000, 8899, 37777, 34567, 80]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.4)
+                    res = s.connect_ex((ip, port))
+                    s.close()
+                    if res == 0:
+                        if port == 8554:
+                            stream_path = "/stream"
+                        elif port == 554:
+                            stream_path = "/live/0/MAIN"
+                        elif port == 1935:
+                            return {
+                                "name": f"Câmera RTSP ({ip})",
+                                "ip": ip,
+                                "port": port,
+                                "default_rtsp": f"rtsp://admin:admin@{ip}:1935/live",
+                                "type": "Vídeo RTSP (1935)",
+                            }
+                        else:
+                            stream_path = "/stream1"
+                        return {
+                            "name": f"Xiaomi / Câmera IP ({ip})",
+                            "ip": ip,
+                            "port": port,
+                            "onvif_service_url": f"http://{ip}:80/onvif/device_service",
+                            "default_rtsp": f"rtsp://{ip}:{port}{stream_path}",
+                            "type": "ONVIF / RTSP Direto",
+                        }
+                except Exception:
+                    pass
+
+            # 2. Test Smartphone HTTP Webcam ports (8080, 8081, 4747, 8888) as fallback
             for http_port in [8080, 8081, 4747, 8888]:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.5)
+                    s.settimeout(0.4)
                     if s.connect_ex((ip, http_port)) == 0:
                         s.close()
-                        # Test if IP Webcam / DroidCam responds
                         if http_port == 4747:
                             return {
                                 "name": f"Smartphone DroidCam ({ip})",
@@ -108,33 +140,6 @@ class ONVIFDiscovery:
                             "type": "Câmera Celular (IP Webcam / MJPEG)",
                         }
                     s.close()
-                except Exception:
-                    pass
-
-            # 2. Test standard RTSP / ONVIF ports
-            for port in [8554, 554, 8000, 1935, 8899, 37777, 34567, 80]:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.5)
-                    res = s.connect_ex((ip, port))
-                    s.close()
-                    if res == 0:
-                        if port == 8554:
-                            stream_path = "/stream"
-                        elif port == 554:
-                            stream_path = "/live/0/MAIN"
-                        elif port == 1935:
-                            stream_path = "/live"
-                        else:
-                            stream_path = "/stream1"
-                        return {
-                            "name": f"Xiaomi / Câmera IP ({ip})",
-                            "ip": ip,
-                            "port": port,
-                            "onvif_service_url": f"http://{ip}:80/onvif/device_service",
-                            "default_rtsp": f"rtsp://{ip}:{port}{stream_path}",
-                            "type": "ONVIF / RTSP Direto",
-                        }
                 except Exception:
                     pass
             return None
@@ -222,7 +227,39 @@ class ONVIFDiscovery:
             if target_ip == local_ip or target_ip == "127.0.0.1":
                 return None
 
-            # 1. Check Smartphone IP Webcam / Simulator ports (8080, 8081, 4747, 8888)
+            # 1. Check dedicated video stream ports FIRST (8554, 554, 1935, 37777, 34567, 8000)
+            for rtsp_port in [8554, 554, 1935, 37777, 34567, 8000]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(timeout_per_host)
+                    res = s.connect_ex((target_ip, rtsp_port))
+                    s.close()
+                    if res == 0:
+                        if rtsp_port == 8554:
+                            stream_path = "/stream"
+                        elif rtsp_port == 554:
+                            stream_path = "/live/0/MAIN"
+                        elif rtsp_port == 1935:
+                            return {
+                                "name": f"Câmera RTSP ({target_ip})",
+                                "ip": target_ip,
+                                "port": rtsp_port,
+                                "default_rtsp": f"rtsp://admin:admin@{target_ip}:1935/live",
+                                "type": "Vídeo RTSP (1935)",
+                            }
+                        else:
+                            stream_path = "/stream1"
+                        return {
+                            "name": f"Xiaomi / Câmera IP ({target_ip})",
+                            "ip": target_ip,
+                            "port": rtsp_port,
+                            "default_rtsp": f"rtsp://{target_ip}:{rtsp_port}{stream_path}",
+                            "type": f"Vídeo RTSP ({rtsp_port})",
+                        }
+                except Exception:
+                    pass
+
+            # 2. Check Smartphone IP Webcam / Simulator ports (8080, 8081, 4747, 8888)
             for phone_port in [8080, 8081, 4747, 8888]:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -244,32 +281,6 @@ class ONVIFDiscovery:
                             "port": phone_port,
                             "default_rtsp": f"http://{target_ip}:{phone_port}/video",
                             "type": "Câmera Celular (IP Webcam / MJPEG)",
-                        }
-                except Exception:
-                    pass
-
-            # 2. Check dedicated video stream ports (554, 8554, 37777, 34567, 8000)
-            for rtsp_port in [8554, 554, 37777, 34567, 8000, 1935]:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(timeout_per_host)
-                    res = s.connect_ex((target_ip, rtsp_port))
-                    s.close()
-                    if res == 0:
-                        if rtsp_port == 8554:
-                            stream_path = "/stream"
-                        elif rtsp_port == 554:
-                            stream_path = "/live/0/MAIN"
-                        elif rtsp_port == 1935:
-                            stream_path = "/live"
-                        else:
-                            stream_path = "/stream1"
-                        return {
-                            "name": f"Xiaomi / Câmera IP ({target_ip})",
-                            "ip": target_ip,
-                            "port": rtsp_port,
-                            "default_rtsp": f"rtsp://{target_ip}:{rtsp_port}{stream_path}",
-                            "type": f"Vídeo RTSP ({rtsp_port})",
                         }
                 except Exception:
                     pass
