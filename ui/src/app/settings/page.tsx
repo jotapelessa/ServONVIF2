@@ -79,6 +79,8 @@ import {
   BellRing,
   Laptop,
   KeyRound,
+  Database,
+  X,
 } from "lucide-react";
 
 type SettingsTab = "vehicles" | "devices" | "tests" | "logs" | "tv" | "telegram" | "storage" | "engine" | "backup" | "guide" | "zimaos";
@@ -299,6 +301,11 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [logSearchText, setLogSearchText] = useState("");
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const [copiedLogs, setCopiedLogs] = useState(false);
+  // Full System Diagnostic Test Suite State
+  const [fullTestRunning, setFullTestRunning] = useState(false);
+  const [fullTestResults, setFullTestResults] = useState<any>(null);
+  const [isFullTestModalOpen, setIsFullTestModalOpen] = useState(false);
+  const [singleTestingPillar, setSingleTestingPillar] = useState<string | null>(null);
 
   // Backup & Server Operations State
   const [importingBackup, setImportingBackup] = useState(false);
@@ -755,6 +762,57 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
       console.error("Failed to load logs:", e);
     } finally {
       setLogsLoading(false);
+    }
+  };
+
+  const handleRunFullSystemTest = async () => {
+    try {
+      setFullTestRunning(true);
+      const res = await fetch(`${API_BASE}/settings/diagnostics/run-full-system-test`, { method: "POST" });
+      const data = await res.json();
+      setFullTestResults(data);
+      setIsFullTestModalOpen(true);
+      await fetchLogs();
+    } catch (err: any) {
+      alert("Erro ao executar teste do sistema: " + (err.message || err));
+    } finally {
+      setFullTestRunning(false);
+    }
+  };
+
+  const handleQuickPingTest = async () => {
+    try {
+      setSingleTestingPillar("network");
+      await fetch(`${API_BASE}/settings/ping`);
+      await fetchLogs();
+    } catch (err) {
+      console.error("Erro no ping:", err);
+    } finally {
+      setSingleTestingPillar(null);
+    }
+  };
+
+  const handleQuickTelegramTest = async () => {
+    try {
+      setSingleTestingPillar("telegram");
+      await apiClient.testTelegram();
+      await fetchLogs();
+    } catch (err: any) {
+      alert("Erro no teste do Telegram: " + (err.message || err));
+    } finally {
+      setSingleTestingPillar(null);
+    }
+  };
+
+  const handleQuickTvAlert = async () => {
+    try {
+      setSingleTestingPillar("devices");
+      await apiClient.simulateMotion(1, "Câmera de Teste (TV)", 0.99);
+      await fetchLogs();
+    } catch (err: any) {
+      alert("Erro no teste de alerta para TV: " + (err.message || err));
+    } finally {
+      setSingleTestingPillar(null);
     }
   };
 
@@ -3808,14 +3866,27 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     <div>
                       <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                         <Terminal className="w-5 h-5 text-cyan-400" />
-                        <span>Telemetria, Câmeras &amp; Relatório Antigravity</span>
+                        <span>Centro de Diagnóstico, Telemetria &amp; Logs do Servidor</span>
                       </h2>
                       <p className="text-xs text-slate-400 mt-1">
-                        Acompanhe todos os processos das câmeras (varredura, conexão RTSP, resolução, status de imagem e erros) em tempo real.
+                        Acompanhe todos os processos em tempo real: buscas na rede, pings, integridade de transmissão, Telegram e conexões de TV.
                       </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleRunFullSystemTest}
+                        disabled={fullTestRunning}
+                        className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-cyan-600/30 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        {fullTestRunning ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                        )}
+                        <span>{fullTestRunning ? "Testando Funções..." : "⚡ Testar Todas as Funções"}</span>
+                      </button>
+
                       <button
                         onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
@@ -3839,23 +3910,171 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
                       <button
                         onClick={handleCopyLogsForAntigravity}
-                        className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-lg shadow-cyan-600/25 transition-all"
+                        className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition-all"
                       >
-                        {copiedLogs ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        <span>{copiedLogs ? "Copiado para o Clipboard!" : "📋 Copiar Logs para Antigravity"}</span>
+                        {copiedLogs ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                        <span>{copiedLogs ? "Copiado!" : "📋 Copiar Logs"}</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Real-Time Camera Telemetry Cards */}
+                  {/* 4-Pillar Operational Health Diagnostic Banners (Standardized & Proportional) */}
+                  {logsData?.summary?.pillars && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      {/* Pillar 1: Cameras */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 min-h-[175px] flex flex-col justify-between hover:border-cyan-500/40 transition-all shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5 truncate">
+                              <Video className="w-4 h-4 text-cyan-400 shrink-0" />
+                              <span className="truncate">1. Câmeras &amp; Vídeo</span>
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                              logsData.summary.pillars.cameras.status === "OK"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : logsData.summary.pillars.cameras.status === "WARNING"
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                            }`}>
+                              {logsData.summary.pillars.cameras.badge}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-slate-100 mt-2 font-mono">
+                            {logsData.summary.pillars.cameras.online} / {logsData.summary.pillars.cameras.total} Câmeras Online
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 h-[32px] mt-1">
+                            {logsData.summary.pillars.cameras.label}
+                          </p>
+                        </div>
+                        <div className="pt-2 border-t border-slate-800/80 mt-2 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500">Varreduras &amp; RTSP</span>
+                          <button
+                            onClick={() => {
+                              window.location.href = "/cameras";
+                            }}
+                            className="text-[11px] font-medium text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                          >
+                            <Search className="w-3 h-3" />
+                            <span>Abrir Câmeras</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pillar 2: Network & Pings */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 min-h-[175px] flex flex-col justify-between hover:border-sky-500/40 transition-all shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5 truncate">
+                              <Radio className="w-4 h-4 text-sky-400 shrink-0" />
+                              <span className="truncate">2. Pings &amp; Rede</span>
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                              {logsData.summary.pillars.network.badge}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-sky-300 font-mono mt-2 truncate">
+                            {logsData.summary.local_ip}:{logsData.summary.port}
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 h-[32px] mt-1">
+                            {logsData.summary.pillars.network.label}
+                          </p>
+                        </div>
+                        <div className="pt-2 border-t border-slate-800/80 mt-2 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500">Porta HTTP 8080</span>
+                          <button
+                            onClick={handleQuickPingTest}
+                            disabled={singleTestingPillar === "network"}
+                            className="text-[11px] font-medium text-sky-400 hover:text-sky-300 flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {singleTestingPillar === "network" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                            <span>Testar Ping</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pillar 3: Telegram Cloud Vault */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 min-h-[175px] flex flex-col justify-between hover:border-purple-500/40 transition-all shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5 truncate">
+                              <Send className="w-4 h-4 text-purple-400 shrink-0" />
+                              <span className="truncate">3. Telegram &amp; Alertas</span>
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                              logsData.summary.pillars.telegram.status === "OK"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {logsData.summary.pillars.telegram.badge}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-purple-200 mt-2 truncate">
+                            {logsData.summary.pillars.telegram.configured ? `Chat ID: ${logsData.summary.pillars.telegram.chat_id}` : "Não configurado"}
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 h-[32px] mt-1">
+                            {logsData.summary.pillars.telegram.label}
+                          </p>
+                        </div>
+                        <div className="pt-2 border-t border-slate-800/80 mt-2 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500">Fotos, Vídeos &amp; Backup</span>
+                          <button
+                            onClick={handleQuickTelegramTest}
+                            disabled={singleTestingPillar === "telegram" || !logsData.summary.pillars.telegram.configured}
+                            className="text-[11px] font-medium text-purple-400 hover:text-purple-300 flex items-center gap-1 disabled:opacity-40"
+                          >
+                            {singleTestingPillar === "telegram" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                            <span>Testar Envio</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pillar 4: Devices & WebSockets */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 min-h-[175px] flex flex-col justify-between hover:border-emerald-500/40 transition-all shadow-sm">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5 truncate">
+                              <Tv className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <span className="truncate">4. Dispositivos &amp; TVs</span>
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                              logsData.summary.pillars.devices.status === "OK"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "bg-slate-800 text-slate-400"
+                            }`}>
+                              {logsData.summary.pillars.devices.badge}
+                            </span>
+                          </div>
+                          <div className="text-sm font-bold text-emerald-300 mt-2">
+                            {logsData.summary.connected_ws_clients} Conexões Ativas
+                          </div>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 h-[32px] mt-1">
+                            {logsData.summary.pillars.devices.label}
+                          </p>
+                        </div>
+                        <div className="pt-2 border-t border-slate-800/80 mt-2 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500">Smart TV PiP / WebSocket</span>
+                          <button
+                            onClick={handleQuickTvAlert}
+                            disabled={singleTestingPillar === "devices"}
+                            className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {singleTestingPillar === "devices" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                            <span>Testar Alerta TV</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Real-Time Camera Telemetry Cards (Proportional) */}
                   {logsData?.active_cameras && logsData.active_cameras.length > 0 && (
                     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
                           <Video className="w-4 h-4 text-cyan-400" />
-                          <span>Status das Câmeras em Tempo Real</span>
+                          <span>Status das Câmeras Ativas em Tempo Real</span>
                         </div>
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-[11px] text-slate-400 font-mono">
                           {logsData.active_cameras.filter((c: any) => c.online).length}/{logsData.active_cameras.length} Online
                         </span>
                       </div>
@@ -3864,7 +4083,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         {logsData.active_cameras.map((cam: any) => (
                           <div
                             key={cam.id}
-                            className={`p-3 rounded-lg border flex flex-col justify-between transition-all ${
+                            className={`p-3.5 rounded-lg border min-h-[110px] flex flex-col justify-between transition-all ${
                               cam.online
                                 ? "bg-emerald-950/20 border-emerald-500/30"
                                 : cam.running
@@ -3877,7 +4096,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                                 #{cam.id} {cam.name}
                               </div>
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
                                   cam.online
                                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                                     : cam.running
@@ -3894,110 +4113,15 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                               <div className="text-slate-400 truncate font-mono text-[10px]" title={cam.rtsp}>
                                 🔗 {cam.rtsp}
                               </div>
-                              <div className="flex items-center justify-between text-slate-300 text-[11px] pt-1 border-t border-slate-800/60">
+                              <div className="flex items-center justify-between text-slate-300 text-[11px] pt-1.5 border-t border-slate-800/60">
                                 <span>Resolução: <strong className="text-cyan-400">{cam.resolution || "Detectando..."}</strong></span>
                                 {cam.last_frame_age_seconds !== null && (
-                                  <span className="text-slate-400">Último frame: <strong className="text-slate-200">{cam.last_frame_age_seconds}s</strong> atrás</span>
+                                  <span className="text-slate-400">Último frame: <strong className="text-slate-200">{cam.last_frame_age_seconds}s</strong></span>
                                 )}
                               </div>
                             </div>
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 4-Pillar Operational Health Diagnostic Banners */}
-                  {logsData?.summary?.pillars && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                      {/* Pillar 1: Cameras */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-cyan-500/40 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                            <Video className="w-4 h-4 text-cyan-400" />
-                            <span>1. Câmeras &amp; Imagem</span>
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            logsData.summary.pillars.cameras.status === "OK"
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : logsData.summary.pillars.cameras.status === "WARNING"
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                              : "bg-slate-800 text-slate-400"
-                          }`}>
-                            {logsData.summary.pillars.cameras.badge}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-slate-100">
-                          {logsData.summary.pillars.cameras.online} / {logsData.summary.pillars.cameras.total} Câmeras Online
-                        </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2">
-                          {logsData.summary.pillars.cameras.label}
-                        </p>
-                      </div>
-
-                      {/* Pillar 2: Network & Pings */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-sky-500/40 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                            <Radio className="w-4 h-4 text-sky-400" />
-                            <span>2. Pings &amp; Rede</span>
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            {logsData.summary.pillars.network.badge}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-sky-300 font-mono">
-                          {logsData.summary.local_ip}:{logsData.summary.port}
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          Latência zero-lag com WebSocket e HTTP Keep-Alive
-                        </p>
-                      </div>
-
-                      {/* Pillar 3: Telegram Cloud Vault */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-purple-500/40 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                            <Send className="w-4 h-4 text-purple-400" />
-                            <span>3. Telegram &amp; Alertas</span>
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            logsData.summary.pillars.telegram.status === "OK"
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : "bg-slate-800 text-slate-400"
-                          }`}>
-                            {logsData.summary.pillars.telegram.badge}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-purple-200">
-                          {logsData.summary.pillars.telegram.configured ? `Chat ID: ${logsData.summary.pillars.telegram.chat_id}` : "Não configurado"}
-                        </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2">
-                          {logsData.summary.pillars.telegram.label}
-                        </p>
-                      </div>
-
-                      {/* Pillar 4: Devices & WebSockets */}
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-emerald-500/40 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                            <Tv className="w-4 h-4 text-emerald-400" />
-                            <span>4. Dispositivos (TVs)</span>
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            logsData.summary.pillars.devices.status === "OK"
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : "bg-slate-800 text-slate-400"
-                          }`}>
-                            {logsData.summary.pillars.devices.badge}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-emerald-300">
-                          {logsData.summary.connected_ws_clients} Conexões Ativas
-                        </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2">
-                          {logsData.summary.pillars.devices.label}
-                        </p>
                       </div>
                     </div>
                   )}
@@ -7447,6 +7571,122 @@ systemctl enable --now servonvif.service
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: RESULTADO DO TESTE COMPLETO DAS FUNÇÕES ================= */}
+      {isFullTestModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="card-dark rounded-2xl w-full max-w-2xl p-6 border border-white/10 shadow-2xl space-y-5 bg-slate-900 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-600/20 to-indigo-600/20 text-cyan-400 border border-cyan-500/30">
+                  <Zap className="w-6 h-6 text-amber-300 fill-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Auto-Diagnóstico Completo do Servidor</span>
+                    {fullTestResults?.overall_status === "OK" ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        100% OPERACIONAL
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        COM AVISOS
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Bateria de testes executada em <strong className="text-slate-200">{fullTestResults?.total_time_ms || 0}ms</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsFullTestModalOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Test Summary Banner */}
+            {fullTestResults?.summary && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3 text-center">
+                  <div className="text-[11px] text-emerald-400 font-semibold">Aprovados</div>
+                  <div className="text-lg font-bold text-emerald-300">{fullTestResults.summary.passed} / {fullTestResults.summary.total}</div>
+                </div>
+                <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3 text-center">
+                  <div className="text-[11px] text-amber-400 font-semibold">Avisos</div>
+                  <div className="text-lg font-bold text-amber-300">{fullTestResults.summary.warnings}</div>
+                </div>
+                <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3 text-center">
+                  <div className="text-[11px] text-rose-400 font-semibold">Falhas</div>
+                  <div className="text-lg font-bold text-rose-300">{fullTestResults.summary.failed}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Items List */}
+            <div className="space-y-2.5">
+              {fullTestResults?.tests?.map((t: any) => {
+                const isOk = t.status === "OK";
+                const isWarn = t.status === "WARNING";
+                return (
+                  <div
+                    key={t.id}
+                    className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
+                      isOk
+                        ? "bg-slate-950/80 border-emerald-500/30"
+                        : isWarn
+                        ? "bg-slate-950/80 border-amber-500/30"
+                        : "bg-slate-950/80 border-rose-500/30"
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-100">{t.name}</span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isOk
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : isWarn
+                              ? "bg-amber-500/20 text-amber-300"
+                              : "bg-rose-500/20 text-rose-300"
+                          }`}
+                        >
+                          {isOk ? "🟢 APROVADO" : isWarn ? "🟡 AVISO" : "🔴 FALHA"}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">({t.latency_ms}ms)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">{t.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={handleRunFullSystemTest}
+                disabled={fullTestRunning}
+                className="px-4 py-2 text-xs font-bold text-cyan-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition flex items-center gap-2"
+              >
+                {fullTestRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                <span>Executar Novamente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsFullTestModalOpen(false)}
+                className="px-5 py-2 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-500 rounded-xl shadow-md shadow-cyan-600/20 transition"
+              >
+                Fechar Relatório
+              </button>
+            </div>
           </div>
         </div>
       )}
