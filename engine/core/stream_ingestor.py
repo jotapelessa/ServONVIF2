@@ -152,17 +152,23 @@ class StreamIngestor:
         )
 
     def _create_capture(self, rtsp_url: str) -> cv2.VideoCapture:
-        # High-stability TCP RTSP capture with sufficient buffer size for 5MP keyframes
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-            "rtsp_transport;tcp|"
-            "analyzeduration;2000000|"
-            "probesize;2000000|"
-            "max_delay;500000|"
-            "stimeout;3000000"
-        )
-        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        return cap
+        if rtsp_url.startswith("http://") or rtsp_url.startswith("https://"):
+            # HTTP MJPEG / Smartphone Camera Simulator stream (e.g. IP Webcam, DroidCam)
+            cap = cv2.VideoCapture(rtsp_url)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            return cap
+        else:
+            # High-stability TCP RTSP capture with sufficient buffer size for 5MP keyframes
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                "rtsp_transport;tcp|"
+                "analyzeduration;2000000|"
+                "probesize;2000000|"
+                "max_delay;500000|"
+                "stimeout;3000000"
+            )
+            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            return cap
 
     def _grabber_loop(self) -> None:
         """
