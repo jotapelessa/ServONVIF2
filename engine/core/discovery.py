@@ -112,16 +112,23 @@ class ONVIFDiscovery:
                     pass
 
             # 2. Test standard RTSP / ONVIF ports
-            for port in [554, 8554, 8000, 8899, 37777, 34567, 80]:
+            for port in [8554, 554, 8000, 1935, 8899, 37777, 34567, 80]:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(0.5)
                     res = s.connect_ex((ip, port))
                     s.close()
                     if res == 0:
-                        stream_path = "/live/0/MAIN" if port == 554 else "/stream1"
+                        if port == 8554:
+                            stream_path = "/stream"
+                        elif port == 554:
+                            stream_path = "/live/0/MAIN"
+                        elif port == 1935:
+                            stream_path = "/live"
+                        else:
+                            stream_path = "/stream1"
                         return {
-                            "name": f"Câmera IP ({ip})",
+                            "name": f"Xiaomi / Câmera IP ({ip})",
                             "ip": ip,
                             "port": port,
                             "onvif_service_url": f"http://{ip}:80/onvif/device_service",
@@ -242,16 +249,23 @@ class ONVIFDiscovery:
                     pass
 
             # 2. Check dedicated video stream ports (554, 8554, 37777, 34567, 8000)
-            for rtsp_port in [554, 8554, 37777, 34567, 8000]:
+            for rtsp_port in [8554, 554, 37777, 34567, 8000, 1935]:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(timeout_per_host)
                     res = s.connect_ex((target_ip, rtsp_port))
                     s.close()
                     if res == 0:
-                        stream_path = "/live/0/MAIN" if rtsp_port == 554 else "/stream1"
+                        if rtsp_port == 8554:
+                            stream_path = "/stream"
+                        elif rtsp_port == 554:
+                            stream_path = "/live/0/MAIN"
+                        elif rtsp_port == 1935:
+                            stream_path = "/live"
+                        else:
+                            stream_path = "/stream1"
                         return {
-                            "name": f"Câmera IP ({target_ip})",
+                            "name": f"Xiaomi / Câmera IP ({target_ip})",
                             "ip": target_ip,
                             "port": rtsp_port,
                             "default_rtsp": f"rtsp://{target_ip}:{rtsp_port}{stream_path}",
