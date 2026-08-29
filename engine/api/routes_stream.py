@@ -14,7 +14,15 @@ async def stream_mjpeg(camera_id: int):
 
     return StreamingResponse(
         mjpeg_streamer.generate_mjpeg_stream(camera_id),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
     )
 
 @router.get("/api/cameras/{camera_id}/frame")

@@ -72,7 +72,8 @@ class VisionPipeline:
             py = int(round(p[1] * height)) if p[1] <= 1.0 else int(p[1])
             pts.append([px, py])
         pts_arr = np.array(pts, dtype=np.int32)
-        return cv2.pointPolygonTest(pts_arr, pt, False) >= 0
+        pt_float = (float(pt[0]), float(pt[1]))
+        return cv2.pointPolygonTest(pts_arr, pt_float, False) >= 0
 
     def is_bbox_in_zone(
         self,

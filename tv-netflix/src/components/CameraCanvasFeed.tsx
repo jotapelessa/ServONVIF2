@@ -56,7 +56,6 @@ export const CameraCanvasFeed: React.FC<CameraCanvasFeedProps> = ({
           alt={camera.name}
           onError={handleImageError}
           className="w-full h-full object-cover object-center transition-opacity duration-300"
-          crossOrigin="anonymous"
         />
       )}
 

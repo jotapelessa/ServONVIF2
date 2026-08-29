@@ -289,6 +289,10 @@ class StreamIngestor:
                 self._latest_frame = cloned_frame
                 self._latest_frame_time = now
 
+            # Immediate, decoupled live broadcast to connected web/TV clients at full camera FPS
+            if mjpeg_streamer.has_clients(self.camera.id):
+                mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
+
             self._new_frame_event.set()
 
         cap.release()
@@ -298,7 +302,7 @@ class StreamIngestor:
         Lightweight, high-efficiency processor:
         - Continuous, smooth event recording with optimized RAM footprint.
         - Throttled MOG2 Motion Detection at 8 FPS (saves 75% OpenCV CPU while keeping 100% detection reliability).
-        - Ring buffer & MJPEG preview streaming at efficient, decoupled rates.
+        - Ring buffer & AI Neural / LPR pipeline with resilient error supervision.
         """
         last_motion_check = 0.0
         last_ring_push = 0.0
@@ -313,105 +317,102 @@ class StreamIngestor:
                 time.sleep(0.4)
                 continue
 
-            # Wait for fresh frame from grabber
-            if not self._new_frame_event.wait(timeout=0.1):
-                continue
-            self._new_frame_event.clear()
-
-            with self._frame_lock:
-                if self._latest_frame is None:
+            try:
+                # Wait for fresh frame from grabber
+                if not self._new_frame_event.wait(timeout=0.1):
                     continue
-                frame = self._latest_frame.copy()
-                frame_time = self._latest_frame_time
+                self._new_frame_event.clear()
 
-            # 1. Update lightweight circular RAM ring buffer (~10 FPS, max 1280px)
-            if frame_time - last_ring_push >= 0.10:
-                last_ring_push = frame_time
-                h, w = frame.shape[:2]
-                if w > 1280:
-                    scale = 1280.0 / w
-                    ring_frame = cv2.resize(frame, (1280, int(h * scale)), interpolation=cv2.INTER_LINEAR)
-                else:
-                    ring_frame = frame.copy()
-                self.ring_buffer.push(ring_frame, is_keyframe=True, timestamp=frame_time)
+                with self._frame_lock:
+                    if self._latest_frame is None:
+                        continue
+                    frame = self._latest_frame.copy()
+                    frame_time = self._latest_frame_time
 
-            # 2. Broadcast MJPEG preview to active viewers only
-            if mjpeg_streamer.has_clients(self.camera.id):
-                mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
-
-            # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
-            if self._is_recording_event:
-                if frame_time - self._last_record_append_time >= 0.048:  # ~20 FPS cap for recorded video
-                    self._last_record_append_time = frame_time
+                # 1. Update lightweight circular RAM ring buffer (~10 FPS, max 1280px)
+                if frame_time - last_ring_push >= 0.10:
+                    last_ring_push = frame_time
                     h, w = frame.shape[:2]
-                    if w > 1920:
-                        rec_scale = 1920.0 / w
-                        rec_frame = cv2.resize(frame, (1920, int(h * rec_scale)), interpolation=cv2.INTER_LINEAR)
+                    if w > 1280:
+                        scale = 1280.0 / w
+                        ring_frame = cv2.resize(frame, (1280, int(h * scale)), interpolation=cv2.INTER_LINEAR)
                     else:
-                        rec_frame = frame.copy()
-                    self._event_frames.append((rec_frame, frame_time))
-                    lpr_frame_counter += 1
+                        ring_frame = frame.copy()
+                    self.ring_buffer.push(ring_frame, is_keyframe=True, timestamp=frame_time)
 
-                    # Continuous multi-frame LPR scanning during vehicle movement (every 8th recorded frame)
-                    if lpr_frame_counter % 8 == 0:
-                        self._trigger_lpr_scan(frame, is_motion=True, motion_bboxes=current_bboxes)
-
-            now_monotonic = time.time()
-
-            # 3. Throttled Hybrid 2-Stage Vision Pipeline (MOG2 ROI Fusion + YOLO Track + LPR at 6-8 FPS)
-            if now_monotonic - last_motion_check >= motion_interval:
-                last_motion_check = now_monotonic
-
-                # 3A. Fast Pixel-Level ROI Motion Detection (MOG2)
-                orig_h, orig_w = frame.shape[:2]
-                scale_ratio = 400.0 / max(orig_w, 1)
-                target_w = 400
-                target_h = int(orig_h * scale_ratio)
-                small_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
-
-                is_mog2_motion, mog2_score, mog2_bboxes_small = self.motion_detector.process_frame(small_frame)
-                mog2_bboxes = [
-                    (int(x / scale_ratio), int(y / scale_ratio), int(bw / scale_ratio), int(bh / scale_ratio))
-                    for (x, y, bw, bh) in mog2_bboxes_small
-                ]
-
-                # 3B. Neural Object Tracking (YOLO) & Stage 2 LPR
-                is_yolo_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
-                    camera_id=self.camera.id,
-                    camera_name=self.camera.name,
-                    frame_bgr=frame,
-                    roi_polygon=getattr(self.camera, "roi_polygon", None),
-                    ignore_polygons=getattr(self.camera, "ignore_polygons", None),
-                    sensitivity=getattr(self.camera, "sensitivity", 20.0)
-                )
-
-                yolo_bboxes = [d["bbox"] for d in detections]
-                current_bboxes = yolo_bboxes if len(yolo_bboxes) > 0 else mog2_bboxes
-                yolo_score = max([d["confidence"] for d in detections], default=0.0)
-                current_score = max(yolo_score, mog2_score)
-
-                is_current_motion = is_mog2_motion or is_yolo_motion
-
-                if is_current_motion:
-                    self._last_motion_time = now_monotonic
-                    if not self._is_recording_event:
-                        # Minimum 3s cooldown between distinct event alerts
-                        if now_monotonic - self._last_alert_time > 3.0:
-                            self._last_alert_time = now_monotonic
-                            self._handle_motion_start_instant(frame, current_score, current_bboxes, frame_time)
-
-                # Process Stage 2 Plate Identification Event
-                if plate_payload:
-                    self._handle_plate_detection(frame, plate_payload, vehicle_crop)
-
-                # Check if configured video recording duration was reached
+                # 2. Continuous Smooth Event Recording (Zero Frame-Drops, Max 20 FPS, Memory Optimized)
                 if self._is_recording_event:
-                    duration_sec = float(getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10))
-                    total_recording_elapsed = now_monotonic - getattr(self, "_event_start_time", now_monotonic)
+                    if frame_time - self._last_record_append_time >= 0.048:  # ~20 FPS cap for recorded video
+                        self._last_record_append_time = frame_time
+                        h, w = frame.shape[:2]
+                        if w > 1920:
+                            rec_scale = 1920.0 / w
+                            rec_frame = cv2.resize(frame, (1920, int(h * rec_scale)), interpolation=cv2.INTER_LINEAR)
+                        else:
+                            rec_frame = frame.copy()
+                        self._event_frames.append((rec_frame, frame_time))
+                        lpr_frame_counter += 1
 
-                    # Continue recording until the user-configured duration is reached (e.g., 30s full security coverage)
-                    if total_recording_elapsed >= duration_sec:
-                        self._handle_motion_end_async()
+                now_monotonic = time.time()
+
+                # 3. Throttled Hybrid 2-Stage Vision Pipeline (MOG2 ROI Fusion + YOLO Track + LPR at 6-8 FPS)
+                if now_monotonic - last_motion_check >= motion_interval:
+                    last_motion_check = now_monotonic
+
+                    # 3A. Fast Pixel-Level ROI Motion Detection (MOG2)
+                    orig_h, orig_w = frame.shape[:2]
+                    scale_ratio = 400.0 / max(orig_w, 1)
+                    target_w = 400
+                    target_h = int(orig_h * scale_ratio)
+                    small_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+
+                    is_mog2_motion, mog2_score, mog2_bboxes_small = self.motion_detector.process_frame(small_frame)
+                    mog2_bboxes = [
+                        (int(x / scale_ratio), int(y / scale_ratio), int(bw / scale_ratio), int(bh / scale_ratio))
+                        for (x, y, bw, bh) in mog2_bboxes_small
+                    ]
+
+                    # 3B. Neural Object Tracking (YOLO) & Stage 2 LPR
+                    is_yolo_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
+                        camera_id=self.camera.id,
+                        camera_name=self.camera.name,
+                        frame_bgr=frame,
+                        roi_polygon=getattr(self.camera, "roi_polygon", None),
+                        ignore_polygons=getattr(self.camera, "ignore_polygons", None),
+                        sensitivity=getattr(self.camera, "sensitivity", 20.0)
+                    )
+
+                    yolo_bboxes = [d["bbox"] for d in detections]
+                    current_bboxes = yolo_bboxes if len(yolo_bboxes) > 0 else mog2_bboxes
+                    yolo_score = max([d["confidence"] for d in detections], default=0.0)
+                    current_score = max(yolo_score, mog2_score)
+
+                    is_current_motion = is_mog2_motion or is_yolo_motion
+
+                    if is_current_motion:
+                        self._last_motion_time = now_monotonic
+                        if not self._is_recording_event:
+                            # Minimum 3s cooldown between distinct event alerts
+                            if now_monotonic - self._last_alert_time > 3.0:
+                                self._last_alert_time = now_monotonic
+                                self._handle_motion_start_instant(frame, current_score, current_bboxes, frame_time)
+
+                    # Process Stage 2 Plate Identification Event
+                    if plate_payload:
+                        self._handle_plate_detection(frame, plate_payload, vehicle_crop)
+
+                    # Check if configured video recording duration was reached
+                    if self._is_recording_event:
+                        duration_sec = float(getattr(settings, "TELEGRAM_VIDEO_DURATION_SECONDS", 10))
+                        total_recording_elapsed = now_monotonic - getattr(self, "_event_start_time", now_monotonic)
+
+                        # Continue recording until the user-configured duration is reached
+                        if total_recording_elapsed >= duration_sec:
+                            self._handle_motion_end_async()
+
+            except Exception as err:
+                logger.error(f"[Câmera #{self.camera.id}] Erro no loop de processamento de IA/Movimento: {err}")
+                time.sleep(0.05)
 
     def _handle_plate_detection(
         self,
@@ -469,9 +470,6 @@ class StreamIngestor:
 
         snap_frame = current_frame.copy()
         bboxes_copy = list(bboxes)
-
-        # Trigger immediate LPR on motion start
-        self._trigger_lpr_scan(snap_frame, is_motion=True, motion_bboxes=bboxes_copy)
 
         # Retrieve pre-event window with exact timestamps (if enabled in settings)
         include_pre = getattr(settings, "TELEGRAM_INCLUDE_PREBUFFER", True)

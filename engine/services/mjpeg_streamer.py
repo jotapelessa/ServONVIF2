@@ -72,23 +72,22 @@ class MJPEGStreamer:
 
     async def generate_mjpeg_stream(self, camera_id: int) -> AsyncGenerator[bytes, None]:
         self.register_client(camera_id)
-        last_yielded_time = 0.0
+        last_yielded_frame_time = 0.0
         try:
             while True:
-                now_t = time.time()
                 with self._lock:
                     frame_bytes = self._latest_jpegs.get(camera_id)
                     frame_time = self._latest_timestamps.get(camera_id, 0.0)
 
-                if frame_bytes is not None and (frame_time > last_yielded_time or (now_t - frame_time) > 2.5):
-                    last_yielded_time = now_t
+                if frame_bytes is not None and frame_time > last_yielded_frame_time:
+                    last_yielded_frame_time = frame_time
                     yield (
                         b'--frame\r\n'
                         b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
                     )
 
-                # Sleep ~33ms (30 FPS polling) to yield cleanly to event loop
-                await asyncio.sleep(0.033)
+                # Poll at ~25ms (up to 40 FPS potential) to deliver fresh frames instantly
+                await asyncio.sleep(0.025)
         except asyncio.CancelledError:
             pass
         finally:
