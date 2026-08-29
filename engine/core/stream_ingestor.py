@@ -392,8 +392,10 @@ class StreamIngestor:
                         is_current_motion = True
                         current_bboxes = yolo_bboxes
                         current_score = yolo_score
-                    elif is_mog2_motion and getattr(self.motion_detector, "_consecutive_motion_count", 0) >= 3 and mog2_score > 0.02:
-                        # Sustained physical motion without classified neural object
+                    elif (is_mog2_motion
+                          and getattr(self.motion_detector, "_consecutive_motion_count", 0) >= 5  # [FIX C3] raised from 3 → 5
+                          and mog2_score > 0.05):  # [FIX C3] raised from 0.02 → 0.05 (eliminates shadow/foliage noise)
+                        # Sustained high-confidence physical motion without classified neural object
                         is_current_motion = True
                         current_bboxes = mog2_bboxes
                         current_score = mog2_score
@@ -406,8 +408,8 @@ class StreamIngestor:
                     if is_current_motion:
                         self._last_motion_time = now_monotonic
                         if not self._is_recording_event:
-                            # Minimum 3s cooldown between distinct event alerts
-                            if now_monotonic - self._last_alert_time > 3.0:
+                            # [FIX C4] 30s cooldown (was 3s) — prevents 1 car/person from firing 5+ duplicate alerts
+                            if now_monotonic - self._last_alert_time > 30.0:
                                 self._last_alert_time = now_monotonic
                                 self._handle_motion_start_instant(frame, current_score, current_bboxes, frame_time)
 

@@ -65,7 +65,7 @@ class VisionPipeline:
 
     def is_point_in_polygon(self, pt: Tuple[int, int], polygon: List[List[float]], width: int, height: int) -> bool:
         if not polygon or len(polygon) < 3:
-            return True
+            return False  # [FIX C1] Invalid/empty polygon = point is NOT inside — prevents unbounded detections
         pts = []
         for p in polygon:
             px = int(round(p[0] * width)) if p[0] <= 1.0 else int(p[0])
@@ -88,9 +88,10 @@ class VisionPipeline:
     ) -> bool:
         """
         Determines if a bounding box is in the valid detection zone:
-        - Ground base point (cx, y2) and center (cx, cy) are evaluated.
-        - Purple Ignore Zones strictly suppress foliage, streets, and neighbor areas.
-        - Cyan ROI Zone restricts detection to the designated perimeter.
+        - Ground base point (cx, y2) and center (cx, cy) are both evaluated.
+        - Purple Ignore Zones: if EITHER point is inside → suppress (strict).
+        - Cyan ROI Zone: BOTH base AND center must be inside the ROI → approve.
+          If no ROI is configured → allow all (camera-wide detection mode).
         """
         cx = int((x1 + x2) / 2)
         cy = int((y1 + y2) / 2)
@@ -99,23 +100,24 @@ class VisionPipeline:
         center_pt = (cx, cy)
 
         # 1. Check Purple Ignore Zones first (strict noise suppression)
+        # ANY point inside ignore zone → suppress
         if ignore_polygons:
             for ig_poly in ignore_polygons:
                 if ig_poly and len(ig_poly) >= 3:
-                    # If feet/base or center is in the ignore zone, suppress
-                    if (self.is_point_in_polygon(base_pt, ig_poly, width, height) or 
-                        self.is_point_in_polygon(center_pt, ig_poly, width, height)):
+                    if (self.is_point_in_polygon(base_pt, ig_poly, width, height) or
+                            self.is_point_in_polygon(center_pt, ig_poly, width, height)):
                         return False
 
         # 2. Check Cyan ROI Polygon (if configured)
         if roi_polygon and len(roi_polygon) >= 3:
+            # [FIX C2] BOTH points must be inside ROI — prevents large objects partially overlapping
             in_roi = (
-                self.is_point_in_polygon(base_pt, roi_polygon, width, height) or
+                self.is_point_in_polygon(base_pt, roi_polygon, width, height) and
                 self.is_point_in_polygon(center_pt, roi_polygon, width, height)
             )
             return in_roi
 
-        # 3. If no ROI is configured and not in ignore zone, allow detection
+        # 3. No ROI configured → allow detection anywhere (not in ignore zone)
         return True
 
     def process_frame(
@@ -146,8 +148,11 @@ class VisionPipeline:
         h, w = frame_bgr.shape[:2]
         self.tracker_manager.cleanup_old_tracks()
 
-        # Minimum confidence threshold adjusted by sensitivity (20 is default 0.35)
-        conf_thresh = max(0.20, min(0.65, 0.55 - (sensitivity / 100.0)))
+        # [FIX C5] Sensitivity scale unified: 0-50 (same as MotionDetector).
+        # Formula: sens=0 → conf=0.55 (strict), sens=50 → conf=0.20 (permissive)
+        # Was: sensitivity / 100.0 (wrong scale, had almost no effect on real 0-50 values)
+        sens_norm = max(0.0, min(50.0, float(sensitivity)))
+        conf_thresh = max(0.20, min(0.55, 0.55 - (sens_norm / 100.0)))
 
         # 1. Run YOLO Tracking (classes: person=0, car=2, moto=3, bus=5, truck=7)
         try:
