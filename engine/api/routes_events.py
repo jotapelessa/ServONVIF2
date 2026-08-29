@@ -55,6 +55,7 @@ def _populate_event_file_size(event: MotionEvent) -> MotionEvent:
         event.file_size_formatted = "--"
     return event
 
+@router.get("", response_model=List[MotionEvent])
 @router.get("/", response_model=List[MotionEvent])
 async def list_events(
     camera_id: Optional[int] = None,

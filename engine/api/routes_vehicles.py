@@ -34,6 +34,7 @@ class PlateSimulationRequest(BaseModel):
     plate_number: str
     confidence: Optional[float] = 0.98
 
+@router.get("", response_model=List[Vehicle])
 @router.get("/", response_model=List[Vehicle])
 async def list_vehicles(session: AsyncSession = Depends(get_db)):
     """Lista todos os veículos cadastrados"""

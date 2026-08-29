@@ -175,6 +175,7 @@ async def ping_server(request: Request):
 async def get_realtime_metrics():
     return get_system_metrics()
 
+@router.get("")
 @router.get("/")
 async def get_current_settings():
     local_ip = get_local_ip()

@@ -43,6 +43,7 @@ class ROISetPayload(BaseModel):
     roi_polygon: Optional[List[List[float]]] = None
     ignore_polygons: Optional[List[List[List[float]]]] = None
 
+@router.get("", response_model=List[Camera])
 @router.get("/", response_model=List[Camera])
 async def list_cameras(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Camera))
