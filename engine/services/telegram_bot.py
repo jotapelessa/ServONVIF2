@@ -181,6 +181,51 @@ def format_vault_caption(
     return caption
 
 
+def diagnose_telegram_error(e: Exception) -> str:
+    err_str = str(e)
+    if "nodename nor servname provided" in err_str or "Errno 8" in err_str or "getaddrinfo" in err_str or "NameResolutionError" in err_str:
+        return (
+            "❌ Falha de Conexão com a Internet / DNS:\n"
+            "O servidor não conseguiu resolver o endereço 'api.telegram.org' (DNS [Errno 8]).\n\n"
+            "🔍 Diagnóstico e Solução:\n"
+            "1. Verifique se o seu computador/servidor está conectado à internet pública.\n"
+            "2. Se estiver usando Tailscale ou VPN, confira se o DNS está configurado para internet externa.\n"
+            "3. Teste a conexão abrindo um terminal e digitando: ping -c 2 api.telegram.org"
+        )
+    elif "ConnectTimeout" in err_str or "TimeoutException" in err_str or "timed out" in err_str:
+        return (
+            "⏱️ Tempo Limite Esgotado (Timeout):\n"
+            "A API do Telegram demorou muito para responder. Verifique a estabilidade da sua conexão com a internet."
+        )
+    elif "401" in err_str or "Unauthorized" in err_str:
+        return (
+            "🔑 Token do Bot Inválido (HTTP 401):\n"
+            "O Telegram rejeitou o token fornecido. Verifique o Token gerado pelo @BotFather e salve novamente."
+        )
+    elif "chat not found" in err_str or "400" in err_str:
+        return (
+            "💬 Chat ID Não Encontrado (HTTP 400):\n"
+            "O bot não conseguiu enviar mensagem para o Chat ID fornecido. Abra o Telegram, procure seu bot e envie /start primeiro!"
+        )
+    return f"Falha de conexão com Telegram: {err_str}"
+
+
+def diagnose_telegram_response(status_code: int, response_text: str) -> str:
+    try:
+        data = json.loads(response_text)
+        desc = data.get("description", response_text)
+    except Exception:
+        desc = response_text
+
+    if status_code == 401:
+        return f"🔑 Token Inválido (HTTP 401): {desc}. Verifique o Token obtido no @BotFather."
+    elif status_code == 400 and "chat not found" in desc.lower():
+        return f"💬 Chat ID Inválido (HTTP 400): {desc}. Abra o Telegram, procure seu bot e envie /start primeiro!"
+    elif status_code == 403:
+        return f"🚫 Acesso Bloqueado (HTTP 403): {desc}. O bot foi bloqueado pelo usuário ou não tem permissão para enviar mensagens."
+    return f"Erro na API do Telegram (HTTP {status_code}): {desc}"
+
+
 class TelegramService:
     """
     Asynchronous Telegram Bot notification & Cloud Vault storage client using official Telegram Bot HTTP API.
@@ -432,8 +477,9 @@ class TelegramService:
                     return False, f"Erro do Telegram: {err_desc}"
         except Exception as e:
             elapsed = round(time.time() - t0, 2)
+            diag = diagnose_telegram_error(e)
             logger.error(f"[Telegram Bot] ❌ Erro de conexão ao enviar backup JSON ao Telegram: {e} (Tempo: {elapsed}s)")
-            return False, f"Falha de conexão com Telegram: {str(e)}"
+            return False, diag
 
     async def send_test_message(self, custom_token: Optional[str] = None, custom_chat_id: Optional[str] = None) -> tuple[bool, str]:
         token = custom_token or self.bot_token
@@ -470,9 +516,9 @@ class TelegramService:
                 if response.status_code == 200:
                     return True, "Mensagem de teste do Cloud Vault com hashtags enviada com sucesso ao Telegram!"
                 else:
-                    return False, f"Erro na API do Telegram: {response.text}"
+                    return False, diagnose_telegram_response(response.status_code, response.text)
         except Exception as e:
-            return False, f"Falha na requisição: {str(e)}"
+            return False, diagnose_telegram_error(e)
 
     async def send_test_photo(self, camera_id: Optional[int] = None) -> tuple[bool, str]:
         from engine.core.camera_manager import camera_manager
