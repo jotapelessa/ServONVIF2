@@ -110,6 +110,7 @@ class VisionPipeline:
             results = self.model.track(
                 frame_bgr,
                 persist=True,
+                tracker="bytetrack.yaml",
                 classes=self.TARGET_CLASSES,
                 conf=conf_thresh,
                 device=self.device,

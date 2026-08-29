@@ -2,6 +2,7 @@ import asyncio
 import threading
 import time
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable, List, Tuple
@@ -170,9 +171,45 @@ class StreamIngestor:
                 "max_delay;500000|"
                 "stimeout;3000000"
             )
-            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+            cap = cv2.VideoCapture(rtsp_url)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             return cap
+
+    def _try_fallback_urls(self, original_url: str) -> Optional[str]:
+        """
+        If the configured URL is failing, quickly probes standard endpoints on the same IP.
+        E.g. switches broken /video to rtsp://...:8554/stream or /live/0/MAIN.
+        """
+        ip = getattr(self.camera, "ip_address", None)
+        if not ip:
+            m = re.search(r'://(?:[^:/@]+@)?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', original_url)
+            if m:
+                ip = m.group(1)
+        if not ip:
+            return None
+
+        candidates = [
+            f"rtsp://{ip}:8554/stream",
+            f"rtsp://{ip}:554/live/0/MAIN",
+            f"rtsp://admin:admin@{ip}:1935/live",
+            f"http://{ip}:8080/shot.jpg",
+            f"http://{ip}:8080/video",
+            f"http://{ip}:4747/video",
+        ]
+
+        for cand in candidates:
+            if cand == original_url:
+                continue
+            try:
+                test_cap = cv2.VideoCapture(cand)
+                ret, frame = test_cap.read()
+                test_cap.release()
+                if ret and frame is not None:
+                    logger.success(f"[Câmera #{self.camera.id}] 🔄 Fallback automático detectou fluxo ativo em: {cand}")
+                    return cand
+            except Exception:
+                pass
+        return None
 
     def _grabber_loop(self) -> None:
         """
@@ -183,6 +220,7 @@ class StreamIngestor:
         cap = self._create_capture(rtsp_url)
         frames_since_connect = 0
         reconnect_backoff = 2.0
+        consecutive_failures = 0
 
         while self.is_running:
             if self.is_paused:
@@ -196,6 +234,7 @@ class StreamIngestor:
                     self.is_online = False
                     self._latest_frame = None
 
+                consecutive_failures += 1
                 if not self._was_logged_offline:
                     self._was_logged_offline = True
                     logger.warning(
@@ -208,6 +247,13 @@ class StreamIngestor:
                     offline_img = self._generate_offline_frame()
                     mjpeg_streamer.broadcast_frame(self.camera.id, offline_img, quality=70, max_fps=2.0)
 
+                # After 2 failures, try auto-detecting working stream on same host
+                if consecutive_failures >= 2 and consecutive_failures % 3 == 0:
+                    fallback = self._try_fallback_urls(rtsp_url)
+                    if fallback:
+                        rtsp_url = fallback
+                        self.camera.rtsp_url = fallback
+
                 frames_since_connect = 0
                 time.sleep(reconnect_backoff)
                 reconnect_backoff = min(reconnect_backoff * 1.5, 15.0)
@@ -215,6 +261,7 @@ class StreamIngestor:
                 cap = self._create_capture(rtsp_url)
                 continue
 
+            consecutive_failures = 0
             reconnect_backoff = 2.0
             frames_since_connect += 1
             # Skip the first 4 frames on fresh connection to allow full I-frame POC sync
