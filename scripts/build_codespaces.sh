@@ -95,17 +95,44 @@ unset _JAVA_OPTIONS 2>/dev/null || true
 export GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true"
 
 # 3. Configurar Java 17
+echo "☕ Configurando Java 17..."
 if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
     export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 elif [ -d "/usr/lib/jvm/java-1.17.0-openjdk-amd64" ]; then
     export JAVA_HOME="/usr/lib/jvm/java-1.17.0-openjdk-amd64"
-else
-    JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" | head -n 1)
+elif [ -n "$SDKMAN_DIR" ] && [ -d "$SDKMAN_DIR/candidates/java" ]; then
+    JAVA_17_PATH=$(find "$SDKMAN_DIR/candidates/java" -maxdepth 1 -name "17.*" | head -n 1)
     if [ -n "$JAVA_17_PATH" ]; then
         export JAVA_HOME="$JAVA_17_PATH"
     fi
+else
+    if [ -d "/usr/lib/jvm" ]; then
+        JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" 2>/dev/null | head -n 1)
+        if [ -n "$JAVA_17_PATH" ]; then
+            export JAVA_HOME="$JAVA_17_PATH"
+        fi
+    fi
 fi
-export PATH="$JAVA_HOME/bin:$PATH"
+
+if [ -z "$JAVA_HOME" ]; then
+    echo "⚠️ Java 17 não encontrado em caminhos padrões. Instalando openjdk-17-jdk-headless..."
+    sudo apt-get update -y >/dev/null 2>&1 || true
+    sudo apt-get install -y openjdk-17-jdk-headless >/dev/null 2>&1 || true
+    if [ -d "/usr/lib/jvm" ]; then
+        JAVA_17_PATH=$(find /usr/lib/jvm -maxdepth 1 -name "*17*" 2>/dev/null | head -n 1)
+        if [ -n "$JAVA_17_PATH" ]; then
+            export JAVA_HOME="$JAVA_17_PATH"
+        fi
+    fi
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+    echo "✅ JAVA_HOME definido para: $JAVA_HOME"
+else
+    echo "⚠️ Não foi possível definir JAVA_HOME. Usando java do sistema."
+fi
+java -version
 
 # 4. Configurar Android SDK
 if [ -d "/usr/local/lib/android/sdk" ]; then
@@ -117,6 +144,11 @@ else
 fi
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+# Criar local.properties para a pasta android/
+cat << EOF > "$WORKSPACE_DIR/android/local.properties"
+sdk.dir=$ANDROID_HOME
+EOF
 
 # 5. Garantir Gradle Wrapper JAR
 mkdir -p "$WORKSPACE_DIR/android/gradle/wrapper"
