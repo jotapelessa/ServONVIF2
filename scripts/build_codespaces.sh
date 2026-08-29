@@ -143,17 +143,50 @@ fi
 "$JAVA_HOME/bin/java" -version 2>&1 | head -n 2 || java -version 2>&1 | head -n 2
 
 # 4. Configurar Android SDK
-if [ -d "/usr/local/lib/android/sdk" ]; then
-    export ANDROID_HOME="/usr/local/lib/android/sdk"
-elif [ -d "$HOME/android-sdk" ]; then
-    export ANDROID_HOME="$HOME/android-sdk"
-else
-    export ANDROID_HOME="$HOME/android-sdk"
-fi
+echo "📱 Configurando Android SDK..."
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
+
+for candidate in \
+    "$ANDROID_HOME" \
+    /usr/local/lib/android/sdk \
+    /opt/android-sdk \
+    /usr/lib/android-sdk \
+    $HOME/android-sdk
+do
+    if [ -d "$candidate/platforms" ] || [ -d "$candidate/cmdline-tools" ]; then
+        export ANDROID_HOME="$candidate"
+        break
+    fi
+done
+
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ] && [ ! -d "$ANDROID_HOME/platforms/android-34" ]; then
+    echo "📥 Instalando Android SDK Command-line Tools e Platform 34 no Codespaces..."
+    mkdir -p "$ANDROID_HOME/cmdline-tools"
+    TMP_ZIP="/tmp/cmdline-tools.zip"
+    wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O "$TMP_ZIP" || curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o "$TMP_ZIP"
+    rm -rf "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/cmdline-tools" 2>/dev/null || true
+    unzip -q -o "$TMP_ZIP" -d "$ANDROID_HOME/cmdline-tools"
+    mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+    rm -f "$TMP_ZIP"
+
+    echo "📜 Aceitando licenças do Android SDK..."
+    yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+    echo "📦 Baixando Android Platform 34 e Build-Tools 34.0.0..."
+    "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null 2>&1 || true
+fi
+
+# Garantir licenças aceitas
+if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+    yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+fi
+
+echo "✅ Android SDK configurado em: $ANDROID_HOME"
 
 # Criar local.properties para a pasta android/
+mkdir -p "$WORKSPACE_DIR/android"
 cat << EOF > "$WORKSPACE_DIR/android/local.properties"
 sdk.dir=$ANDROID_HOME
 EOF
