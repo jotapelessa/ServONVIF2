@@ -548,18 +548,43 @@ async def get_pairing_qr_code(host: Optional[str] = None):
 # ================= DIAGNOSTICS & SYSTEM CONTROL ENDPOINTS =================
 
 @router.get("/diagnostics/logs")
-async def get_system_logs(limit: int = 100, level: str = "ALL"):
+async def get_system_logs(limit: int = 150, level: str = "ALL"):
     """
     Returns structured logs and pre-formatted Markdown for 1-click clipboard reporting to Antigravity.
+    Supports camera-specific diagnostics and telemetry.
     """
+    import time
     from engine.core.camera_manager import camera_manager
     local_ip = get_local_ip()
-    logs = log_buffer.get_logs(limit=limit, level_filter=level)
     
-    active_cams = [
-        {"id": cid, "name": ing.camera.name, "rtsp": ing.camera.rtsp_url, "running": ing.is_running}
-        for cid, ing in camera_manager.ingestors.items()
-    ]
+    if level == "CAMERAS":
+        all_logs = log_buffer.get_logs(limit=limit * 2, level_filter=None)
+        camera_keywords = ["[Câmera", "[Varredura", "[Gerenciador de Câmeras]", "RTSP", "ONVIF", "Fluxo", "StreamIngestor", "SEM SINAL", "CONECTADO"]
+        logs = [
+            l for l in all_logs
+            if any(k in l["message"] for k in camera_keywords) or "camera" in l["module"].lower() or "discovery" in l["module"].lower()
+        ][-limit:]
+    else:
+        logs = log_buffer.get_logs(limit=limit, level_filter=level)
+    
+    now = time.time()
+    active_cams = []
+    for cid, ing in camera_manager.ingestors.items():
+        is_online = getattr(ing, "is_online", False)
+        res = getattr(ing, "stream_resolution", "Desconhecido")
+        last_time = getattr(ing, "_latest_frame_time", 0.0)
+        age = round(now - last_time, 1) if last_time > 0 else None
+        
+        active_cams.append({
+            "id": cid,
+            "name": ing.camera.name,
+            "rtsp": ing.camera.rtsp_url,
+            "running": ing.is_running,
+            "online": is_online,
+            "resolution": res,
+            "last_frame_age_seconds": age,
+            "status_label": "ONLINE" if is_online else ("RECONECTANDO..." if ing.is_running else "OFFLINE"),
+        })
 
     total_ws = len(ws_hub.active_connections)
     storage = get_media_storage_stats()
@@ -573,15 +598,15 @@ async def get_system_logs(limit: int = 100, level: str = "ALL"):
     ]
     if active_cams:
         for c in active_cams:
-            status_emoji = "🟢" if c["running"] else "🔴"
-            lines.append(f"  • {status_emoji} ID #{c['id']} - `{c['name']}` ({c['rtsp']})")
+            status_emoji = "🟢" if c["online"] else ("🟡" if c["running"] else "🔴")
+            lines.append(f"  • {status_emoji} ID #{c['id']} - `{c['name']}` ({c['rtsp']}) | Resolução: {c['resolution']} | Status: {c['status_label']}")
     else:
         lines.append("  • Nenhuma câmera ativa no momento")
 
     lines.append(f"- **Armazenamento de Vídeos:** {storage['total_files']} arquivos ({storage['total_size_mb']} MB)")
     lines.append("\n#### 📋 Registros de Log Recentes:")
     lines.append("```text")
-    for log in logs[-80:]:
+    for log in logs[-100:]:
         lines.append(f"[{log['timestamp']}] [{log['level']}] {log['module']}:{log['function']}:{log['line']} - {log['message']}")
     lines.append("```")
 

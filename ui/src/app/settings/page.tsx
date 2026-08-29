@@ -296,6 +296,8 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
   const [logsData, setLogsData] = useState<any>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logLevelFilter, setLogLevelFilter] = useState("ALL");
+  const [logSearchText, setLogSearchText] = useState("");
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   // Backup & Server Operations State
@@ -918,6 +920,12 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     }
     if (activeTab === "logs") {
       fetchLogs();
+      if (autoRefreshLogs) {
+        const timer = setInterval(() => {
+          fetchLogs();
+        }, 3000);
+        return () => clearInterval(timer);
+      }
     }
     if (activeTab === "devices") {
       fetchDevices();
@@ -928,7 +936,7 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
     if (activeTab === "storage") {
       fetchStorageDetailed(true);
     }
-  }, [activeTab, logLevelFilter]);
+  }, [activeTab, logLevelFilter, autoRefreshLogs]);
 
   const handleCopyLogsForAntigravity = () => {
     if (!logsData?.markdown_report) return;
@@ -3793,21 +3801,33 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                 </div>
               )}
 
-              {/* ================= TAB: LOGS & ANTIGRAVITY ================= */}
+              {/* ================= TAB: LOGS & PROCESSOS DAS CÂMERAS ================= */}
               {activeTab === "logs" && (
                 <div className="space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                         <Terminal className="w-5 h-5 text-cyan-400" />
-                        <span>Telemetria &amp; Relatório para o Antigravity</span>
+                        <span>Telemetria, Câmeras &amp; Relatório Antigravity</span>
                       </h2>
                       <p className="text-xs text-slate-400 mt-1">
-                        Copie todos os logs com 1 clique para colar no Antigravity e diagnosticar qualquer problema.
+                        Acompanhe todos os processos das câmeras (varredura, conexão RTSP, resolução, status de imagem e erros) em tempo real.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => setAutoRefreshLogs(!autoRefreshLogs)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          autoRefreshLogs
+                            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                            : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${autoRefreshLogs ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                        <span>{autoRefreshLogs ? "Ao Vivo (3s)" : "Pausado"}</span>
+                      </button>
+
                       <button
                         onClick={fetchLogs}
                         disabled={logsLoading}
@@ -3826,6 +3846,66 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                       </button>
                     </div>
                   </div>
+
+                  {/* Real-Time Camera Telemetry Cards */}
+                  {logsData?.active_cameras && logsData.active_cameras.length > 0 && (
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                          <Video className="w-4 h-4 text-cyan-400" />
+                          <span>Status das Câmeras em Tempo Real</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          {logsData.active_cameras.filter((c: any) => c.online).length}/{logsData.active_cameras.length} Online
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {logsData.active_cameras.map((cam: any) => (
+                          <div
+                            key={cam.id}
+                            className={`p-3 rounded-lg border flex flex-col justify-between transition-all ${
+                              cam.online
+                                ? "bg-emerald-950/20 border-emerald-500/30"
+                                : cam.running
+                                ? "bg-amber-950/20 border-amber-500/30"
+                                : "bg-rose-950/20 border-rose-500/30"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-semibold text-xs text-slate-100 truncate">
+                                #{cam.id} {cam.name}
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                  cam.online
+                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    : cam.running
+                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                    : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${cam.online ? "bg-emerald-400" : cam.running ? "bg-amber-400 animate-pulse" : "bg-rose-400"}`} />
+                                {cam.status_label || (cam.online ? "ONLINE" : "OFFLINE")}
+                              </span>
+                            </div>
+
+                            <div className="mt-2 space-y-1 text-[11px]">
+                              <div className="text-slate-400 truncate font-mono text-[10px]" title={cam.rtsp}>
+                                🔗 {cam.rtsp}
+                              </div>
+                              <div className="flex items-center justify-between text-slate-300 text-[11px] pt-1 border-t border-slate-800/60">
+                                <span>Resolução: <strong className="text-cyan-400">{cam.resolution || "Detectando..."}</strong></span>
+                                {cam.last_frame_age_seconds !== null && (
+                                  <span className="text-slate-400">Último frame: <strong className="text-slate-200">{cam.last_frame_age_seconds}s</strong> atrás</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Telemetry Summary Cards */}
                   {logsData?.summary && (
@@ -3860,55 +3940,114 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     </div>
                   )}
 
-                  {/* Level Filters */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 mr-2">Filtrar:</span>
-                    {["ALL", "INFO", "WARNING", "ERROR", "DEBUG"].map((lvl) => (
-                      <button
-                        key={lvl}
-                        onClick={() => setLogLevelFilter(lvl)}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                          logLevelFilter === lvl
-                            ? "bg-slate-700 text-white font-semibold"
-                            : "bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                        }`}
-                      >
-                        {lvl === "ALL" && "Todos"}
-                        {lvl === "INFO" && "🟢 Info"}
-                        {lvl === "WARNING" && "🟡 Avisos"}
-                        {lvl === "ERROR" && "🔴 Erros"}
-                        {lvl === "DEBUG" && "⚙️ Debug"}
-                      </button>
-                    ))}
+                  {/* Filter & Search Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-xl">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-slate-400 mr-1 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" />
+                        <span>Filtro:</span>
+                      </span>
+                      {[
+                        { id: "ALL", label: "Todos" },
+                        { id: "CAMERAS", label: "📹 Câmeras & Vídeo" },
+                        { id: "INFO", label: "🟢 Info" },
+                        { id: "WARNING", label: "🟡 Avisos" },
+                        { id: "ERROR", label: "🔴 Erros" },
+                        { id: "DEBUG", label: "⚙️ Debug" },
+                      ].map((lvl) => (
+                        <button
+                          key={lvl.id}
+                          onClick={() => setLogLevelFilter(lvl.id)}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            logLevelFilter === lvl.id
+                              ? "bg-cyan-600 text-white font-semibold shadow"
+                              : "bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700"
+                          }`}
+                        >
+                          {lvl.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative min-w-[240px]">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={logSearchText}
+                        onChange={(e) => setLogSearchText(e.target.value)}
+                        placeholder="Buscar nos logs (ex: Xiaomi, 8554, Varredura)..."
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      />
+                      {logSearchText && (
+                        <button
+                          onClick={() => setLogSearchText("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-200"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Logs Terminal Box */}
-                  <div className="bg-[#020617] border border-slate-800/80 rounded-xl p-4 font-mono text-xs overflow-x-auto max-h-[480px] overflow-y-auto space-y-1 select-text">
-                    {logsData?.logs && logsData.logs.length > 0 ? (
-                      logsData.logs.map((log: any, idx: number) => {
+                  <div className="bg-[#020617] border border-slate-800/80 rounded-xl p-4 font-mono text-xs overflow-x-auto max-h-[520px] overflow-y-auto space-y-1 select-text">
+                    {(() => {
+                      const allLogs = logsData?.logs || [];
+                      const filteredLogs = logSearchText.trim()
+                        ? allLogs.filter(
+                            (l: any) =>
+                              l.message?.toLowerCase().includes(logSearchText.toLowerCase()) ||
+                              l.module?.toLowerCase().includes(logSearchText.toLowerCase()) ||
+                              l.function?.toLowerCase().includes(logSearchText.toLowerCase())
+                          )
+                        : allLogs;
+
+                      if (filteredLogs.length === 0) {
+                        return (
+                          <div className="text-slate-500 py-12 text-center flex flex-col items-center justify-center gap-2">
+                            <Terminal className="w-8 h-8 text-slate-600" />
+                            <span>Nenhum log encontrado para o filtro selecionado.</span>
+                          </div>
+                        );
+                      }
+
+                      return filteredLogs.map((log: any, idx: number) => {
                         const levelColor =
                           log.level === "ERROR"
-                            ? "text-rose-400 bg-rose-500/10 px-1 rounded"
+                            ? "text-rose-400 bg-rose-500/10 px-1 rounded font-bold"
                             : log.level === "WARNING"
-                            ? "text-amber-400"
+                            ? "text-amber-400 bg-amber-500/10 px-1 rounded font-bold"
+                            : log.level === "SUCCESS"
+                            ? "text-emerald-400 bg-emerald-500/10 px-1 rounded font-bold"
                             : log.level === "INFO"
-                            ? "text-emerald-400"
+                            ? "text-cyan-400"
                             : "text-slate-500";
 
+                        const isCameraLog =
+                          log.message?.includes("[Câmera") ||
+                          log.message?.includes("[Varredura") ||
+                          log.message?.includes("[Gerenciador") ||
+                          log.message?.includes("RTSP") ||
+                          log.message?.includes("SEM SINAL") ||
+                          log.message?.includes("CONECTADO");
+
                         return (
-                          <div key={idx} className="leading-relaxed hover:bg-slate-900/50 py-0.5 px-1 rounded">
+                          <div
+                            key={idx}
+                            className={`leading-relaxed hover:bg-slate-900/70 py-1 px-2 rounded transition-colors ${
+                              isCameraLog ? "bg-slate-900/30 border-l-2 border-cyan-500/40" : ""
+                            }`}
+                          >
                             <span className="text-slate-500">[{log.timestamp}]</span>{" "}
-                            <span className={`font-semibold ${levelColor}`}>[{log.level}]</span>{" "}
+                            <span className={`text-[10px] ${levelColor}`}>[{log.level}]</span>{" "}
                             <span className="text-slate-400">
                               {log.module}:{log.function}:{log.line}
                             </span>{" "}
-                            - <span className="text-slate-200">{log.message}</span>
+                            - <span className="text-slate-200 font-sans text-xs">{log.message}</span>
                           </div>
                         );
-                      })
-                    ) : (
-                      <div className="text-slate-500 py-8 text-center">Nenhum log encontrado para o filtro selecionado.</div>
-                    )}
+                      });
+                    })()}
                   </div>
                 </div>
               )}

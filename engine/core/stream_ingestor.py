@@ -62,6 +62,9 @@ class StreamIngestor:
         self._last_periodic_lpr_time = 0.0
         self._stationary_plates_seen: dict[str, float] = {}
         self.is_paused = False
+        self.stream_resolution = "Desconhecido"
+        self.fps = 0.0
+        self._was_logged_offline = False
 
     def get_current_frame(self) -> np.ndarray:
         """Returns the latest active frame, or a dynamic 'SEM SINAL' frame if the camera is offline."""
@@ -102,13 +105,13 @@ class StreamIngestor:
     def pause(self) -> None:
         """Pauses frame grabbing, MOG2 and LPR processing to drop CPU to 0%."""
         self.is_paused = True
-        logger.info(f"⏸️ StreamIngestor PAUSED for camera [{self.camera.id}] {self.camera.name} (Standby Mode)")
+        logger.info(f"[Câmera #{self.camera.id} - '{self.camera.name}'] ⏸️ Fluxo de vídeo PAUSADO (Standby)")
 
     def resume(self) -> None:
         """Resumes active frame grabbing, MOG2 and LPR processing instantly."""
         self.is_paused = False
         self._new_frame_event.set()
-        logger.info(f"▶️ StreamIngestor RESUMED for camera [{self.camera.id}] {self.camera.name}")
+        logger.info(f"[Câmera #{self.camera.id} - '{self.camera.name}'] ▶️ Fluxo de vídeo RETOMADO")
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         if self.is_running:
@@ -132,16 +135,16 @@ class StreamIngestor:
         )
         self._processor_thread.start()
 
-        logger.info(f"Zero-Latency Ingestor started for camera [{self.camera.id}] {self.camera.name}")
+        logger.info(f"[Câmera #{self.camera.id} - '{self.camera.name}'] 🚀 Ingestor iniciado. Conectando em: {self.camera.rtsp_url}")
 
     def stop(self) -> None:
         self.is_running = False
         self._new_frame_event.set()
         if self._grabber_thread and self._grabber_thread.is_alive():
-            self._grabber_thread.join(timeout=1.5)
+            self._grabber_thread.join(timeout=1.0)
         if self._processor_thread and self._processor_thread.is_alive():
-            self._processor_thread.join(timeout=1.5)
-        logger.info(f"Stream ingestor stopped for camera [{self.camera.id}] {self.camera.name}")
+            self._processor_thread.join(timeout=1.0)
+        logger.info(f"[Câmera #{self.camera.id} - '{self.camera.name}'] ⏹️ Ingestor finalizado")
 
     def update_config(self, camera: Camera) -> None:
         self.camera = camera
@@ -187,10 +190,17 @@ class StreamIngestor:
 
             ret, frame = cap.read()
             if not ret or frame is None:
-                # Camera is offline / unplugged
+                # Camera is offline / unplugged / no signal
                 with self._frame_lock:
                     self.is_online = False
                     self._latest_frame = None
+
+                if not self._was_logged_offline:
+                    self._was_logged_offline = True
+                    logger.warning(
+                        f"[Câmera #{self.camera.id} - '{self.camera.name}'] 🔴 SEM SINAL / DESCONECTADA ({rtsp_url}). "
+                        f"Tentando reconexão automática em {reconnect_backoff:.1f}s..."
+                    )
 
                 # Broadcast offline placeholder to web/mobile clients
                 if mjpeg_streamer.has_clients(self.camera.id):
@@ -213,6 +223,16 @@ class StreamIngestor:
             # Quality check: skip corrupted/gray uninitialized macroblock frames (stddev < 4.0)
             if np.std(frame) < 4.0:
                 continue
+
+            h, w = frame.shape[:2]
+            self.stream_resolution = f"{w}x{h}"
+
+            if self._was_logged_offline or frames_since_connect == 5:
+                self._was_logged_offline = False
+                logger.success(
+                    f"[Câmera #{self.camera.id} - '{self.camera.name}'] 🟢 FLUXO DE VÍDEO CONECTADO! "
+                    f"Resolução: {w}x{h} px | URL: {rtsp_url}"
+                )
 
             now = time.time()
             cloned_frame = frame.copy()

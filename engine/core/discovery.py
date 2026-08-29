@@ -47,13 +47,18 @@ class ONVIFDiscovery:
         """
         discovered_map: Dict[str, Dict[str, Any]] = {}
 
-        # 0. If a specific IP is requested, run ultra-fast targeted probe first
+        # 0. Discovery initialization log
         if custom_ip and custom_ip.strip():
             ip_clean = custom_ip.strip()
+            logger.info(f"[Varredura de Câmeras] 🎯 Sondando diretamente o endereço IP alvo: {ip_clean}...")
             direct_cam = await cls._probe_single_ip(ip_clean)
             if direct_cam:
                 discovered_map[ip_clean] = direct_cam
-                logger.info(f"Targeted Scan: Discovered Camera at {ip_clean}")
+                logger.success(f"[Varredura de Câmeras] ✅ Câmera encontrada no IP {ip_clean}! URL: {direct_cam['default_rtsp']} ({direct_cam['type']})")
+            else:
+                logger.warning(f"[Varredura de Câmeras] ⚠️ Nenhuma câmera ativa respondeu no IP {ip_clean}")
+        else:
+            logger.info(f"[Varredura de Câmeras] 🔍 Iniciando varredura ampla na rede local (Portas ONVIF, RTSP e Smartphone)...")
 
         # 1. Run ONVIF WS-Discovery concurrently
         onvif_task = asyncio.create_task(cls._discover_onvif(timeout_seconds=2.0))
@@ -66,15 +71,21 @@ class ONVIFDiscovery:
             if isinstance(onvif_results, list):
                 for cam in onvif_results:
                     discovered_map[cam["ip"]] = cam
-                    logger.info(f"Discovered ONVIF Camera: {cam['ip']}")
+                    logger.success(f"[Varredura de Câmeras] ✅ Câmera ONVIF descoberta: {cam['ip']} ({cam['onvif_service_url']})")
 
             if isinstance(port_results, list):
                 for cam in port_results:
                     if cam["ip"] not in discovered_map:
                         discovered_map[cam["ip"]] = cam
-                        logger.info(f"Discovered IP Camera via Port Scan: {cam['ip']}:{cam['port']} ({cam['type']})")
+                        logger.success(f"[Varredura de Câmeras] ✅ Câmera IP descoberta: {cam['name']} ({cam['ip']}:{cam['port']}) -> {cam['default_rtsp']}")
         except Exception as e:
-            logger.warning(f"Discovery aggregation notice: {e}")
+            logger.warning(f"[Varredura de Câmeras] Aviso de agregação: {e}")
+
+        total_found = len(discovered_map)
+        if total_found > 0:
+            logger.info(f"[Varredura de Câmeras] 🏁 Varredura concluída com sucesso! Total de câmeras detectadas: {total_found}")
+        else:
+            logger.warning(f"[Varredura de Câmeras] ⚠️ Varredura concluída. Nenhuma câmera foi encontrada na rede local.")
 
         return list(discovered_map.values())
 

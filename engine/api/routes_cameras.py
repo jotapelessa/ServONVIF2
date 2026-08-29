@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
 
+from loguru import logger
+
 from engine.database.db import get_db
 from engine.database.models import Camera
 from engine.core.camera_manager import camera_manager
@@ -68,6 +70,8 @@ async def create_camera(payload: CameraCreate, db: AsyncSession = Depends(get_db
     await db.commit()
     await db.refresh(camera)
 
+    logger.success(f"[Gerenciador de Câmeras] ➕ Nova câmera cadastrada: #{camera.id} '{camera.name}' ({camera.rtsp_url})")
+
     if camera.is_active:
         await camera_manager.start_camera(camera)
 
@@ -94,6 +98,8 @@ async def update_camera(camera_id: int, payload: CameraUpdate, db: AsyncSession 
     await db.commit()
     await db.refresh(camera)
 
+    logger.info(f"[Gerenciador de Câmeras] ✏️ Câmera #{camera.id} '{camera.name}' atualizada")
+
     if camera.is_active:
         if camera.id in camera_manager.ingestors:
             camera_manager.update_camera_config(camera)
@@ -116,6 +122,7 @@ async def delete_camera(camera_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(camera)
     await db.commit()
 
+    logger.warning(f"[Gerenciador de Câmeras] 🗑️ Câmera #{camera_id} '{cam_name}' removida do sistema")
     asyncio.create_task(dispatch_telegram_backup(reason=f"Câmera Removida: {cam_name}"))
     return {"message": "Camera deleted successfully"}
 
