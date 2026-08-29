@@ -358,11 +358,25 @@ class StreamIngestor:
 
             now_monotonic = time.time()
 
-            # 3. Throttled 2-Stage Vision Pipeline (YOLO + LPR at 6-8 FPS)
+            # 3. Throttled Hybrid 2-Stage Vision Pipeline (MOG2 ROI Fusion + YOLO Track + LPR at 6-8 FPS)
             if now_monotonic - last_motion_check >= motion_interval:
                 last_motion_check = now_monotonic
 
-                is_current_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
+                # 3A. Fast Pixel-Level ROI Motion Detection (MOG2)
+                orig_h, orig_w = frame.shape[:2]
+                scale_ratio = 400.0 / max(orig_w, 1)
+                target_w = 400
+                target_h = int(orig_h * scale_ratio)
+                small_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+
+                is_mog2_motion, mog2_score, mog2_bboxes_small = self.motion_detector.process_frame(small_frame)
+                mog2_bboxes = [
+                    (int(x / scale_ratio), int(y / scale_ratio), int(bw / scale_ratio), int(bh / scale_ratio))
+                    for (x, y, bw, bh) in mog2_bboxes_small
+                ]
+
+                # 3B. Neural Object Tracking (YOLO) & Stage 2 LPR
+                is_yolo_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
                     camera_id=self.camera.id,
                     camera_name=self.camera.name,
                     frame_bgr=frame,
@@ -371,8 +385,12 @@ class StreamIngestor:
                     sensitivity=getattr(self.camera, "sensitivity", 20.0)
                 )
 
-                current_bboxes = [d["bbox"] for d in detections]
-                current_score = max([d["confidence"] for d in detections], default=0.0)
+                yolo_bboxes = [d["bbox"] for d in detections]
+                current_bboxes = yolo_bboxes if len(yolo_bboxes) > 0 else mog2_bboxes
+                yolo_score = max([d["confidence"] for d in detections], default=0.0)
+                current_score = max(yolo_score, mog2_score)
+
+                is_current_motion = is_mog2_motion or is_yolo_motion
 
                 if is_current_motion:
                     self._last_motion_time = now_monotonic

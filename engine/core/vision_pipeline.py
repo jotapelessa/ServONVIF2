@@ -71,8 +71,53 @@ class VisionPipeline:
             px = int(round(p[0] * width)) if p[0] <= 1.0 else int(p[0])
             py = int(round(p[1] * height)) if p[1] <= 1.0 else int(p[1])
             pts.append([px, py])
-        pts_arr = np.array([pts], dtype=np.int32)
+        pts_arr = np.array(pts, dtype=np.int32)
         return cv2.pointPolygonTest(pts_arr, pt, False) >= 0
+
+    def is_bbox_in_zone(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        roi_polygon: Optional[List[List[float]]],
+        ignore_polygons: Optional[List[List[List[float]]]],
+        width: int,
+        height: int
+    ) -> bool:
+        """
+        Determines if a bounding box is in the valid detection zone:
+        - Cyan ROI Zone has highest priority.
+        - Multi-point sampling (center, bottom, top) avoids edge clipping.
+        - Purple Ignore Zones only suppress if object is not in ROI.
+        """
+        center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
+        center_bottom = (int((x1 + x2) / 2), max(0, y2 - 4))
+        center_top = (int((x1 + x2) / 2), min(height - 1, y1 + 4))
+
+        in_roi = True
+        if roi_polygon and len(roi_polygon) >= 3:
+            in_roi = (
+                self.is_point_in_polygon(center, roi_polygon, width, height) or
+                self.is_point_in_polygon(center_bottom, roi_polygon, width, height) or
+                self.is_point_in_polygon(center_top, roi_polygon, width, height)
+            )
+
+        if not in_roi:
+            return False
+
+        # If explicitly in ROI, Cyan takes precedence over external broad ignore masks
+        if roi_polygon and len(roi_polygon) >= 3 and in_roi:
+            return True
+
+        # Check Purple Ignore Zones
+        if ignore_polygons:
+            for ig_poly in ignore_polygons:
+                if ig_poly and len(ig_poly) >= 3:
+                    if self.is_point_in_polygon(center, ig_poly, width, height):
+                        return False
+
+        return True
 
     def process_frame(
         self,
@@ -144,21 +189,8 @@ class VisionPipeline:
             if bw < 20 or bh < 20:
                 continue
 
-            # Bottom center point for ground zone filtering
-            center_bottom = (int((x1 + x2) / 2), y2)
-
-            # Check Ignore Zones (Purple Zones)
-            in_ignore = False
-            if ignore_polygons:
-                for ig_poly in ignore_polygons:
-                    if self.is_point_in_polygon(center_bottom, ig_poly, w, h):
-                        in_ignore = True
-                        break
-            if in_ignore:
-                continue
-
-            # Check ROI Detection Zone (Cyan Zone)
-            if roi_polygon and not self.is_point_in_polygon(center_bottom, roi_polygon, w, h):
+            # Check Zone Membership (Cyan ROI Priority over Purple Ignore)
+            if not self.is_bbox_in_zone(x1, y1, x2, y2, roi_polygon, ignore_polygons, w, h):
                 continue
 
             # Valid detection in active zone

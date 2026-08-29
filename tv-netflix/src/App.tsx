@@ -220,30 +220,91 @@ export default function App() {
         }
       }
 
-      // 3. Arrow Keys Navigation (D-pad Spatial Traversal)
+      // 3. Arrow Keys Navigation (True 2D Spatial Traversal for Android TV D-Pad)
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
         const focusableElements = Array.from(
           document.querySelectorAll('.tv-focus-target')
-        ) as HTMLElement[];
+        ).filter((el) => {
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }) as HTMLElement[];
 
         if (focusableElements.length === 0) return;
 
-        const currentActive = document.activeElement as HTMLElement;
-        const currentIndex = focusableElements.indexOf(currentActive);
+        const currentActive = (document.activeElement as HTMLElement) || focusableElements[0];
+        const currentRect = currentActive ? currentActive.getBoundingClientRect() : null;
 
-        let nextIndex = 0;
-        if (currentIndex !== -1) {
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            nextIndex = (currentIndex + 1) % focusableElements.length;
-          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            nextIndex = (currentIndex - 1 + focusableElements.length) % focusableElements.length;
+        if (!currentRect || !focusableElements.includes(currentActive)) {
+          focusableElements[0].focus();
+          setFocusedElementId(focusableElements[0].id || null);
+          return;
+        }
+
+        const currentCenter = {
+          x: currentRect.left + currentRect.width / 2,
+          y: currentRect.top + currentRect.height / 2,
+        };
+
+        let bestCandidate: HTMLElement | null = null;
+        let minDistance = Infinity;
+
+        for (const el of focusableElements) {
+          if (el === currentActive) continue;
+          const rect = el.getBoundingClientRect();
+          const targetCenter = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          };
+
+          const dx = targetCenter.x - currentCenter.x;
+          const dy = targetCenter.y - currentCenter.y;
+
+          let isValidDirection = false;
+          let distance = Infinity;
+
+          if (e.key === 'ArrowUp') {
+            // Strictly above (dy < 0)
+            if (targetCenter.y < currentCenter.y - 10) {
+              isValidDirection = true;
+              // Strongly penalize horizontal drift to keep column alignment
+              distance = Math.abs(dy) * 1.0 + Math.abs(dx) * 2.5;
+            }
+          } else if (e.key === 'ArrowDown') {
+            // Strictly below (dy > 0)
+            if (targetCenter.y > currentCenter.y + 10) {
+              isValidDirection = true;
+              distance = Math.abs(dy) * 1.0 + Math.abs(dx) * 2.5;
+            }
+          } else if (e.key === 'ArrowLeft') {
+            // Strictly to the left (dx < 0)
+            if (targetCenter.x < currentCenter.x - 10) {
+              isValidDirection = true;
+              // Strongly penalize vertical drift to keep row alignment
+              distance = Math.abs(dx) * 1.0 + Math.abs(dy) * 2.5;
+            }
+          } else if (e.key === 'ArrowRight') {
+            // Strictly to the right (dx > 0)
+            if (targetCenter.x > currentCenter.x + 10) {
+              isValidDirection = true;
+              distance = Math.abs(dx) * 1.0 + Math.abs(dy) * 2.5;
+            }
+          }
+
+          if (isValidDirection && distance < minDistance) {
+            minDistance = distance;
+            bestCandidate = el;
           }
         }
 
-        const target = focusableElements[nextIndex];
-        if (target) {
-          target.focus();
-          setFocusedElementId(target.id || null);
+        if (bestCandidate) {
+          bestCandidate.focus();
+          try {
+            bestCandidate.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          } catch (err) {
+            // Ignore if unsupported in older webviews
+          }
+          setFocusedElementId(bestCandidate.id || null);
         }
       }
     };

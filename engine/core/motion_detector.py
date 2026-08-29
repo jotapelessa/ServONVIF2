@@ -134,15 +134,15 @@ class MotionDetector:
         total_active_pixels = max(active_pixels, 1)
 
         # 1. Global Illumination / Light Switch Detection
-        # Compute mean luminance in the active ROI to detect instantaneous scene brightness shifts
+        # Compute mean luminance across the ENTIRE scene to detect true global ambient light shifts
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        current_luma = float(cv2.mean(gray, mask=effective_mask)[0])
+        current_luma = float(cv2.mean(gray)[0])
 
         is_light_shock = False
         if self._prev_luma is not None:
             luma_delta = abs(current_luma - self._prev_luma)
-            # Sudden scene-wide illumination jump (> 14.0 luma units in a single frame)
-            if luma_delta > 14.0:
+            # Sudden scene-wide illumination jump (> 25.0 luma units in a single frame across entire camera)
+            if luma_delta > 25.0:
                 is_light_shock = True
                 self._light_shock_cooldown_frames = 3
                 logger.debug(f"💡 Global light switch detected (ΔLuma={luma_delta:.1f}). Suppressing false alarm.")
@@ -182,11 +182,11 @@ class MotionDetector:
         if effective_mask is not None:
             fg_mask = cv2.bitwise_and(fg_mask, effective_mask)
 
-        # Check for massive screen-wide foreground flood (typical of global exposure changes)
+        # Check for massive screen-wide foreground flood (typical of global exposure/headlight changes)
         total_fg_pixels = cv2.countNonZero(fg_mask)
-        raw_fg_ratio = float(total_fg_pixels) / float(total_active_pixels)
-        if raw_fg_ratio > 0.40:
-            # More than 40% of the entire monitored area changed at once -> global light change
+        raw_screen_ratio = float(total_fg_pixels) / float(w * h)
+        if raw_screen_ratio > 0.65:
+            # More than 65% of the entire camera sensor changed at once -> global light change
             self._consecutive_motion_count = 0
             return False, 0.0, []
 
@@ -197,9 +197,9 @@ class MotionDetector:
 
         # Sensitivity formula:
         sens_clamped = max(1.0, min(50.0, self.sensitivity))
-        area_factor = max(0.0006, (51.0 - sens_clamped) * 0.00014)
-        min_contour_area = max(120.0, total_active_pixels * area_factor)
-        score_threshold = max(0.0020, (51.0 - sens_clamped) * 0.00040)
+        area_factor = max(0.0003, (51.0 - sens_clamped) * 0.00008)
+        min_contour_area = max(25.0, min(total_active_pixels * 0.04, total_active_pixels * area_factor))
+        score_threshold = max(0.0010, (51.0 - sens_clamped) * 0.00025)
 
         for cnt in contours:
             area = cv2.contourArea(cnt)
