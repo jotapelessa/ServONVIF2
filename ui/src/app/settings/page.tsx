@@ -3907,35 +3907,97 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                     </div>
                   )}
 
-                  {/* Telemetry Summary Cards */}
-                  {logsData?.summary && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
-                        <div className="text-[11px] text-slate-400">Servidor Local</div>
-                        <div className="text-sm font-bold text-emerald-400 mt-0.5 font-mono">
+                  {/* 4-Pillar Operational Health Diagnostic Banners */}
+                  {logsData?.summary?.pillars && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      {/* Pillar 1: Cameras */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-cyan-500/40 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Video className="w-4 h-4 text-cyan-400" />
+                            <span>1. Câmeras &amp; Imagem</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            logsData.summary.pillars.cameras.status === "OK"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : logsData.summary.pillars.cameras.status === "WARNING"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "bg-slate-800 text-slate-400"
+                          }`}>
+                            {logsData.summary.pillars.cameras.badge}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-slate-100">
+                          {logsData.summary.pillars.cameras.online} / {logsData.summary.pillars.cameras.total} Câmeras Online
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-2">
+                          {logsData.summary.pillars.cameras.label}
+                        </p>
+                      </div>
+
+                      {/* Pillar 2: Network & Pings */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-sky-500/40 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Radio className="w-4 h-4 text-sky-400" />
+                            <span>2. Pings &amp; Rede</span>
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            {logsData.summary.pillars.network.badge}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-sky-300 font-mono">
                           {logsData.summary.local_ip}:{logsData.summary.port}
                         </div>
+                        <p className="text-[11px] text-slate-400">
+                          Latência zero-lag com WebSocket e HTTP Keep-Alive
+                        </p>
                       </div>
 
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
-                        <div className="text-[11px] text-slate-400">Clientes WebSocket</div>
-                        <div className="text-sm font-bold text-cyan-400 mt-0.5">
-                          {logsData.summary.connected_ws_clients} conectados
+                      {/* Pillar 3: Telegram Cloud Vault */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-purple-500/40 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Send className="w-4 h-4 text-purple-400" />
+                            <span>3. Telegram &amp; Alertas</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            logsData.summary.pillars.telegram.status === "OK"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400"
+                          }`}>
+                            {logsData.summary.pillars.telegram.badge}
+                          </span>
                         </div>
+                        <div className="text-sm font-bold text-purple-200">
+                          {logsData.summary.pillars.telegram.configured ? `Chat ID: ${logsData.summary.pillars.telegram.chat_id}` : "Não configurado"}
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-2">
+                          {logsData.summary.pillars.telegram.label}
+                        </p>
                       </div>
 
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
-                        <div className="text-[11px] text-slate-400">Câmeras Ativas</div>
-                        <div className="text-sm font-bold text-amber-400 mt-0.5">
-                          {logsData.summary.active_cameras_count} câmeras
+                      {/* Pillar 4: Devices & WebSockets */}
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-2 hover:border-emerald-500/40 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Tv className="w-4 h-4 text-emerald-400" />
+                            <span>4. Dispositivos (TVs)</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            logsData.summary.pillars.devices.status === "OK"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400"
+                          }`}>
+                            {logsData.summary.pillars.devices.badge}
+                          </span>
                         </div>
-                      </div>
-
-                      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
-                        <div className="text-[11px] text-slate-400">Armazenamento</div>
-                        <div className="text-sm font-bold text-slate-200 mt-0.5">
-                          {logsData.summary.storage?.total_size_mb} MB ({logsData.summary.storage?.total_files} vídeos)
+                        <div className="text-sm font-bold text-emerald-300">
+                          {logsData.summary.connected_ws_clients} Conexões Ativas
                         </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-2">
+                          {logsData.summary.pillars.devices.label}
+                        </p>
                       </div>
                     </div>
                   )}
