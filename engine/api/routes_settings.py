@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -154,12 +154,18 @@ def get_system_metrics():
         }
 
 @router.get("/ping")
-async def ping_server():
-    logger.info("📡 Ping HTTP recebido no servidor a partir de cliente TV/Mobile")
+async def ping_server(request: Request):
+    t0 = time.time()
+    client_ip = request.client.host if request.client else "desconhecido"
+    ua = request.headers.get("user-agent", "Desconhecido")
+    elapsed_ms = round((time.time() - t0) * 1000, 2)
+    logger.info(f"[Rede & Ping] 📶 Ping HTTP recebido de {client_ip} ({ua}) | Resposta: 200 OK | Processamento: {elapsed_ms}ms")
     return {
         "status": "ok",
         "pong": True,
         "server_time": time.time(),
+        "client_ip": client_ip,
+        "latency_ms": elapsed_ms,
         "app_name": settings.APP_NAME,
         "version": settings.VERSION
     }
@@ -564,6 +570,27 @@ async def get_system_logs(limit: int = 150, level: str = "ALL"):
             l for l in all_logs
             if any(k in l["message"] for k in camera_keywords) or "camera" in l["module"].lower() or "discovery" in l["module"].lower()
         ][-limit:]
+    elif level == "NETWORK":
+        all_logs = log_buffer.get_logs(limit=limit * 2, level_filter=None)
+        net_keywords = ["[Rede & Ping]", "[Diagnóstico de Rede]", "Ping HTTP", "RTSP Connection Test", "ping", "latência", "Latência", "socket", "porta", "ms"]
+        logs = [
+            l for l in all_logs
+            if any(k in l["message"] for k in net_keywords)
+        ][-limit:]
+    elif level == "TELEGRAM":
+        all_logs = log_buffer.get_logs(limit=limit * 2, level_filter=None)
+        tg_keywords = ["[Telegram Bot]", "Telegram Cloud Vault", "sendPhoto", "sendVideo", "sendDocument", "backup", "telegram"]
+        logs = [
+            l for l in all_logs
+            if any(k in l["message"] for k in tg_keywords) or "telegram" in l["module"].lower()
+        ][-limit:]
+    elif level == "DEVICES":
+        all_logs = log_buffer.get_logs(limit=limit * 2, level_filter=None)
+        dev_keywords = ["[Dispositivos]", "WebSocket client", "Dispositivo CONECTADO", "Dispositivo DESCONECTADO", "pareado", "ALLOWED", "BLOCKED", "PAUSED", "Smart TV", "Android TV"]
+        logs = [
+            l for l in all_logs
+            if any(k in l["message"] for k in dev_keywords) or "websocket" in l["module"].lower() or "device" in l["module"].lower()
+        ][-limit:]
     else:
         logs = log_buffer.get_logs(limit=limit, level_filter=level)
     
@@ -685,21 +712,50 @@ async def test_rtsp_connection(payload: RTSPTestPayload):
         latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
         if res == 0:
-            logger.info(f"RTSP Connection Test SUCCESS for {host}:{port} ({latency_ms}ms)")
+            logger.success(f"[Diagnóstico de Rede] 🏓 Teste de conexão RTSP SUCESSO para {host}:{port} | Latência: {latency_ms}ms | Velocidade: 🟢 ÓTIMA")
             return {
                 "success": True,
                 "latency_ms": latency_ms,
                 "message": f"Conexão bem-sucedida com {host}:{port}! Respondeu em {latency_ms}ms."
             }
         else:
-            logger.warning(f"RTSP Connection Test FAILED for {host}:{port} (code {res})")
+            logger.warning(f"[Diagnóstico de Rede] ⚠️ Teste de conexão RTSP FALHOU para {host}:{port} (código {res}) | Latência: {latency_ms}ms")
             return {
                 "success": False,
                 "latency_ms": latency_ms,
                 "message": f"Falha ao conectar na porta {port} do IP {host} (código de erro {res})."
             }
     except Exception as e:
+        logger.error(f"[Diagnóstico de Rede] ❌ Exceção ao testar conexão RTSP para {host}:{port}: {e}")
         raise HTTPException(status_code=500, detail=f"Exceção de rede: {e}")
+
+class PingTargetPayload(BaseModel):
+    target_ip: str
+    target_port: Optional[int] = 8080
+
+@router.post("/diagnostics/ping")
+async def test_ping_target(payload: PingTargetPayload):
+    """
+    Directly tests latency, network connectivity, and socket handshake with an external host or local device.
+    """
+    target = payload.target_ip.strip()
+    port = payload.target_port or 8080
+    start_time = time.time()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(2.0)
+        res = s.connect_ex((target, port))
+        s.close()
+        elapsed_ms = round((time.time() - start_time) * 1000, 1)
+        if res == 0:
+            logger.success(f"[Rede & Ping] 📶 Teste de ping para {target}:{port} SUCESSO | Latência: {elapsed_ms}ms | Status: 🟢 OK")
+            return {"success": True, "target": target, "port": port, "latency_ms": elapsed_ms, "status": "OK"}
+        else:
+            logger.warning(f"[Rede & Ping] ⚠️ Teste de ping para {target}:{port} FALHOU (erro {res}) | Latência: {elapsed_ms}ms")
+            return {"success": False, "target": target, "port": port, "latency_ms": elapsed_ms, "error_code": res}
+    except Exception as e:
+        logger.error(f"[Rede & Ping] ❌ Exceção ao pingar {target}:{port}: {e}")
+        return {"success": False, "target": target, "port": port, "error": str(e)}
 
 
 # =========================================================================

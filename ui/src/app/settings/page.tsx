@@ -3948,19 +3948,19 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                         <span>Filtro:</span>
                       </span>
                       {[
-                        { id: "ALL", label: "Todos" },
-                        { id: "CAMERAS", label: "📹 Câmeras & Vídeo" },
-                        { id: "INFO", label: "🟢 Info" },
-                        { id: "WARNING", label: "🟡 Avisos" },
-                        { id: "ERROR", label: "🔴 Erros" },
-                        { id: "DEBUG", label: "⚙️ Debug" },
+                        { id: "ALL", label: "📋 Todos os Processos" },
+                        { id: "CAMERAS", label: "📹 1. Câmeras & Varreduras" },
+                        { id: "NETWORK", label: "📶 2. Pings & Rede" },
+                        { id: "TELEGRAM", label: "✈️ 3. Telegram & Alertas" },
+                        { id: "DEVICES", label: "📱 4. Dispositivos & Clientes" },
+                        { id: "ERROR", label: "🔴 Erros & Falhas" },
                       ].map((lvl) => (
                         <button
                           key={lvl.id}
                           onClick={() => setLogLevelFilter(lvl.id)}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                             logLevelFilter === lvl.id
-                              ? "bg-cyan-600 text-white font-semibold shadow"
+                              ? "bg-cyan-600 text-white shadow-md shadow-cyan-600/30 ring-1 ring-cyan-400"
                               : "bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700"
                           }`}
                         >
@@ -4031,12 +4031,35 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
                           log.message?.includes("SEM SINAL") ||
                           log.message?.includes("CONECTADO");
 
+                        const isNetworkLog =
+                          log.message?.includes("[Rede & Ping]") ||
+                          log.message?.includes("[Diagnóstico de Rede]") ||
+                          log.message?.includes("Ping HTTP") ||
+                          log.message?.includes("Latência") ||
+                          log.message?.includes("socket");
+
+                        const isTelegramLog =
+                          log.message?.includes("[Telegram Bot]") ||
+                          log.message?.includes("Telegram Cloud Vault") ||
+                          log.message?.includes("sendPhoto") ||
+                          log.message?.includes("sendVideo");
+
+                        const isDeviceLog =
+                          log.message?.includes("[Dispositivos]") ||
+                          log.message?.includes("WebSocket client") ||
+                          log.message?.includes("Dispositivo CONECTADO") ||
+                          log.message?.includes("Dispositivo DESCONECTADO");
+
+                        let borderClass = "";
+                        if (isCameraLog) borderClass = "bg-cyan-950/10 border-l-2 border-cyan-500/60";
+                        else if (isNetworkLog) borderClass = "bg-sky-950/10 border-l-2 border-sky-500/60";
+                        else if (isTelegramLog) borderClass = "bg-purple-950/10 border-l-2 border-purple-500/60";
+                        else if (isDeviceLog) borderClass = "bg-emerald-950/10 border-l-2 border-emerald-500/60";
+
                         return (
                           <div
                             key={idx}
-                            className={`leading-relaxed hover:bg-slate-900/70 py-1 px-2 rounded transition-colors ${
-                              isCameraLog ? "bg-slate-900/30 border-l-2 border-cyan-500/40" : ""
-                            }`}
+                            className={`leading-relaxed hover:bg-slate-900/70 py-1.5 px-2.5 rounded transition-colors ${borderClass}`}
                           >
                             <span className="text-slate-500">[{log.timestamp}]</span>{" "}
                             <span className={`text-[10px] ${levelColor}`}>[{log.level}]</span>{" "}

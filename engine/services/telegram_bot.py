@@ -251,6 +251,8 @@ class TelegramService:
         )
 
         url = f"{self.base_url}/sendPhoto"
+        file_size_kb = os.path.getsize(path_obj) / 1024
+        t0 = time.time()
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 with open(path_obj, "rb") as f:
@@ -260,15 +262,23 @@ class TelegramService:
                         "caption": caption,
                     }
                     response = await client.post(url, data=data, files=files)
+                    elapsed = round(time.time() - t0, 2)
+                    speed_kb_s = round(file_size_kb / max(elapsed, 0.05), 1)
                     if response.status_code == 200:
-                        logger.info(f"📸 Telegram Cloud Vault: Photo alert sent with hashtags for camera [{camera_id}] {camera_name}")
+                        logger.success(
+                            f"[Telegram Bot] ✅ Alerta de FOTO enviado com SUCESSO para o Chat ID {self.chat_id} "
+                            f"(Câmera: #{camera_id} '{camera_name}' | {file_size_kb:.1f} KB em {elapsed}s | Velocidade: {speed_kb_s} KB/s)"
+                        )
                         self.mark_sent(camera_id)
                         return True
                     else:
-                        logger.warning(f"Telegram API returned status {response.status_code}: {response.text}")
+                        logger.error(
+                            f"[Telegram Bot] ❌ FALHA ao enviar foto no Telegram (Status {response.status_code}): {response.text} (Tempo: {elapsed}s)"
+                        )
                         return False
         except Exception as e:
-            logger.error(f"Failed to send Telegram alert: {e}")
+            elapsed = round(time.time() - t0, 2)
+            logger.error(f"[Telegram Bot] ❌ Erro de conexão ao enviar foto para o Telegram: {e} (Tempo: {elapsed}s)")
             return False
 
     async def send_video_clip(
@@ -285,11 +295,11 @@ class TelegramService:
             return False
 
         if getattr(settings, "TELEGRAM_PAUSED", False):
-            logger.info(f"⏸️ Telegram video dispatch is PAUSED. Skipping clip upload for camera [{camera_id}].")
+            logger.info(f"[Telegram Bot] ⏸️ Envio de vídeos está PAUSADO no momento. Ignorando clipe para câmera [{camera_id}].")
             return False
 
         if getattr(settings, "TELEGRAM_DISPATCH_MODE", "all") == "photo_only":
-            logger.debug("Telegram dispatch mode is 'photo_only'. Skipping video clip upload.")
+            logger.debug("[Telegram Bot] Modo de envio configurado apenas para fotos. Ignorando clipe de vídeo.")
             return False
 
         if not getattr(settings, "TELEGRAM_ENABLED", True):
@@ -297,6 +307,7 @@ class TelegramService:
 
         path_obj = Path(video_path)
         if not path_obj.exists():
+            logger.warning(f"[Telegram Bot] ⚠️ Arquivo de vídeo MP4 não encontrado para envio: {video_path}")
             return False
 
         dt = event_dt or datetime.utcnow()
@@ -329,6 +340,7 @@ class TelegramService:
             pass
 
         url = f"{self.base_url}/sendVideo"
+        t0 = time.time()
         try:
             async with httpx.AsyncClient(timeout=90.0) as client:
                 with open(path_obj, "rb") as f:
@@ -345,14 +357,22 @@ class TelegramService:
                         data["duration"] = str(vid_dur)
 
                     response = await client.post(url, data=data, files=files)
+                    elapsed = round(time.time() - t0, 2)
+                    speed_mb_s = round(file_size_mb / max(elapsed, 0.1), 2)
                     if response.status_code == 200:
-                        logger.info(f"🎥 Telegram Cloud Vault: Video clip uploaded with semantic hashtags for camera [{camera_id}] ({file_size_mb:.1f} MB)")
+                        logger.success(
+                            f"[Telegram Bot] 🎥 Vídeo MP4 gravado enviado com SUCESSO para o Chat ID {self.chat_id} "
+                            f"(Câmera: #{camera_id} '{camera_name}' | {file_size_mb:.2f} MB em {elapsed}s | Velocidade: {speed_mb_s} MB/s)"
+                        )
                         return True
                     else:
-                        logger.warning(f"Telegram video upload status {response.status_code}: {response.text}")
+                        logger.error(
+                            f"[Telegram Bot] ❌ FALHA ao enviar vídeo no Telegram (Status {response.status_code}): {response.text} (Tempo: {elapsed}s)"
+                        )
                         return False
         except Exception as e:
-            logger.error(f"Failed to send Telegram video: {e}")
+            elapsed = round(time.time() - t0, 2)
+            logger.error(f"[Telegram Bot] ❌ Erro de conexão ao enviar vídeo MP4 ao Telegram: {e} (Tempo: {elapsed}s)")
             return False
 
     async def send_backup_document(
@@ -384,6 +404,7 @@ class TelegramService:
         )
 
         url = f"{self.base_url}/sendDocument"
+        t0 = time.time()
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 files = {"document": (filename, json_bytes, "application/json")}
@@ -393,8 +414,12 @@ class TelegramService:
                     "parse_mode": "HTML",
                 }
                 response = await client.post(url, data=data, files=files)
+                elapsed = round(time.time() - t0, 2)
                 if response.status_code == 200:
-                    logger.info(f"☁️ Cópia de backup JSON enviada com sucesso para o Telegram ({filename}, Motivo: {reason})")
+                    logger.success(
+                        f"[Telegram Bot] 📦 Cópia de Backup JSON (.json) enviada com SUCESSO para o Telegram "
+                        f"({filename} | {size_kb:.1f} KB em {elapsed}s | Motivo: '{reason}')"
+                    )
                     return True, "Arquivo universal de backup (.json) enviado com sucesso para o seu Telegram!"
                 else:
                     err_desc = response.text
@@ -403,10 +428,11 @@ class TelegramService:
                         err_desc = err_json.get("description", err_desc)
                     except Exception:
                         pass
-                    logger.warning(f"Falha ao enviar backup para o Telegram: {err_desc}")
+                    logger.error(f"[Telegram Bot] ❌ Falha ao enviar backup para o Telegram: {err_desc} (Tempo: {elapsed}s)")
                     return False, f"Erro do Telegram: {err_desc}"
         except Exception as e:
-            logger.error(f"Erro ao enviar documento de backup ao Telegram: {e}")
+            elapsed = round(time.time() - t0, 2)
+            logger.error(f"[Telegram Bot] ❌ Erro de conexão ao enviar backup JSON ao Telegram: {e} (Tempo: {elapsed}s)")
             return False, f"Falha de conexão com Telegram: {str(e)}"
 
     async def send_test_message(self, custom_token: Optional[str] = None, custom_chat_id: Optional[str] = None) -> tuple[bool, str]:

@@ -71,12 +71,19 @@ class WebSocketHub:
         self.ip_status_cache[client_ip] = status
         self.ip_status_cache[dev_id] = status
 
-        logger.info(f"📱 WebSocket client connected: {dev_id} ({dev_type} - {model}) at IP {client_ip} [Status: {status}]. Total active: {len(self.active_clients)}")
+        status_emoji = "🟢" if status == "ALLOWED" else ("🟡" if status == "PAUSED" else "🔴")
+        logger.success(
+            f"[Dispositivos] 📱 Dispositivo CONECTADO: '{dev_id}' ({dev_type} - {model}) em {client_ip} "
+            f"| Status: {status_emoji} {status} | Conexões Ativas: {len(self.active_clients)}"
+        )
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_clients:
             info = self.active_clients.pop(websocket)
-            logger.info(f"WebSocket client disconnected: {info.device_id} @ {info.ip} ({info.device_type}). Remaining: {len(self.active_clients)}")
+            logger.warning(
+                f"[Dispositivos] 🔌 Dispositivo DESCONECTADO: '{info.device_id}' ({info.device_type} @ {info.ip}) "
+                f"| Conexões Restantes: {len(self.active_clients)}"
+            )
 
     async def _sync_device_to_db(
         self,
