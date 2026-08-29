@@ -1,22 +1,33 @@
 import { Camera, LprDetection, SecurityEvent, SystemHealth } from '../types';
 
 export function getApiBase(): string {
+  // Priority 1: URL injected by Android native bridge at page load
+  try {
+    if ((window as any).__SERVONVIF_BASE_URL) {
+      const injected = (window as any).__SERVONVIF_BASE_URL;
+      if (injected && injected.startsWith('http')) return injected;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Priority 2: Android JavascriptInterface method
   try {
     if ((window as any).AndroidNative?.getServerBaseUrl) {
       const nativeBase = (window as any).AndroidNative.getServerBaseUrl();
       if (nativeBase && nativeBase.startsWith('http')) return nativeBase;
     }
-  } catch (e) {
-    // Ignore
-  }
+  } catch (e) { /* ignore */ }
+
+  // Priority 3: Relative URL detection when served from the backend
   if (typeof window !== 'undefined' && window.location) {
-    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    if ((proto === 'http:' || proto === 'https:') && host && host !== 'appassets.androidplatform.net') {
       if (window.location.port === '8080') return '';
-      if (window.location.hostname && window.location.hostname !== 'appassets.androidplatform.net') {
-        return `${window.location.protocol}//${window.location.hostname}:8080`;
-      }
+      return `${proto}//${host}:8080`;
     }
   }
+
+  // Priority 4: Default LAN fallback
   return 'http://192.168.1.96:8080';
 }
 

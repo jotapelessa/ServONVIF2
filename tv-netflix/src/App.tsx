@@ -21,7 +21,8 @@ import {
   SecurityEvent, 
   SystemHealth, 
   TVSettings, 
-  TabType 
+  TabType,
+  ActiveAlertPip
 } from './types';
 import { TopAppBar } from './components/TopAppBar';
 import { HomeTab } from './components/HomeTab';
@@ -394,7 +395,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fullscreenCamera, pipCamera, showRemote, showAndroidCode]);
+  }, [fullscreenCamera, activeAlertPips, showRemote, showAndroidCode]);
 
   // Remote D-pad Emulation
   const handleDpadUp = () => {

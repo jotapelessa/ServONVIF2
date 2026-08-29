@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ServONVIF TV PRO • Smart TV Leanback Interface</title>
     <meta name="description" content="Interface cinematográfica 10-Foot Leanback (estilo Netflix) para Smart TV e Android TV do sistema de segurança ServONVIF PRO." />
-    <meta property="og:title" content="ServONVIF TV PRO • Smart TV Leanback Interface" />
-    <meta property="og:description" content="Interface cinematográfica 10-Foot Leanback (estilo Netflix) para Smart TV e Android TV do sistema de segurança ServONVIF PRO." />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-DsASoGFX.js"></script>
+    <!-- 
+      NOTE: Google Fonts removed from here to allow offline operation on Android TV.
+      Font stack fallback: Inter → system-ui → sans-serif (works offline).
+      The CSS @import is handled inside the Tailwind/React bundle via index.css.
+    -->
+    <style>
+      /* Prevent layout shift while fonts load - works offline without blocking */
+      :root { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+    <script type="module" crossorigin src="./assets/index-pEw63XCg.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-CMeQd8FA.css">
   </head>
   <body class="bg-[#070B14] text-slate-100 antialiased overflow-x-hidden selection:bg-cyan-500 selection:text-black">

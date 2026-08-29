@@ -65,6 +65,9 @@ class TvMainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupHardwareAcceleratedWebView() {
+        // WebViewAssetLoader: maps https://appassets.androidplatform.net/* to app assets
+        // URL pattern:  /assets/tv-netflix/index.html         → assets/tv-netflix/index.html  ✅
+        //               /assets/tv-netflix/assets/index-XYZ.js → assets/tv-netflix/assets/XYZ ✅
         val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(this))
             .build()
@@ -82,10 +85,12 @@ class TvMainActivity : AppCompatActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = true
                 allowContentAccess = true
+                @Suppress("DEPRECATION")
                 allowFileAccessFromFileURLs = true
+                @Suppress("DEPRECATION")
                 allowUniversalAccessFromFileURLs = true
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                cacheMode = WebSettings.LOAD_DEFAULT
+                cacheMode = WebSettings.LOAD_NO_CACHE
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(false)
@@ -103,16 +108,33 @@ class TvMainActivity : AppCompatActivity() {
                     view: WebView?,
                     request: WebResourceRequest?
                 ): WebResourceResponse? {
-                    return request?.url?.let { assetLoader.shouldInterceptRequest(it) }
+                    val intercepted = request?.url?.let { assetLoader.shouldInterceptRequest(it) }
+                    if (intercepted != null) return intercepted
+                    return null
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     progressBar.visibility = View.GONE
-                    Log.i("ServOnvifNetflixTV", "Netflix Smart TV Interface loaded successfully: $url")
+                    Log.i("ServOnvifNetflixTV", "Netflix Smart TV Interface loaded: $url")
+                    // Inject server base URL into the JS context immediately
+                    val httpBase = configRepo.httpBaseUrl
+                    webView.evaluateJavascript(
+                        "window.__SERVONVIF_BASE_URL = '$httpBase';",
+                        null
+                    )
                 }
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    Log.w("ServOnvifNetflixTV", "WebView Error on $url: ${error?.description}")
+                    val isMainFrame = request?.isForMainFrame == true
+                    Log.w("ServOnvifNetflixTV", "WebView Error [mainFrame=$isMainFrame] on ${request?.url}: ${error?.description}")
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    errorResponse: android.webkit.WebResourceResponse?
+                ) {
+                    Log.w("ServOnvifNetflixTV", "HTTP Error ${errorResponse?.statusCode} for ${request?.url}")
                 }
             }
 
