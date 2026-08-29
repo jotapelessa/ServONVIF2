@@ -92,3 +92,15 @@ export interface TVSettings {
   nightAlarmMode: boolean;
   autoTourActive: boolean;
 }
+
+export interface ActiveAlertPip {
+  id: string;
+  camera: Camera;
+  type: 'motion' | 'person' | 'vehicle' | 'lpr' | 'manual';
+  score: number;
+  label?: string;
+  thumbnailUrl?: string;
+  timestamp: number;
+  expiresAt: number;
+}
+

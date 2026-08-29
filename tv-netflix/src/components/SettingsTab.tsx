@@ -77,6 +77,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     if ((window as any).AndroidNative?.triggerPiP) {
       (window as any).AndroidNative.triggerPiP('1', 'Câmera Teste PiP');
     }
+    onUpdateSettings({ pipEnabled: true });
     setTimeout(() => setTestPipFeedback(false), 3000);
   };
 

@@ -32,7 +32,7 @@ import { TestLabTab } from './components/TestLabTab';
 import { SystemHealthTab } from './components/SystemHealthTab';
 import { SettingsTab } from './components/SettingsTab';
 import { SpotlightFullscreenModal } from './components/SpotlightFullscreenModal';
-import { PictureInPictureFloating } from './components/PictureInPictureFloating';
+import { MultiCameraPipDock } from './components/MultiCameraPipDock';
 import { RemoteControlOverlay } from './components/RemoteControlOverlay';
 import { AndroidCodeExporter } from './components/AndroidCodeExporter';
 import { TvApiService } from './services/apiService';
@@ -46,6 +46,47 @@ export default function App() {
   const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>(INITIAL_EVENTS);
   const [systemHealth, setSystemHealth] = useState<SystemHealth>(INITIAL_SYSTEM_HEALTH);
   const [settings, setSettings] = useState<TVSettings>(INITIAL_SETTINGS);
+
+  // Multi-PiP Simultaneous Alerts State (Side-by-side compact previews)
+  const [activeAlertPips, setActiveAlertPips] = useState<ActiveAlertPip[]>([]);
+
+  // Function to trigger or refresh an alert PiP for a camera
+  const triggerAlertPip = useCallback((
+    cam: Camera,
+    type: ActiveAlertPip['type'] = 'motion',
+    label?: string,
+    score = 0.85
+  ) => {
+    const duration = Math.max(5000, (settings.pipDurationSeconds || 10) * 1000);
+    const now = Date.now();
+    setActiveAlertPips((prev) => {
+      // Remove previous entry for same camera to refresh it smoothly
+      const filtered = prev.filter((a) => a.camera.id !== cam.id);
+      const newAlert: ActiveAlertPip = {
+        id: `alert-${cam.id}-${now}`,
+        camera: cam,
+        type,
+        score,
+        label: label || (type === 'person' ? '👤 PESSOA' : type === 'lpr' ? '🚗 VEÍCULO' : '⚡ MOVIMENTO'),
+        timestamp: now,
+        expiresAt: now + duration,
+      };
+      // Keep up to 3 simultaneous alerts
+      return [newAlert, ...filtered].slice(0, 3);
+    });
+  }, [settings.pipDurationSeconds]);
+
+  // Clean expired alerts every 500ms
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setActiveAlertPips((prev) => {
+        const active = prev.filter((a) => a.expiresAt > now);
+        return active.length === prev.length ? prev : active;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   // Connect to live ServONVIF Backend & Native Bridge Sync
   useEffect(() => {
@@ -93,9 +134,53 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Real-Time WebSocket Alerts Listener (Direct Core WS & Android Native Bridge)
+  useEffect(() => {
+    // 1. Android Native Bridge callback
+    (window as any).__onNativeWsEvent = (event: any) => {
+      if (!event || !event.camera_id) return;
+      const cam = cameras.find((c) => String(c.id) === String(event.camera_id));
+      if (cam) {
+        const isPerson = event.type?.includes('PERSON') || (event.score && event.score > 0.88);
+        const isLpr = event.type?.includes('LPR');
+        triggerAlertPip(cam, isPerson ? 'person' : isLpr ? 'lpr' : 'motion', undefined, event.score || 0.9);
+      }
+    };
+
+    // 2. Direct WebSocket client for Web TV browser / TV WebView fallback
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.hostname && window.location.hostname !== 'appassets.androidplatform.net'
+      ? `${window.location.hostname}:8080`
+      : '192.168.1.96:8080';
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(`${wsProto}//${wsHost}/ws/events`);
+      socket.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data && data.camera_id) {
+            const cam = cameras.find((c) => String(c.id) === String(data.camera_id));
+            if (cam) {
+              const isPerson = data.type?.includes('PERSON') || (data.score && data.score > 0.88);
+              const isLpr = data.type?.includes('LPR');
+              triggerAlertPip(cam, isPerson ? 'person' : isLpr ? 'lpr' : 'motion', undefined, data.score || 0.9);
+            }
+          }
+        } catch (err) {
+          // Ignore
+        }
+      };
+    } catch (e) {
+      // Ignore
+    }
+
+    return () => {
+      if (socket) socket.close();
+    };
+  }, [cameras, triggerAlertPip]);
+
   // Modals & Overlays
   const [fullscreenCamera, setFullscreenCamera] = useState<Camera | null>(null);
-  const [pipCamera, setPipCamera] = useState<Camera | null>(null);
   const [showRemote, setShowRemote] = useState(false);
   const [showAndroidCode, setShowAndroidCode] = useState(false);
   const [snapshotToast, setSnapshotToast] = useState<{ visible: boolean; text: string }>({
@@ -118,7 +203,7 @@ export default function App() {
       if ((window as any).AndroidNative?.updatePipConfig) {
         (window as any).AndroidNative.updatePipConfig(
           updated.pipSize || 'mini',
-          updated.pipPosition || 'top_right',
+          updated.pipPosition || 'bottom_right',
           updated.pipDurationSeconds || 10
         );
       }
@@ -127,13 +212,11 @@ export default function App() {
 
     if (newSettings.pipEnabled !== undefined) {
       if (newSettings.pipEnabled) {
-        if ((window as any).AndroidNative?.triggerPiP && selectedCamera) {
-          (window as any).AndroidNative.triggerPiP(selectedCamera.id, selectedCamera.name);
-        } else {
-          setPipCamera(selectedCamera);
+        if (selectedCamera) {
+          triggerAlertPip(selectedCamera, 'motion', 'TESTE PiP');
         }
       } else {
-        setPipCamera(null);
+        setActiveAlertPips([]);
       }
     }
   };
@@ -203,9 +286,9 @@ export default function App() {
           setFullscreenCamera(null);
           return;
         }
-        if (pipCamera) {
+        if (activeAlertPips.length > 0) {
           e.preventDefault();
-          setPipCamera(null);
+          setActiveAlertPips([]);
           return;
         }
         if (showRemote) {
@@ -438,9 +521,7 @@ export default function App() {
               }
             }}
             onTriggerPiP={(cam) => {
-              if (!(window as any).AndroidNative?.triggerPiP) {
-                setPipCamera(cam);
-              }
+              triggerAlertPip(cam, 'motion', 'DEMO ALERTA');
             }}
             focusedElementId={focusedElementId}
             onElementFocus={handleElementFocus}
@@ -481,12 +562,16 @@ export default function App() {
         />
       )}
 
-      {/* 4. FLOATING PICTURE-IN-PICTURE (Fallback Web apenas quando não houver ponte nativa Android) */}
-      {pipCamera && settings.pipEnabled && !fullscreenCamera && !(window as any).AndroidNative && (
-        <PictureInPictureFloating
-          camera={pipCamera}
-          onClose={() => setPipCamera(null)}
+      {/* 4. MULTI-CAMERA COMPACT SIDE-BY-SIDE PIP DOCK */}
+      {!fullscreenCamera && (
+        <MultiCameraPipDock
+          alerts={activeAlertPips}
+          onDismissAlert={(id) => setActiveAlertPips((prev) => prev.filter((a) => a.id !== id))}
+          onDismissAll={() => setActiveAlertPips([])}
           onMaximize={(cam) => setFullscreenCamera(cam)}
+          focusedElementId={focusedElementId}
+          onElementFocus={handleElementFocus}
+          position={settings.pipPosition as any}
         />
       )}
 
