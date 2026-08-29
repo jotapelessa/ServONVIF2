@@ -372,7 +372,7 @@ class StreamIngestor:
                         for (x, y, bw, bh) in mog2_bboxes_small
                     ]
 
-                    # 3B. Neural Object Tracking (YOLO) & Stage 2 LPR
+                    # 3B. Neural Object Tracking (YOLO) & Stage 2 LPR (Authoritative Classifier)
                     is_yolo_motion, detections, plate_payload, vehicle_crop = vision_pipeline.process_frame(
                         camera_id=self.camera.id,
                         camera_name=self.camera.name,
@@ -383,11 +383,25 @@ class StreamIngestor:
                     )
 
                     yolo_bboxes = [d["bbox"] for d in detections]
-                    current_bboxes = yolo_bboxes if len(yolo_bboxes) > 0 else mog2_bboxes
                     yolo_score = max([d["confidence"] for d in detections], default=0.0)
-                    current_score = max(yolo_score, mog2_score)
 
-                    is_current_motion = is_mog2_motion or is_yolo_motion
+                    # Authoritative Security Event Decision:
+                    # 1. Primary: Neural YOLO confirmation (person / vehicle in valid ROI)
+                    # 2. Secondary fallback: High-confidence sustained physical movement (3+ consecutive frames)
+                    if is_yolo_motion and len(yolo_bboxes) > 0:
+                        is_current_motion = True
+                        current_bboxes = yolo_bboxes
+                        current_score = yolo_score
+                    elif is_mog2_motion and getattr(self.motion_detector, "_consecutive_motion_count", 0) >= 3 and mog2_score > 0.02:
+                        # Sustained physical motion without classified neural object
+                        is_current_motion = True
+                        current_bboxes = mog2_bboxes
+                        current_score = mog2_score
+                    else:
+                        # Filter out foliage, shadows, and transient pixel noise
+                        is_current_motion = False
+                        current_bboxes = []
+                        current_score = 0.0
 
                     if is_current_motion:
                         self._last_motion_time = now_monotonic

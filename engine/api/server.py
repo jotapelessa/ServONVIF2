@@ -69,11 +69,27 @@ app.include_router(auth_router)
 
 # Mount ServONVIF Netflix Smart TV Web UI at /tv
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, RedirectResponse
 from pathlib import Path
 
 tv_dist_dir = Path(__file__).resolve().parent.parent.parent / "tv-netflix" / "dist"
+
+if (tv_dist_dir / "assets").exists():
+    app.mount("/tv/assets", StaticFiles(directory=str(tv_dist_dir / "assets")), name="tv-assets")
+    app.mount("/assets", StaticFiles(directory=str(tv_dist_dir / "assets")), name="root-assets")
+
+@app.get("/tv")
+@app.get("/tv/")
+@app.head("/tv")
+@app.head("/tv/")
+async def serve_tv_leanback():
+    index_file = tv_dist_dir / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file), media_type="text/html")
+    return RedirectResponse(url="/")
+
 if tv_dist_dir.exists():
-    app.mount("/tv", StaticFiles(directory=str(tv_dist_dir), html=True), name="tv-netflix")
+    app.mount("/tv-netflix", StaticFiles(directory=str(tv_dist_dir), html=True), name="tv-netflix-alias")
 
 @app.websocket("/ws/events")
 async def websocket_events_endpoint(

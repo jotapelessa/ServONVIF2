@@ -88,36 +88,34 @@ class VisionPipeline:
     ) -> bool:
         """
         Determines if a bounding box is in the valid detection zone:
-        - Cyan ROI Zone has highest priority.
-        - Multi-point sampling (center, bottom, top) avoids edge clipping.
-        - Purple Ignore Zones only suppress if object is not in ROI.
+        - Ground base point (cx, y2) and center (cx, cy) are evaluated.
+        - Purple Ignore Zones strictly suppress foliage, streets, and neighbor areas.
+        - Cyan ROI Zone restricts detection to the designated perimeter.
         """
-        center = (int((x1 + x2) / 2), int((y1 + y2) / 2))
-        center_bottom = (int((x1 + x2) / 2), max(0, y2 - 4))
-        center_top = (int((x1 + x2) / 2), min(height - 1, y1 + 4))
+        cx = int((x1 + x2) / 2)
+        cy = int((y1 + y2) / 2)
+        base_y = max(0, min(height - 1, y2 - 6))
+        base_pt = (cx, base_y)
+        center_pt = (cx, cy)
 
-        in_roi = True
-        if roi_polygon and len(roi_polygon) >= 3:
-            in_roi = (
-                self.is_point_in_polygon(center, roi_polygon, width, height) or
-                self.is_point_in_polygon(center_bottom, roi_polygon, width, height) or
-                self.is_point_in_polygon(center_top, roi_polygon, width, height)
-            )
-
-        if not in_roi:
-            return False
-
-        # If explicitly in ROI, Cyan takes precedence over external broad ignore masks
-        if roi_polygon and len(roi_polygon) >= 3 and in_roi:
-            return True
-
-        # Check Purple Ignore Zones
+        # 1. Check Purple Ignore Zones first (strict noise suppression)
         if ignore_polygons:
             for ig_poly in ignore_polygons:
                 if ig_poly and len(ig_poly) >= 3:
-                    if self.is_point_in_polygon(center, ig_poly, width, height):
+                    # If feet/base or center is in the ignore zone, suppress
+                    if (self.is_point_in_polygon(base_pt, ig_poly, width, height) or 
+                        self.is_point_in_polygon(center_pt, ig_poly, width, height)):
                         return False
 
+        # 2. Check Cyan ROI Polygon (if configured)
+        if roi_polygon and len(roi_polygon) >= 3:
+            in_roi = (
+                self.is_point_in_polygon(base_pt, roi_polygon, width, height) or
+                self.is_point_in_polygon(center_pt, roi_polygon, width, height)
+            )
+            return in_roi
+
+        # 3. If no ROI is configured and not in ignore zone, allow detection
         return True
 
     def process_frame(
