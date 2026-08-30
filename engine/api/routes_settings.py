@@ -130,7 +130,12 @@ def get_media_storage_stats():
         "media_path": str(media_dir.resolve()),
     }
 
+# Network I/O measurement state
+_last_net_io = None
+_last_net_time = 0.0
+
 def get_system_metrics():
+    global _last_net_io, _last_net_time
     try:
         import psutil
         cpu_pct = psutil.cpu_percent(interval=None)
@@ -206,6 +211,55 @@ def get_system_metrics():
             except Exception:
                 pass
 
+        # 3. SSD / Disk Storage Metrics
+        disk_total_gb = 0.0
+        disk_used_gb = 0.0
+        disk_free_gb = 0.0
+        disk_percent = 0.0
+        try:
+            disk = psutil.disk_usage('/')
+            disk_total_gb = round(disk.total / (1024**3), 1)
+            disk_used_gb = round(disk.used / (1024**3), 1)
+            disk_free_gb = round(disk.free / (1024**3), 1)
+            disk_percent = round(disk.percent, 1)
+        except Exception:
+            pass
+
+        # 4. Network Throughput & Interface Metrics
+        net_rx_kbps = 0.0
+        net_tx_kbps = 0.0
+        net_speed_mbps = 1000
+        net_type = "Cabo Ethernet"
+        now_time = time.time()
+        try:
+            current_net_io = psutil.net_io_counters()
+            if _last_net_io is not None and (now_time - _last_net_time) > 0.5:
+                dt = now_time - _last_net_time
+                rx_bytes = current_net_io.bytes_recv - _last_net_io.bytes_recv
+                tx_bytes = current_net_io.bytes_sent - _last_net_io.bytes_sent
+                net_rx_kbps = round(max(0.0, (rx_bytes / dt) / 1024), 1)
+                net_tx_kbps = round(max(0.0, (tx_bytes / dt) / 1024), 1)
+            _last_net_io = current_net_io
+            _last_net_time = now_time
+
+            # Check network interface stats
+            ifstats = psutil.net_if_stats()
+            for iface_name, ifstat in ifstats.items():
+                if ifstat.isup and ifstat.speed > 0 and not iface_name.startswith(('lo', 'docker', 'veth')):
+                    if ifstat.speed > 100:
+                        net_speed_mbps = ifstat.speed
+                    if iface_name.startswith(('wl', 'wlan')):
+                        net_type = "Wi-Fi"
+                    else:
+                        net_type = "Cabo Ethernet"
+                    break
+        except Exception:
+            pass
+
+        # 5. Telegram Integration Status
+        telegram_configured = bool(telegram_service.is_configured)
+        telegram_enabled = bool(settings.TELEGRAM_ENABLED)
+
         return {
             "cpu_percent": round(cpu_pct, 1),
             "cpu_temp_c": cpu_temp_c,
@@ -215,6 +269,16 @@ def get_system_metrics():
             "ram_used_mb": proc_mem_mb,
             "ram_total_mb": round(vmem.total / (1024 * 1024), 0),
             "system_ram_used_mb": round(vmem.used / (1024 * 1024), 0),
+            "disk_total_gb": disk_total_gb,
+            "disk_used_gb": disk_used_gb,
+            "disk_free_gb": disk_free_gb,
+            "disk_percent": disk_percent,
+            "net_rx_kbps": net_rx_kbps,
+            "net_tx_kbps": net_tx_kbps,
+            "net_speed_mbps": net_speed_mbps,
+            "net_type": net_type,
+            "telegram_configured": telegram_configured,
+            "telegram_enabled": telegram_enabled,
         }
     except Exception as e:
         logger.warning(f"Failed to get system metrics: {e}")
@@ -227,6 +291,16 @@ def get_system_metrics():
             "ram_used_mb": 0.0,
             "ram_total_mb": 0.0,
             "system_ram_used_mb": 0.0,
+            "disk_total_gb": 0.0,
+            "disk_used_gb": 0.0,
+            "disk_free_gb": 0.0,
+            "disk_percent": 0.0,
+            "net_rx_kbps": 0.0,
+            "net_tx_kbps": 0.0,
+            "net_speed_mbps": 1000,
+            "net_type": "Cabo Ethernet",
+            "telegram_configured": False,
+            "telegram_enabled": False,
         }
 
 @router.get("/ping")

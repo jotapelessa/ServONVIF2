@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { Header } from "@/components/layout/Header";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient, API_BASE, getApiBase, SettingsResponse, TailscaleStatus, SystemVersionInfo, StorageDetailedResponse } from "@/lib/api-client";
 import {
@@ -1472,26 +1473,15 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-white flex flex-col">
-      {/* Header */}
-      <header className="h-16 border-b border-slate-800 bg-[#0f172a]/80 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors bg-slate-800/60 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-sm font-medium border border-slate-700/50"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Voltar ao Monitor</span>
-          </Link>
-          <div className="h-4 w-px bg-slate-700" />
-          <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2 flex-wrap">
-            <Sliders className="w-5 h-5 text-blue-500" />
-            <span>Central de Controle &amp; Dispositivos</span>
-            <span
-              className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
-              title="Versão Oficial do Sistema (Formato 9 dígitos: 000.000.000)"
-            >
-              v{serverInfo?.version || "002.002.182"}
-            </span>
+      {/* Global Persistent Header */}
+      <Header />
+
+      {/* Settings Sub-Header Toolbar */}
+      <div className="h-14 w-full bg-slate-900/60 border-b border-slate-800/80 px-4 sm:px-6 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
+            <Sliders className="w-4 h-4 text-blue-400" />
+            <span>Central de Controle & Ajustes</span>
           </h1>
         </div>
 
@@ -1505,13 +1495,13 @@ export default function SettingsPage({ initialTab }: { initialTab?: string }) {
           <button
             onClick={handleSaveSettings}
             disabled={saving || loading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-600/20"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm shadow-blue-600/20 active:scale-95"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-3.5 h-3.5" />
             <span>{saving ? "Salvando..." : "Salvar Alterações"}</span>
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Main Container */}
       <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-6 gap-6 pb-24">

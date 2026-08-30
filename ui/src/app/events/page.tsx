@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
+import { Header } from "@/components/layout/Header";
 import { apiClient, MotionEvent, Camera, API_BASE } from "@/lib/api-client";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAlertStore } from "@/store/useCameraStore";
@@ -323,25 +324,19 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-[#0b0f19]">
-      {/* App Header */}
-      <header className="h-16 w-full app-header px-6 flex items-center justify-between sticky top-0 z-30 shrink-0">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 h-9 px-3 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg border border-slate-700 transition"
-          >
-            <ArrowLeft className="w-4 h-4 text-blue-400" />
-            <span>Mosaico ao Vivo</span>
-          </Link>
-          <div className="flex flex-col">
-            <h1 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
-              Central de Gravações & Timeline
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                {filteredEvents.length} {filteredEvents.length === 1 ? "Evento" : "Eventos"}
-              </span>
-            </h1>
-            <p className="text-[11px] text-slate-400">Navegação contínua, histórico MP4 e limpeza em lote</p>
-          </div>
+      {/* Global Persistent Header */}
+      <Header />
+
+      {/* Events Sub-Header Toolbar */}
+      <div className="h-14 w-full bg-slate-900/60 border-b border-slate-800/80 px-4 sm:px-6 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+            Central de Gravações
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              {filteredEvents.length} {filteredEvents.length === 1 ? "Evento" : "Eventos"}
+            </span>
+          </h1>
+          <p className="text-[11px] text-slate-400 hidden md:inline">Histórico contínuo MP4 e IA</p>
         </div>
 
         {/* Filter & Batch Controls */}
@@ -472,7 +467,7 @@ export default function EventsPage({ initialFilter }: { initialFilter?: string }
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-400" : ""}`} />
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Interactive Category & Camera Filter Pills Bar */}
       <div className="w-full px-6 py-2.5 bg-slate-900/90 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0 backdrop-blur-sm z-20">

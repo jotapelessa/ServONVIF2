@@ -733,6 +733,16 @@ export const apiClient = {
     ram_used_mb: number;
     ram_total_mb: number;
     system_ram_used_mb: number;
+    disk_total_gb?: number;
+    disk_used_gb?: number;
+    disk_free_gb?: number;
+    disk_percent?: number;
+    net_rx_kbps?: number;
+    net_tx_kbps?: number;
+    net_speed_mbps?: number;
+    net_type?: string;
+    telegram_configured?: boolean;
+    telegram_enabled?: boolean;
   }> {
     const res = await fetch(`${getApiBase()}/api/settings/metrics`);
     if (!res.ok) throw new Error("Falha ao obter métricas de CPU/RAM");

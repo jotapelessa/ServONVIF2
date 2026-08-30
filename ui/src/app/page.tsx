@@ -48,6 +48,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchCameras();
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get("action");
+      if (action === "scan") {
+        setIsScanModalOpen(true);
+        handleScan();
+      } else if (action === "add") {
+        setIsAddModalOpen(true);
+      }
+    }
   }, [fetchCameras]);
 
   const handleScan = async (customTarget?: string) => {
