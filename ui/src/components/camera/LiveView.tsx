@@ -60,6 +60,8 @@ export function LiveView({
             src={mjpegUrl}
             alt={`Live feed - ${cameraName}`}
             className="w-full h-full object-cover"
+            loading="eager"
+            decoding="async"
             onError={() => setHasError(true)}
           />
 

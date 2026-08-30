@@ -163,12 +163,14 @@ class StreamIngestor:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             return cap
         else:
-            # High-stability TCP RTSP capture with sufficient buffer size for 5MP keyframes
+            # High-stability TCP RTSP capture with ZERO-BUFFER and LOW-DELAY flags
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                 "rtsp_transport;tcp|"
-                "analyzeduration;2000000|"
-                "probesize;2000000|"
-                "max_delay;500000|"
+                "fflags;nobuffer|"
+                "flags;low_delay|"
+                "max_delay;0|"
+                "analyzeduration;100000|"
+                "probesize;100000|"
                 "stimeout;3000000"
             )
             cap = cv2.VideoCapture(rtsp_url)
@@ -245,7 +247,7 @@ class StreamIngestor:
                 # Broadcast offline placeholder to web/mobile clients
                 if mjpeg_streamer.has_clients(self.camera.id):
                     offline_img = self._generate_offline_frame()
-                    mjpeg_streamer.broadcast_frame(self.camera.id, offline_img, quality=70, max_fps=2.0)
+                    mjpeg_streamer.set_latest_frame(self.camera.id, offline_img)
 
                 # After 2 failures, try auto-detecting working stream on same host
                 if consecutive_failures >= 2 and consecutive_failures % 3 == 0:
@@ -264,18 +266,14 @@ class StreamIngestor:
             consecutive_failures = 0
             reconnect_backoff = 2.0
             frames_since_connect += 1
-            # Skip the first 4 frames on fresh connection to allow full I-frame POC sync
-            if frames_since_connect < 5:
-                continue
-
-            # Quality check: skip corrupted/gray uninitialized macroblock frames (stddev < 4.0)
-            if np.std(frame) < 4.0:
+            # Skip the first 3 frames on fresh connection to allow full I-frame POC sync
+            if frames_since_connect < 4:
                 continue
 
             h, w = frame.shape[:2]
             self.stream_resolution = f"{w}x{h}"
 
-            if self._was_logged_offline or frames_since_connect == 5:
+            if self._was_logged_offline or frames_since_connect == 4:
                 self._was_logged_offline = False
                 logger.success(
                     f"[Câmera #{self.camera.id} - '{self.camera.name}'] 🟢 FLUXO DE VÍDEO CONECTADO! "
@@ -283,16 +281,13 @@ class StreamIngestor:
                 )
 
             now = time.time()
-            cloned_frame = frame.copy()
             with self._frame_lock:
                 self.is_online = True
-                self._latest_frame = cloned_frame
+                self._latest_frame = frame
                 self._latest_frame_time = now
 
-            # Immediate, decoupled live broadcast to connected web/TV clients at full camera FPS
-            if mjpeg_streamer.has_clients(self.camera.id):
-                mjpeg_streamer.broadcast_frame(self.camera.id, frame, quality=75, max_fps=25.0)
-
+            # Zero-copy atomic broadcast to active web viewers (takes < 0.001ms)
+            mjpeg_streamer.set_latest_frame(self.camera.id, frame)
             self._new_frame_event.set()
 
         cap.release()
