@@ -217,6 +217,19 @@ class StreamIngestor:
                 pass
         return None
 
+    async def _persist_working_url(self, working_url: str) -> None:
+        try:
+            from engine.database.db import async_session_factory
+            from engine.database.models import Camera
+            async with async_session_factory() as session:
+                cam = await session.get(Camera, self.camera.id)
+                if cam:
+                    cam.rtsp_url = working_url
+                    await session.commit()
+                    logger.success(f"[Câmera #{self.camera.id}] 💾 URL funcional persistida com sucesso no banco SQLite: {working_url}")
+        except Exception as e:
+            logger.debug(f"[Câmera #{self.camera.id}] Não foi possível atualizar URL no banco: {e}")
+
     def _grabber_loop(self) -> None:
         """
         Continuously drains the RTSP buffer as fast as packets arrive.
@@ -259,6 +272,8 @@ class StreamIngestor:
                     if fallback:
                         rtsp_url = fallback
                         self.camera.rtsp_url = fallback
+                        if self._loop:
+                            asyncio.run_coroutine_threadsafe(self._persist_working_url(fallback), self._loop)
 
                 frames_since_connect = 0
                 time.sleep(reconnect_backoff)
