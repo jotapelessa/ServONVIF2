@@ -41,6 +41,17 @@ export function LiveView({
     return () => clearTimeout(timer);
   }, [hasError]);
 
+  // Instantly sync to live real-time frame when tab becomes visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setKey((prev) => prev + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   // Convert normalized points [0..1] to SVG polygon points string
   const roiSvgPoints = roiPolygon && roiPolygon.length >= 3
     ? roiPolygon.map(([x, y]) => `${(x * 100).toFixed(2)},${(y * 100).toFixed(2)}`).join(" ")
