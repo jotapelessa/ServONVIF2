@@ -89,107 +89,94 @@ class ONVIFDiscovery:
 
         return list(discovered_map.values())
 
-    @staticmethod
-    def _validate_rtsp_stream(ip: str, port: int, timeout: float = 0.5) -> bool:
-        """
-        Sends an official RTSP OPTIONS packet to verify if the port runs a genuine RTSP video server,
-        rejecting random TCP ports, TV media servers, or other non-camera devices.
-        """
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout)
-            s.connect((ip, port))
-            probe = f"OPTIONS rtsp://{ip}:{port}/ RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: ServONVIF-Scanner/2.0\r\n\r\n"
-            s.sendall(probe.encode("ascii"))
-            resp = s.recv(256)
-            s.close()
-            if resp and (b"RTSP/" in resp or b"Public:" in resp or b"CSeq:" in resp):
-                return True
-        except Exception:
-            pass
-        return False
-
-    @staticmethod
-    def _validate_http_camera_stream(ip: str, port: int, timeout: float = 0.5) -> Optional[str]:
-        """
-        Verifies if an HTTP port runs a genuine IP Webcam, DroidCam or MJPEG stream,
-        rejecting generic web servers, routers or dev apps.
-        Returns the confirmed video stream path or None.
-        """
-        for path in ["/video", "/videofeed", "/mjpeg", "/shot.jpg"]:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(timeout)
-                s.connect((ip, port))
-                req = f"GET {path} HTTP/1.1\r\nHost: {ip}:{port}\r\nUser-Agent: ServONVIF\r\nConnection: close\r\n\r\n"
-                s.sendall(req.encode("ascii"))
-                resp = s.recv(512)
-                s.close()
-                if resp:
-                    resp_lower = resp.lower()
-                    if (
-                        b"multipart/x-mixed-replace" in resp_lower or
-                        b"image/jpeg" in resp_lower or
-                        b"ip webcam" in resp_lower or
-                        b"droidcam" in resp_lower or
-                        b"--boundary" in resp_lower or
-                        b"content-type: image/" in resp_lower or
-                        b"content-type: video/" in resp_lower
-                    ):
-                        return path
-            except Exception:
-                pass
-        return None
-
     @classmethod
     async def _probe_single_ip(cls, ip: str) -> Optional[Dict[str, Any]]:
-        """Directly probes a single IP with strict RTSP & HTTP stream handshake verification."""
+        """Directly probes a single IP across all CCTV, ONVIF, and Smartphone ports."""
         loop = asyncio.get_running_loop()
 
         def do_probe():
-            # 1. Test dedicated RTSP ports (8554, 554, 1935, 8000, 37777, 34567) with genuine RTSP handshake
-            for port in [8554, 554, 1935, 8000, 8899, 37777, 34567]:
-                if cls._validate_rtsp_stream(ip, port, timeout=0.6):
-                    if port == 8554:
-                        stream_path = "/stream"
-                    elif port == 554:
-                        stream_path = "/live/0/MAIN"
-                    elif port == 1935:
-                        stream_path = "/live"
-                    else:
-                        stream_path = "/stream1"
-                    return {
-                        "name": f"Câmera RTSP ({ip})",
-                        "ip": ip,
-                        "port": port,
-                        "onvif_service_url": f"http://{ip}:80/onvif/device_service",
-                        "default_rtsp": f"rtsp://{ip}:{port}{stream_path}",
-                        "type": f"Vídeo RTSP ({port})",
-                    }
+            # 1. Test dedicated RTSP & CCTV ports FIRST (8554, 554, 37777, 34567, 8000)
+            for port in [8554, 554, 37777, 34567, 8000, 80]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.5)
+                    res = s.connect_ex((ip, port))
+                    s.close()
+                    if res == 0:
+                        if port == 8554:
+                            return {
+                                "name": f"Xiaomi / Câmera RTSP ({ip})",
+                                "ip": ip,
+                                "port": port,
+                                "default_rtsp": f"rtsp://{ip}:8554/stream",
+                                "type": "RTSP (Porta 8554)",
+                            }
+                        elif port == 554:
+                            return {
+                                "name": f"Câmera ONVIF / RTSP ({ip})",
+                                "ip": ip,
+                                "port": port,
+                                "default_rtsp": f"rtsp://{ip}:554/live/0/MAIN",
+                                "type": "RTSP Padrão (554)",
+                            }
+                        elif port == 37777:
+                            return {
+                                "name": f"Câmera Intelbras / Dahua ({ip})",
+                                "ip": ip,
+                                "port": port,
+                                "default_rtsp": f"rtsp://admin:admin@{ip}:554/cam/realmonitor?channel=1&subtype=0",
+                                "type": "Intelbras/Dahua (37777)",
+                            }
+                        elif port == 34567:
+                            return {
+                                "name": f"Câmera Xiongmai / XMeye ({ip})",
+                                "ip": ip,
+                                "port": port,
+                                "default_rtsp": f"rtsp://{ip}:554/user=admin&password=&channel=1&stream=0.sdp",
+                                "type": "Xiongmai/XMeye (34567)",
+                            }
+                        elif port == 80:
+                            return {
+                                "name": f"Câmera ONVIF ({ip})",
+                                "ip": ip,
+                                "port": 80,
+                                "default_rtsp": f"rtsp://{ip}:554/live/0/MAIN",
+                                "type": "ONVIF Profile S",
+                            }
+                except Exception:
+                    pass
 
-            # 2. Test Smartphone HTTP Webcam ports with Content-Type header validation
-            for http_port in [8080, 8081, 4747, 8888]:
-                confirmed_path = cls._validate_http_camera_stream(ip, http_port, timeout=0.6)
-                if confirmed_path:
-                    if http_port == 4747:
-                        cam_name = f"Smartphone DroidCam ({ip})"
-                        cam_type = "DroidCam MJPEG"
-                    else:
-                        cam_name = f"Smartphone IP Camera ({ip})"
-                        cam_type = "Câmera Celular (IP Webcam / MJPEG)"
-                    return {
-                        "name": cam_name,
-                        "ip": ip,
-                        "port": http_port,
-                        "default_rtsp": f"http://{ip}:{http_port}{confirmed_path}",
-                        "type": cam_type,
-                    }
+            # 2. Test Smartphone IP Webcam ports (8080, 8081, 4747)
+            for http_port in [8080, 8081, 4747]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.5)
+                    res = s.connect_ex((ip, http_port))
+                    s.close()
+                    if res == 0:
+                        if http_port == 4747:
+                            return {
+                                "name": f"Smartphone DroidCam ({ip})",
+                                "ip": ip,
+                                "port": http_port,
+                                "default_rtsp": f"http://{ip}:{http_port}/video",
+                                "type": "DroidCam MJPEG",
+                            }
+                        return {
+                            "name": f"Smartphone IP Camera ({ip})",
+                            "ip": ip,
+                            "port": http_port,
+                            "default_rtsp": f"http://{ip}:{http_port}/video",
+                            "type": "Câmera Celular (IP Webcam)",
+                        }
+                except Exception:
+                    pass
             return None
 
         return await loop.run_in_executor(None, do_probe)
 
     @classmethod
-    async def _discover_onvif(cls, timeout_seconds: float = 2.0) -> List[Dict[str, Any]]:
+    async def _discover_onvif(cls, timeout_seconds: float = 2.5) -> List[Dict[str, Any]]:
         cameras = []
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.settimeout(timeout_seconds)
@@ -245,12 +232,12 @@ class ONVIFDiscovery:
     @classmethod
     async def _scan_subnet_fast(
         cls,
-        timeout_per_host: float = 0.35,
+        timeout_per_host: float = 0.4,
         target_subnet: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Scans subnet in parallel with strict RTSP & HTTP stream handshake verification,
-        eliminating 100% of false positives (ghost cameras).
+        Scans entire subnet for dedicated CCTV, RTSP (8554/554/37777/34567) and Smartphone IP Webcam ports.
+        Excludes generic RTMP (1935) and dev ports (8888) to eliminate false positives.
         """
         subnets_to_scan = []
         if target_subnet and target_subnet.strip():
@@ -270,53 +257,74 @@ class ONVIFDiscovery:
             if target_ip == local_ip or target_ip == "127.0.0.1":
                 return None
 
-            # 1. Test dedicated RTSP ports (8554, 554, 1935, 8000, 37777, 34567) with genuine RTSP handshake
-            for rtsp_port in [8554, 554, 1935, 8000, 37777, 34567]:
-                if cls._validate_rtsp_stream(target_ip, rtsp_port, timeout=0.4):
-                    if rtsp_port == 8554:
-                        stream_path = "/stream"
-                    elif rtsp_port == 554:
-                        stream_path = "/live/0/MAIN"
-                    elif rtsp_port == 1935:
-                        stream_path = "/live"
-                    else:
-                        stream_path = "/stream1"
-                    return {
-                        "name": f"Xiaomi / Câmera IP ({target_ip})",
-                        "ip": target_ip,
-                        "port": rtsp_port,
-                        "default_rtsp": f"rtsp://{target_ip}:{rtsp_port}{stream_path}",
-                        "type": f"Vídeo RTSP ({rtsp_port})",
-                    }
+            # 1. Dedicated RTSP & CCTV Ports (8554, 554, 37777, 34567)
+            for rtsp_port in [8554, 554, 37777, 34567]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(timeout_per_host)
+                    res = s.connect_ex((target_ip, rtsp_port))
+                    s.close()
+                    if res == 0:
+                        if rtsp_port == 8554:
+                            return {
+                                "name": f"Xiaomi / Câmera IP ({target_ip})",
+                                "ip": target_ip,
+                                "port": rtsp_port,
+                                "default_rtsp": f"rtsp://{target_ip}:8554/stream",
+                                "type": "Vídeo RTSP (8554)",
+                            }
+                        elif rtsp_port == 554:
+                            return {
+                                "name": f"Câmera RTSP / ONVIF ({target_ip})",
+                                "ip": target_ip,
+                                "port": rtsp_port,
+                                "default_rtsp": f"rtsp://{target_ip}:554/live/0/MAIN",
+                                "type": "Vídeo RTSP (554)",
+                            }
+                        elif rtsp_port == 37777:
+                            return {
+                                "name": f"Câmera Intelbras / Dahua ({target_ip})",
+                                "ip": target_ip,
+                                "port": rtsp_port,
+                                "default_rtsp": f"rtsp://admin:admin@{target_ip}:554/cam/realmonitor?channel=1&subtype=0",
+                                "type": "Intelbras/Dahua (37777)",
+                            }
+                        elif rtsp_port == 34567:
+                            return {
+                                "name": f"Câmera Xiongmai / XMeye ({target_ip})",
+                                "ip": target_ip,
+                                "port": rtsp_port,
+                                "default_rtsp": f"rtsp://{target_ip}:554/user=admin&password=&channel=1&stream=0.sdp",
+                                "type": "Xiongmai/XMeye (34567)",
+                            }
+                except Exception:
+                    pass
 
-            # 2. Check Smartphone IP Webcam / Simulator ports with Content-Type header validation
-            for phone_port in [8080, 8081, 4747, 8888]:
-                confirmed_path = cls._validate_http_camera_stream(target_ip, phone_port, timeout=0.4)
-                if confirmed_path:
-                    if phone_port == 4747:
-                        cam_name = f"Smartphone DroidCam ({target_ip})"
-                        cam_type = "DroidCam MJPEG"
-                    else:
-                        cam_name = f"Smartphone IP Camera ({target_ip})"
-                        cam_type = "Câmera Celular (IP Webcam / MJPEG)"
-                    return {
-                        "name": cam_name,
-                        "ip": target_ip,
-                        "port": phone_port,
-                        "default_rtsp": f"http://{target_ip}:{phone_port}{confirmed_path}",
-                        "type": cam_type,
-                    }
-
-            # 3. Port 80 (HTTP ONVIF check with RTSP validation)
-            if not target_ip.endswith(".1"):
-                if cls._validate_rtsp_stream(target_ip, 554, timeout=0.3):
-                    return {
-                        "name": f"Câmera ONVIF ({target_ip})",
-                        "ip": target_ip,
-                        "port": 80,
-                        "default_rtsp": f"rtsp://{target_ip}:554/live/0/MAIN",
-                        "type": "ONVIF Profile S",
-                    }
+            # 2. Dedicated Smartphone IP Webcam ports (8081, 4747, 8080)
+            for phone_port in [8081, 4747, 8080]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(timeout_per_host)
+                    res = s.connect_ex((target_ip, phone_port))
+                    s.close()
+                    if res == 0:
+                        if phone_port == 4747:
+                            return {
+                                "name": f"Smartphone DroidCam ({target_ip})",
+                                "ip": target_ip,
+                                "port": phone_port,
+                                "default_rtsp": f"http://{target_ip}:{phone_port}/video",
+                                "type": "DroidCam MJPEG",
+                            }
+                        return {
+                            "name": f"Smartphone IP Camera ({target_ip})",
+                            "ip": target_ip,
+                            "port": phone_port,
+                            "default_rtsp": f"http://{target_ip}:{phone_port}/video",
+                            "type": "Câmera Celular (IP Webcam)",
+                        }
+                except Exception:
+                    pass
 
             return None
 
@@ -329,7 +337,7 @@ class ONVIFDiscovery:
                 for sub_prefix in subnets_to_scan
                 for host_num in range(2, 255)
             ]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=120) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
                 futures = [executor.submit(test_host, ip) for ip in targets]
                 for future in concurrent.futures.as_completed(futures):
                     res = future.result()
