@@ -56,7 +56,9 @@ class StreamIngestor:
 
         self._is_recording_event = False
         self._event_frames = []
+        self._event_start_time = 0.0
         self._last_record_append_time = 0.0
+        self._last_motion_time = 0.0
         self._is_lpr_busy = False
         self._post_event_countdown = 0
         self._loop: Optional[asyncio.AbstractEventLoop] = None
