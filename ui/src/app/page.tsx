@@ -22,6 +22,8 @@ import {
   Layers,
   Network,
   Search,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -38,6 +40,8 @@ export default function Dashboard() {
   const [scannedCameras, setScannedCameras] = useState<any[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isAddingBatch, setIsAddingBatch] = useState(false);
+  const [copyAllFeedback, setCopyAllFeedback] = useState(false);
+  const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
   // Manual Add Modal States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -117,6 +121,22 @@ export default function Dashboard() {
     } finally {
       setIsAddingBatch(false);
     }
+  };
+
+  const handleCopyAllIps = () => {
+    if (!scannedCameras.length) return;
+    const text = scannedCameras
+      .map((c, i) => `${i + 1}. IP: ${c.ip} | Nome: ${c.name} | Tipo: ${c.type} | RTSP: ${c.default_rtsp}`)
+      .join("\n");
+    navigator.clipboard.writeText(text);
+    setCopyAllFeedback(true);
+    setTimeout(() => setCopyAllFeedback(false), 2500);
+  };
+
+  const handleCopySingleIp = (textToCopy: string, key: string) => {
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedIp(key);
+    setTimeout(() => setCopiedIp(null), 2000);
   };
 
   const handleCreateManualCamera = async (e: React.FormEvent) => {
@@ -324,48 +344,109 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : scannedCameras.length > 0 ? (
-                scannedCameras.map((dev, idx) => {
-                  const alreadyAdded = cameras.some(
-                    (c) => c.rtsp_url === dev.default_rtsp || (c.ip_address && c.ip_address === dev.ip)
-                  );
-
-                  return (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition"
+                <>
+                  <div className="flex items-center justify-between px-1 py-1 text-xs text-slate-400">
+                    <span className="font-semibold text-slate-300">
+                      {scannedCameras.length} {scannedCameras.length === 1 ? "câmera encontrada" : "câmeras encontradas"}:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyAllIps}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                          <Network className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-white">{dev.name}</h4>
-                            <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                              {dev.type}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 font-mono mt-0.5">{dev.default_rtsp}</p>
-                        </div>
-                      </div>
+                      {copyAllFeedback ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Todos IPs Copiados!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copiar Todos os IPs</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
 
-                      <div>
-                        {alreadyAdded ? (
-                          <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Conectada
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleAddFromScan(dev)}
-                            className="h-7 px-3 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm"
-                          >
-                            Adicionar
-                          </button>
-                        )}
+                  {scannedCameras.map((dev, idx) => {
+                    const alreadyAdded = cameras.some(
+                      (c) => c.rtsp_url === dev.default_rtsp || (c.ip_address && c.ip_address === dev.ip)
+                    );
+                    const ipKey = `ip-${dev.ip}-${idx}`;
+                    const rtspKey = `rtsp-${dev.ip}-${idx}`;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                            <Network className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-bold text-white">{dev.name}</h4>
+                              <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                {dev.type}
+                              </span>
+                              <button
+                                type="button"
+                                title="Copiar IP"
+                                onClick={() => handleCopySingleIp(dev.ip, ipKey)}
+                                className="flex items-center gap-1 text-[10px] font-mono text-cyan-400 hover:text-cyan-300 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/40 transition"
+                              >
+                                {copiedIp === ipKey ? (
+                                  <>
+                                    <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span className="text-emerald-400">IP Copiado</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-2.5 h-2.5" />
+                                    <span>{dev.ip}</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-[11px] text-slate-400 font-mono truncate max-w-[280px]">
+                                {dev.default_rtsp}
+                              </p>
+                              <button
+                                type="button"
+                                title="Copiar URL de Vídeo RTSP"
+                                onClick={() => handleCopySingleIp(dev.default_rtsp, rtspKey)}
+                                className="text-slate-500 hover:text-slate-300 p-0.5 transition"
+                              >
+                                {copiedIp === rtspKey ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          {alreadyAdded ? (
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Conectada
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleAddFromScan(dev)}
+                              className="h-7 px-3 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm"
+                            >
+                              Adicionar
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </>
               ) : (
                 <div className="py-12 text-center text-xs text-slate-400 space-y-1">
                   <p className="font-semibold text-white">Nenhum dispositivo detectado na rede local.</p>
@@ -376,13 +457,34 @@ export default function Dashboard() {
 
             {/* Footer Buttons */}
             <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
-              <button
-                onClick={() => handleScan()}
-                disabled={isScanning}
-                className="h-8 px-3 text-xs font-semibold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 rounded-lg transition disabled:opacity-50"
-              >
-                Escanear Novamente
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleScan()}
+                  disabled={isScanning}
+                  className="h-8 px-3 text-xs font-semibold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 rounded-lg transition disabled:opacity-50"
+                >
+                  Escanear Novamente
+                </button>
+                {scannedCameras.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCopyAllIps}
+                    className="h-8 px-3 text-xs font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition flex items-center gap-1.5"
+                  >
+                    {copyAllFeedback ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar IPs</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 {scannedCameras.length > 0 && (
