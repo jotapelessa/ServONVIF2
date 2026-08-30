@@ -163,11 +163,13 @@ class StreamIngestor:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             return cap
         else:
-            # High-stability TCP RTSP capture with ZERO-BUFFER and LOW-DELAY flags
+            # High-stability TCP RTSP capture with ZERO-BUFFER, LOW-DELAY and HARDWARE FRAME-DROP flags
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                 "rtsp_transport;tcp|"
                 "fflags;nobuffer|"
                 "flags;low_delay|"
+                "framedrop;1|"
+                "strict;experimental|"
                 "max_delay;0|"
                 "analyzeduration;100000|"
                 "probesize;100000|"
