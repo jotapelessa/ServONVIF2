@@ -16,6 +16,8 @@ import {
   Cpu,
   HardDrive,
   ArrowUpCircle,
+  Thermometer,
+  Zap,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -34,6 +36,9 @@ export function Header({
   const { isConnected } = useWebSocket();
   const [metrics, setMetrics] = useState<{
     cpu_percent: number;
+    cpu_temp_c?: number | null;
+    gpu_percent?: number | null;
+    gpu_temp_c?: number | null;
     ram_percent: number;
     ram_used_mb: number;
     ram_total_mb: number;
@@ -100,20 +105,48 @@ export function Header({
 
       {/* Right: Controls, Telemetry & Navigation */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        {/* Telemetry (CPU & RAM) Compact Pill */}
+        {/* Telemetry (CPU, Temp, GPU & RAM) Compact Pill */}
         {metrics && (
           <div
-            title={`Servidor: CPU ${metrics.cpu_percent}% | RAM ${metrics.ram_used_mb}MB (${metrics.ram_percent}%)`}
-            className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-300 shadow-inner"
+            title={`Servidor: CPU ${metrics.cpu_percent}% ${metrics.cpu_temp_c != null ? `(${metrics.cpu_temp_c}°C)` : ''} | ${metrics.gpu_temp_c != null ? `GPU ${metrics.gpu_temp_c}°C | ` : ''}RAM ${metrics.ram_used_mb}MB (${metrics.ram_percent}%)`}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-300 shadow-inner"
           >
+            {/* CPU Load */}
             <div className="flex items-center gap-1">
               <Cpu className="w-3 h-3 text-blue-400" />
               <span className={`font-semibold ${metrics.cpu_percent >= 80 ? "text-rose-400" : metrics.cpu_percent >= 50 ? "text-amber-400" : "text-emerald-400"}`}>
                 {metrics.cpu_percent}%
               </span>
             </div>
+
+            {/* CPU Temp */}
+            {metrics.cpu_temp_c != null && (
+              <>
+                <span className="text-slate-700">|</span>
+                <div className="flex items-center gap-1" title={`Temperatura do Processador: ${metrics.cpu_temp_c}°C`}>
+                  <Thermometer className={`w-3 h-3 ${metrics.cpu_temp_c >= 75 ? "text-rose-400 animate-pulse" : metrics.cpu_temp_c >= 60 ? "text-amber-400" : "text-cyan-400"}`} />
+                  <span className={`font-semibold ${metrics.cpu_temp_c >= 75 ? "text-rose-400" : metrics.cpu_temp_c >= 60 ? "text-amber-400" : "text-cyan-300"}`}>
+                    {metrics.cpu_temp_c}°C
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* GPU Temp */}
+            {metrics.gpu_temp_c != null && (
+              <>
+                <span className="text-slate-700">|</span>
+                <div className="flex items-center gap-1" title={`GPU: ${metrics.gpu_temp_c}°C ${metrics.gpu_percent != null ? `(${metrics.gpu_percent}%)` : ''}`}>
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  <span className="font-semibold text-amber-300">
+                    {metrics.gpu_temp_c}°C
+                  </span>
+                </div>
+              </>
+            )}
+
             <span className="text-slate-700">|</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" title={`Uso de Memória RAM: ${metrics.ram_used_mb}MB`}>
               <HardDrive className="w-3 h-3 text-purple-400" />
               <span className="font-semibold text-slate-300">
                 {metrics.ram_used_mb > 0 ? `${metrics.ram_used_mb}M` : `${metrics.ram_percent}%`}

@@ -162,6 +162,7 @@ class VisionPipeline:
                 tracker="bytetrack.yaml",
                 classes=self.TARGET_CLASSES,
                 conf=conf_thresh,
+                imgsz=640,
                 device=self.device,
                 verbose=False
             )

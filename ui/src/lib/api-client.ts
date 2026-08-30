@@ -127,6 +127,9 @@ export interface SettingsResponse {
   };
   system_metrics?: {
     cpu_percent: number;
+    cpu_temp_c?: number | null;
+    gpu_percent?: number | null;
+    gpu_temp_c?: number | null;
     ram_percent: number;
     ram_used_mb: number;
     ram_total_mb: number;
@@ -686,6 +689,25 @@ export const apiClient = {
     return data;
   },
 
+  async simulateMotion(
+    cameraId: number = 1,
+    cameraName: string = "Câmera de Teste",
+    confidence: number = 0.95
+  ): Promise<any> {
+    const res = await fetch(`${getApiBase()}/api/events/simulate-motion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        camera_id: cameraId,
+        camera_name: cameraName,
+        confidence: confidence,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Falha ao simular movimento");
+    return data;
+  },
+
   async simulatePlateDetection(payload: {
     plate_number: string;
     camera_id?: number;
@@ -704,6 +726,9 @@ export const apiClient = {
 
   async getMetrics(): Promise<{
     cpu_percent: number;
+    cpu_temp_c?: number | null;
+    gpu_percent?: number | null;
+    gpu_temp_c?: number | null;
     ram_percent: number;
     ram_used_mb: number;
     ram_total_mb: number;

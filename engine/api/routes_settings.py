@@ -137,8 +137,80 @@ def get_system_metrics():
         vmem = psutil.virtual_memory()
         proc = psutil.Process()
         proc_mem_mb = round(proc.memory_info().rss / (1024 * 1024), 1)
+
+        # 1. CPU Temperature
+        cpu_temp_c = None
+        try:
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    for key in ["coretemp", "k10temp", "cpu_thermal", "soc_thermal", "acpitz", "zenpower", "cpu-thermal"]:
+                        if key in temps and temps[key]:
+                            cpu_temp_c = round(temps[key][0].current, 1)
+                            break
+                    if cpu_temp_c is None:
+                        for s_list in temps.values():
+                            if s_list:
+                                cpu_temp_c = round(s_list[0].current, 1)
+                                break
+        except Exception:
+            pass
+
+        # Fallback to /sys/class/thermal or /sys/class/hwmon on Linux
+        if cpu_temp_c is None:
+            for zone_idx in range(6):
+                tz_path = f"/sys/class/thermal/thermal_zone{zone_idx}/temp"
+                if os.path.exists(tz_path):
+                    try:
+                        with open(tz_path, "r") as f:
+                            val = float(f.read().strip())
+                            if val > 1000:
+                                val = val / 1000.0
+                            if 10.0 <= val <= 115.0:
+                                cpu_temp_c = round(val, 1)
+                                break
+                    except Exception:
+                        pass
+
+        # 2. GPU Temperature & Usage
+        gpu_temp_c = None
+        gpu_percent = None
+
+        # Check NVIDIA via nvidia-smi if present
+        try:
+            import subprocess
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=temperature.gpu,utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                parts = [p.strip() for p in res.stdout.strip().split(",")]
+                if len(parts) >= 1 and parts[0].isdigit():
+                    gpu_temp_c = float(parts[0])
+                if len(parts) >= 2 and parts[1].isdigit():
+                    gpu_percent = float(parts[1])
+        except Exception:
+            pass
+
+        # Fallback to psutil sensors for AMD/Intel GPU
+        if gpu_temp_c is None and hasattr(psutil, "sensors_temperatures"):
+            try:
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    for key in ["amdgpu", "radeon", "nouveau"]:
+                        if key in temps and temps[key]:
+                            gpu_temp_c = round(temps[key][0].current, 1)
+                            break
+            except Exception:
+                pass
+
         return {
             "cpu_percent": round(cpu_pct, 1),
+            "cpu_temp_c": cpu_temp_c,
+            "gpu_percent": gpu_percent,
+            "gpu_temp_c": gpu_temp_c,
             "ram_percent": round(vmem.percent, 1),
             "ram_used_mb": proc_mem_mb,
             "ram_total_mb": round(vmem.total / (1024 * 1024), 0),
@@ -148,6 +220,9 @@ def get_system_metrics():
         logger.warning(f"Failed to get system metrics: {e}")
         return {
             "cpu_percent": 0.0,
+            "cpu_temp_c": None,
+            "gpu_percent": None,
+            "gpu_temp_c": None,
             "ram_percent": 0.0,
             "ram_used_mb": 0.0,
             "ram_total_mb": 0.0,
